@@ -18,8 +18,9 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ClaudeConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry, with the bearer token redacted."""
-    coordinator = entry.runtime_data
+    data = entry.runtime_data
     return {
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
-        "status": asdict(coordinator.data) if coordinator.data else None,
+        "status": asdict(data.status.data) if data.status.data else None,
+        "usage": data.usage.data.report if data.usage.data else None,
     }

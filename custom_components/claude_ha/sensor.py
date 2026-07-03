@@ -1,18 +1,33 @@
-"""Status sensor for the Claude for Home Assistant integration."""
+"""Sensors for the Claude for Home Assistant integration."""
 
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import STATUS_CLAUDE_VERSION, STATUS_MODEL, STATUS_VERSION
-from .coordinator import ClaudeConfigEntry, ClaudeCoordinator
+from .const import (
+    STATUS_CLAUDE_VERSION,
+    STATUS_HA_MCP,
+    STATUS_MODEL,
+    STATUS_VERSION,
+)
+from .coordinator import (
+    ClaudeConfigEntry,
+    ClaudeStatusCoordinator,
+    ClaudeUsageCoordinator,
+)
 from .entity import build_device_info
 
-# Read-only sensor fed by the coordinator; no outbound writes to serialize.
+# Read-only sensors fed by coordinators; no outbound writes to serialize.
 PARALLEL_UPDATES = 0
 
 # Possible states of the status sensor (SensorDeviceClass.ENUM).
@@ -25,11 +40,18 @@ async def async_setup_entry(
     entry: ClaudeConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the status sensor from a config entry."""
-    async_add_entities([ClaudeStatusSensor(entry.runtime_data)])
+    """Set up the status and usage sensors from a config entry."""
+    data = entry.runtime_data
+    async_add_entities(
+        [
+            ClaudeStatusSensor(data.status),
+            ClaudeUsageSensor(data.usage),
+            ClaudeCostSensor(data.usage),
+        ]
+    )
 
 
-class ClaudeStatusSensor(CoordinatorEntity[ClaudeCoordinator], SensorEntity):
+class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):
     """Reports whether the add-on is ready, plus version/model attributes."""
 
     _attr_has_entity_name = True
@@ -37,8 +59,8 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeCoordinator], SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.ENUM
 
-    def __init__(self, coordinator: ClaudeCoordinator) -> None:
-        """Init from the runtime coordinator."""
+    def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
+        """Init from the status coordinator."""
         super().__init__(coordinator)
         self._attr_options = [STATE_READY, STATE_INITIALIZING]
         entry = coordinator.config_entry
@@ -56,11 +78,68 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeCoordinator], SensorEntity):
         return STATE_READY if self.coordinator.data.ready else STATE_INITIALIZING
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | None]:
-        """Expose the add-on and Claude versions and active model."""
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the add-on and Claude versions, active model and HA-MCP flag."""
         data = self.coordinator.data
         return {
             STATUS_VERSION: data.version,
             STATUS_CLAUDE_VERSION: data.claude_version,
             STATUS_MODEL: data.model,
+            STATUS_HA_MCP: data.ha_mcp,
         }
+
+
+class ClaudeUsageSensor(CoordinatorEntity[ClaudeUsageCoordinator], SensorEntity):
+    """Today's Claude token usage, with the full report as attributes."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "usage"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "tokens"
+
+    def __init__(self, coordinator: ClaudeUsageCoordinator) -> None:
+        """Init from the usage coordinator."""
+        super().__init__(coordinator)
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_usage"
+        self._attr_device_info = build_device_info(entry)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return today's input + output tokens."""
+        return self.coordinator.data.today_tokens if self.coordinator.data else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the full usage report."""
+        return self.coordinator.data.report if self.coordinator.data else {}
+
+
+class ClaudeCostSensor(CoordinatorEntity[ClaudeUsageCoordinator], SensorEntity):
+    """Total prompt-API dollar cost (interactive-console usage is tokens only)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "prompt_api_cost"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "USD"
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(self, coordinator: ClaudeUsageCoordinator) -> None:
+        """Init from the usage coordinator."""
+        super().__init__(coordinator)
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_prompt_api_cost"
+        self._attr_device_info = build_device_info(entry)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the total prompt-API cost in USD."""
+        return self.coordinator.data.cost_total if self.coordinator.data else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose today's prompt-API cost alongside the total."""
+        data = self.coordinator.data
+        return {"today": data.cost_today if data else None}

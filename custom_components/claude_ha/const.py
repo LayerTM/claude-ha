@@ -35,6 +35,7 @@ ADDON_OPTION_API_TOKEN: Final = "api_token"
 # --- Add-on HTTP contract (see .research/CONTRACT.md) -----------------------
 API_PROMPT: Final = "/api/prompt"
 API_STATUS: Final = "/api/status"
+API_USAGE: Final = "/api/usage"
 
 HEADER_CALLER: Final = "X-Claude-Caller"
 
@@ -65,6 +66,7 @@ STATUS_READY: Final = "ready"
 STATUS_VERSION: Final = "version"
 STATUS_CLAUDE_VERSION: Final = "claude_version"
 STATUS_MODEL: Final = "model"
+STATUS_HA_MCP: Final = "ha_mcp"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
@@ -74,6 +76,9 @@ REQUEST_TIMEOUT: Final = 120
 STATUS_TIMEOUT: Final = 15
 # Coordinator poll interval for the status sensor.
 SCAN_INTERVAL: Final = 60
+# The usage report is cached add-on side and heavy to build, so poll it slowly
+# (contract §3a: no more than ~every 5 minutes).
+USAGE_SCAN_INTERVAL: Final = 300
 
 # --- Services ---------------------------------------------------------------
 SERVICE_ASK: Final = "ask"

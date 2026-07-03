@@ -20,6 +20,7 @@ from homeassistant.exceptions import HomeAssistantError
 from .const import (
     API_PROMPT,
     API_STATUS,
+    API_USAGE,
     DOMAIN,
     HEADER_CALLER,
     MODE_READ,
@@ -30,6 +31,7 @@ from .const import (
     RESP_TOOLS_USED,
     RESP_TRUNCATED,
     STATUS_CLAUDE_VERSION,
+    STATUS_HA_MCP,
     STATUS_MODEL,
     STATUS_READY,
     STATUS_TIMEOUT,
@@ -105,6 +107,17 @@ class StatusResult:
     version: str | None
     claude_version: str | None
     model: str | None
+    ha_mcp: bool | None
+
+
+@dataclass(slots=True)
+class UsageResult:
+    """Parsed 200 response of ``GET /api/usage`` (contract §3a)."""
+
+    today_tokens: int
+    cost_today: float
+    cost_total: float
+    report: dict[str, Any]
 
 
 class ClaudeClient:
@@ -123,11 +136,25 @@ class ClaudeClient:
     async def async_get_status(self) -> StatusResult:
         """Fetch add-on readiness/versions (contract §3)."""
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
+        ha_mcp = data.get(STATUS_HA_MCP)
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
             claude_version=data.get(STATUS_CLAUDE_VERSION),
             model=data.get(STATUS_MODEL),
+            ha_mcp=None if ha_mcp is None else bool(ha_mcp),
+        )
+
+    async def async_get_usage(self) -> UsageResult:
+        """Fetch token/cost usage (contract §3a)."""
+        data = await self._request("GET", API_USAGE, timeout_s=STATUS_TIMEOUT)
+        today = data.get("tokens", {}).get("today", {})
+        cost = data.get("prompt_api_cost_usd", {})
+        return UsageResult(
+            today_tokens=int(today.get("input", 0)) + int(today.get("output", 0)),
+            cost_today=float(cost.get("today", 0.0)),
+            cost_total=float(cost.get("total", 0.0)),
+            report=data,
         )
 
     async def async_prompt(

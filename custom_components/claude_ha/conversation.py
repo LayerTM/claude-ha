@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import ClaudeError, Proposal
 from .const import MODE_READ
-from .coordinator import ClaudeConfigEntry, ClaudeCoordinator
+from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .entity import build_device_info
 
 # Declared for the parallel-updates quality rule. Conversation turns are not
@@ -27,7 +27,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the conversation entity from a config entry."""
-    async_add_entities([ClaudeConversationEntity(entry.runtime_data)])
+    async_add_entities([ClaudeConversationEntity(entry.runtime_data.status)])
 
 
 class ClaudeConversationEntity(conversation.ConversationEntity):
@@ -45,7 +45,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
     # The add-on returns a full JSON body, not a token stream.
     _attr_supports_streaming = False
 
-    def __init__(self, coordinator: ClaudeCoordinator) -> None:
+    def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
         """Init from the runtime coordinator (which owns the API client)."""
         self.coordinator = coordinator
         entry = coordinator.config_entry

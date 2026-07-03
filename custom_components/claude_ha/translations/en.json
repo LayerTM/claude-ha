@@ -48,6 +48,12 @@
           "ready": "Ready",
           "initializing": "Initializing"
         }
+      },
+      "usage": {
+        "name": "Token usage today"
+      },
+      "prompt_api_cost": {
+        "name": "Prompt API cost"
       }
     }
   },

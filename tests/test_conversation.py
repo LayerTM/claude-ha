@@ -92,7 +92,7 @@ async def test_conversation_supported_languages(
     from homeassistant.const import MATCH_ALL
 
     await setup_integration(hass, mock_config_entry)
-    entity = ClaudeConversationEntity(mock_config_entry.runtime_data)
+    entity = ClaudeConversationEntity(mock_config_entry.runtime_data.status)
     assert entity.supported_languages == MATCH_ALL
 
 

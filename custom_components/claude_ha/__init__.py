@@ -27,7 +27,12 @@ from .const import (
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
 )
-from .coordinator import ClaudeConfigEntry, ClaudeCoordinator
+from .coordinator import (
+    ClaudeConfigEntry,
+    ClaudeRuntimeData,
+    ClaudeStatusCoordinator,
+    ClaudeUsageCoordinator,
+)
 from .frontend import async_register_card
 from .services import async_setup_services
 
@@ -55,9 +60,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
         base_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
         token=entry.data[CONF_TOKEN],
     )
-    coordinator = ClaudeCoordinator(hass, entry, client)
-    await coordinator.async_config_entry_first_refresh()
-    entry.runtime_data = coordinator
+    status = ClaudeStatusCoordinator(hass, entry, client)
+    await status.async_config_entry_first_refresh()
+
+    # Usage is supplementary and needs add-on >= 1.7.0; a non-blocking refresh
+    # keeps setup working (its sensors just stay unavailable) if it is missing.
+    usage = ClaudeUsageCoordinator(hass, entry, client)
+    await usage.async_refresh()
+
+    entry.runtime_data = ClaudeRuntimeData(client=client, status=status, usage=usage)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

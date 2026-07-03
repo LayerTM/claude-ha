@@ -44,7 +44,7 @@ cloud directly.**
 | 💬 **Conversation agent** | Talk to Claude from HA Assist (text or voice, any device), selectable like any other assistant. |
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
-| 📟 **Status sensor** | Add-on readiness plus the running add-on/Claude versions and active model. |
+| 📟 **Sensors** | Add-on readiness, active model, and Claude token usage + prompt-API cost. |
 | 🔒 **Secure by design** | Read-only by default, bearer-token auth, scoped writes, no cloud calls. |
 | 🚀 **Zero-touch setup** | Discovered, installed and started for you via the Supervisor. |
 
@@ -176,11 +176,16 @@ data:
   notify: mobile_app_my_phone
 ```
 
-### Status sensor
+### Sensors
 
-`sensor.claude_code_status` reports `ready` / `initializing` and carries the
-add-on version, Claude version and active model as attributes. It becomes
-unavailable when the add-on is unreachable.
+- **Status** — `ready` / `initializing`, with the add-on version, Claude version,
+  active model and whether a scoped HA MCP is configured as attributes.
+- **Token usage today** — today's input + output tokens (unit `tokens`), with the
+  full usage report (per-period and per-model token totals, message counts) as
+  attributes. Polled slowly (~5 min; the add-on caches it).
+- **Prompt API cost** — the total prompt-API cost in USD (interactive-console use
+  is measured in tokens, not dollars). The usage/cost sensors need the Claude
+  Code add-on ≥ 1.7.0 and stay unavailable otherwise.
 
 ## Security model
 

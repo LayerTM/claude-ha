@@ -7,6 +7,12 @@
           "ready": "mdi:robot-happy",
           "initializing": "mdi:robot-off"
         }
+      },
+      "usage": {
+        "default": "mdi:counter"
+      },
+      "prompt_api_cost": {
+        "default": "mdi:cash"
       }
     }
   },

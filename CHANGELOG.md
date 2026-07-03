@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-03
+
+### Added
+
+- **Usage sensors** (needs the Claude Code add-on ≥ 1.7.0): *Token usage today*
+  (input + output tokens, with the full `/api/usage` report as attributes) and
+  *Prompt API cost* (total USD). Backed by a separate slow (~5 min) coordinator.
+- `ha_mcp` attribute on the status sensor (from `/api/status`).
+
 ## [0.1.2] - 2026-07-03
 
 ### Added
@@ -46,7 +55,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/LayerTM/claude-ha/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/LayerTM/claude-ha/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LayerTM/claude-ha/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/LayerTM/claude-ha/releases/tag/v0.1.0

@@ -125,8 +125,7 @@ async def _async_handle_ask(call: ServiceCall) -> ServiceResponse:
         )
 
     # ClaudeError is a translated HomeAssistantError and surfaces as-is.
-    coordinator = entry.runtime_data
-    result = await coordinator.client.async_prompt(
+    result = await entry.runtime_data.client.async_prompt(
         prompt,
         mode=mode,
         caller=call.context.user_id,

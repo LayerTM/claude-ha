@@ -30,15 +30,41 @@ TEST_BASE_URL = f"http://{TEST_HOST}:{TEST_PORT}"
 
 STATUS_PAYLOAD = {
     "ready": True,
-    "version": "1.2.3",
+    "version": "1.7.0",
     "claude_version": "2.0.1",
     "model": "claude-sonnet-4-6",
+    "ha_mcp": True,
 }
 PROMPT_PAYLOAD = {
     "text": "The living room is 21 °C.",
     "proposal": None,
     "tools_used": ["mcp__ha__GetLiveContext"],
     "truncated": False,
+}
+USAGE_PAYLOAD = {
+    "projects": "/data/transcripts",
+    "window_days": 7,
+    "tokens": {
+        "today": {"input": 1000, "output": 500, "cache_read": 0, "cache_write": 0},
+        "recent": {"input": 8000, "output": 4000, "cache_read": 0, "cache_write": 0},
+        "all_time": {
+            "input": 90000,
+            "output": 40000,
+            "cache_read": 0,
+            "cache_write": 0,
+        },
+    },
+    "by_model_recent": {
+        "claude-sonnet-4-6": {
+            "input": 8000,
+            "output": 4000,
+            "cache_read": 0,
+            "cache_write": 0,
+        }
+    },
+    "messages": {"today": 12, "recent": 90, "all_time": 1000},
+    "prompt_api_cost_usd": {"today": 0.12, "total": 1.23},
+    "generated_at": "2026-07-03T12:00:00Z",
 }
 
 
@@ -78,8 +104,9 @@ def mock_config_entry() -> MockConfigEntry:
 
 @pytest.fixture
 def mock_status(aioclient_mock: AiohttpClientMocker) -> None:
-    """Mock a healthy GET /api/status."""
+    """Mock a healthy GET /api/status and GET /api/usage."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=STATUS_PAYLOAD)
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
 
 
 @pytest.fixture
