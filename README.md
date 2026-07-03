@@ -42,7 +42,8 @@ cloud directly.**
 | | |
 |---|---|
 | 💬 **Conversation agent** | Talk to Claude from HA Assist (text or voice, any device), selectable like any other assistant. |
-| ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations and scripts and use its answer. |
+| 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
+| ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
 | 📟 **Status sensor** | Add-on readiness plus the running add-on/Claude versions and active model. |
 | 🔒 **Secure by design** | Read-only by default, bearer-token auth, scoped writes, no cloud calls. |
 | 🚀 **Zero-touch setup** | Discovered, installed and started for you via the Supervisor. |
@@ -120,6 +121,19 @@ and reads exposed Home Assistant state, but changes nothing. If a message would
 change state, Claude returns a described *proposal* and the integration surfaces
 it in the reply rather than acting on it.
 
+### Dashboard card
+
+A chat card ships with the integration — no separate install. Add a **Manual**
+card (or pick *Claude Chat* in the card picker) with:
+
+```yaml
+type: custom:claude-chat-card
+title: Claude
+```
+
+Type a message and the card shows Claude's reply. If Claude proposes a change, an
+inline **Apply / Dismiss** appears; **Apply** runs the confirmed write.
+
 ### The `claude_ha.ask` action
 
 ```yaml
@@ -149,6 +163,17 @@ intents — only use `write` from automations you control, never on untrusted in
     prompt: Turn off everything in the garage.
     mode: write
     intents: "{{ claude.proposal.intents }}"
+```
+
+Or let Home Assistant ask you to confirm on your phone: pass a `notify` target,
+and if Claude proposes a change you get an actionable **Approve / Dismiss**
+notification — **Approve** runs the confirmed write for you.
+
+```yaml
+action: claude_ha.ask
+data:
+  prompt: Turn off everything in the garage.
+  notify: mobile_app_my_phone
 ```
 
 ### Status sensor

@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-03
+
+### Added
+
+- Bundled Lovelace **chat card** (`custom:claude-chat-card`), served by the
+  integration itself — chat with Claude and Apply/Dismiss its proposals inline.
+- Optional `notify` field on `claude_ha.ask`: when Claude proposes a change, send
+  an actionable **Approve / Dismiss** mobile notification; Approve runs the
+  confirmed write (with the proposal's intents) and logs it to the logbook.
+
 ## [0.1.1] - 2026-07-03
 
 ### Changed
@@ -36,6 +46,7 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/LayerTM/claude-ha/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LayerTM/claude-ha/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/LayerTM/claude-ha/releases/tag/v0.1.0

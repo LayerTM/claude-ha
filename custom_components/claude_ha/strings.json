@@ -79,6 +79,10 @@
         "intents": {
           "name": "Intents",
           "description": "Required for write mode: the confirmed intents to carry out, echoed from a prior read-mode proposal (at most 5)."
+        },
+        "notify": {
+          "name": "Confirm via",
+          "description": "Optional notify service (e.g. mobile_app_my_phone). If Claude proposes a change, an actionable Approve/Dismiss notification is sent there; Approve runs the confirmed change."
         }
       }
     }

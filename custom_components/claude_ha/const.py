@@ -81,6 +81,10 @@ ATTR_CONFIG_ENTRY: Final = "config_entry"
 ATTR_PROMPT: Final = "prompt"
 ATTR_MODE: Final = "mode"
 ATTR_INTENTS: Final = "intents"
+ATTR_NOTIFY: Final = "notify"
+
+# Event fired after a confirmed write executes (for automations/logbook).
+EVENT_ACTION_EXECUTED: Final = f"{DOMAIN}_action_executed"
 
 # --- Repair issues ----------------------------------------------------------
 ISSUE_ADDON_NOT_RUNNING: Final = "addon_not_running"

@@ -3,10 +3,11 @@
 # Bump these together when a newer HA lands.
 pytest-homeassistant-custom-component==0.13.344
 
-# Runtime requirements of the `conversation` dependency, needed to import it
-# under the test harness.
+# Runtime requirements of the `conversation` and `frontend` dependencies, needed
+# to import/set them up under the test harness.
 hassil==3.8.1
 home-assistant-intents==2026.6.24
+home-assistant-frontend==20260624.4
 
 # Lint + type-check tooling (kept in lockstep with CI and pre-commit).
 ruff==0.15.20

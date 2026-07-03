@@ -17,10 +17,12 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, selector
 
+from .confirm import ConfirmationRequest, async_send_proposal_notification
 from .const import (
     ATTR_CONFIG_ENTRY,
     ATTR_INTENTS,
     ATTR_MODE,
+    ATTR_NOTIFY,
     ATTR_PROMPT,
     DOMAIN,
     MAX_WRITE_INTENTS,
@@ -44,6 +46,7 @@ ASK_SCHEMA = vol.Schema(
         vol.Required(ATTR_PROMPT): cv.string,
         vol.Optional(ATTR_MODE, default=MODE_READ): vol.In(MODES),
         vol.Optional(ATTR_INTENTS): vol.All(cv.ensure_list, [dict]),
+        vol.Optional(ATTR_NOTIFY): cv.string,
     }
 )
 
@@ -129,6 +132,17 @@ async def _async_handle_ask(call: ServiceCall) -> ServiceResponse:
         caller=call.context.user_id,
         intents=intents,
     )
+
+    # If a read produced a proposal and a notify target was given, ask the user
+    # to confirm it (the write then runs on Approve).
+    notify_service = call.data.get(ATTR_NOTIFY)
+    if notify_service and mode == MODE_READ and result.proposal is not None:
+        await async_send_proposal_notification(
+            call.hass,
+            entry,
+            notify_service,
+            ConfirmationRequest(prompt, result.proposal, call.context.user_id),
+        )
 
     response: dict[str, Any] = {
         RESP_TEXT: result.text,

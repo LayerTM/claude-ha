@@ -24,3 +24,8 @@ ask:
       required: false
       selector:
         object:
+    notify:
+      required: false
+      example: mobile_app_my_phone
+      selector:
+        text:

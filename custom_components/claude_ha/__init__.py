@@ -17,6 +17,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .addon import get_addon_manager
 from .api import ClaudeClient
+from .confirm import async_setup_confirm
 from .const import (
     CONF_ADDON_SLUG,
     CONF_HOST,
@@ -27,6 +28,7 @@ from .const import (
     ISSUE_ADDON_NOT_RUNNING,
 )
 from .coordinator import ClaudeConfigEntry, ClaudeCoordinator
+from .frontend import async_register_card
 from .services import async_setup_services
 
 PLATFORMS = (Platform.CONVERSATION, Platform.SENSOR)
@@ -35,8 +37,10 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register services once, so actions exist even when no entry is loaded."""
+    """Register services, the confirm listener and the card, before any entry."""
     async_setup_services(hass)
+    async_setup_confirm(hass)
+    await async_register_card(hass)
     return True
 
 
