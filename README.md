@@ -7,12 +7,22 @@
 **Chat with Claude from Home Assistant Assist, and call it from your automations** —
 powered by the companion Claude Code add-on running on your own hardware.
 
-[![release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
+<!-- release & platform -->
+[![release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&display_name=tag&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
+[![release date](https://img.shields.io/github/release-date/LayerTM/claude-ha?color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![quality scale: platinum](https://img.shields.io/badge/quality%20scale-platinum-8A2BE2)](custom_components/claude_ha/quality_scale.yaml)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
+[![Python](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+<!-- quality & tooling -->
+[![quality scale: platinum](https://img.shields.io/badge/quality%20scale-platinum-8A2BE2)](custom_components/claude_ha/quality_scale.yaml)
+[![coverage: 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](.github/workflows/tests.yml)
+[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](.pre-commit-config.yaml)
+
+<!-- CI status (one per workflow) -->
 [![hassfest](https://github.com/LayerTM/claude-ha/actions/workflows/hassfest.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/hassfest.yml)
 [![hacs](https://github.com/LayerTM/claude-ha/actions/workflows/hacs.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/hacs.yml)
 [![lint](https://github.com/LayerTM/claude-ha/actions/workflows/lint.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/lint.yml)
