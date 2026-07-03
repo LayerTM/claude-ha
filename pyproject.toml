@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "Home Assistant integration exposing Claude via the Claude Code add-on."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 88
 
 [tool.ruff.lint]
@@ -47,15 +47,13 @@ combine-as-imports = true
 convention = "pep257"
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 show_error_codes = true
 follow_imports = "silent"
 strict = true
 warn_unreachable = true
-# Home Assistant's hassio package re-exports AddonManager/etc. without __all__
-# on the pinned test build (dev adds it); accept those first-party imports.
-implicit_reexport = true
-disable_error_code = ["import-untyped"]
+warn_unused_ignores = true
+warn_redundant_casts = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false

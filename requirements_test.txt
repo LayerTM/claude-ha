@@ -1,12 +1,13 @@
-# Pinned to the Home Assistant release that pytest-homeassistant-custom-component
-# tracks (HA 2026.2.x). Bump these together when targeting a newer HA.
-pytest-homeassistant-custom-component==0.13.316
+# Pinned to the current Home Assistant release that
+# pytest-homeassistant-custom-component tracks (HA 2026.7.0 on Python 3.14).
+# Bump these together when a newer HA lands.
+pytest-homeassistant-custom-component==0.13.344
 
 # Runtime requirements of the `conversation` dependency, needed to import it
 # under the test harness.
-hassil==3.5.0
-home-assistant-intents==2026.1.28
+hassil==3.8.1
+home-assistant-intents==2026.6.24
 
-# Lint + type-check tooling (kept in lockstep with CI).
+# Lint + type-check tooling (kept in lockstep with CI and pre-commit).
 ruff==0.15.20
 mypy==2.1.0

@@ -10,7 +10,7 @@ own hardware.
 
 [![HACS: custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![CI](https://github.com/LayerTM/claude-ha/actions/workflows/ci.yaml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/ci.yaml)
-[![Quality scale](https://img.shields.io/badge/quality%20scale-silver-C0C0C0.svg)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
+[![Quality scale](https://img.shields.io/badge/quality%20scale-platinum-E5E4E2.svg)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
 
 </div>
 
@@ -189,11 +189,9 @@ on every push and pull request.
 
 ## Brand assets
 
-Brand images are bundled under `custom_components/claude_ha/brand/` (used
-directly by Home Assistant 2026.3+). They are also prepared for submission to
-[home-assistant/brands](https://github.com/home-assistant/brands) under
-`custom_integrations/claude_ha/`; until that pull request merges, older Home
-Assistant versions show a generic icon.
+Brand images live under `custom_components/claude_ha/brand/` and are served
+directly by Home Assistant's Brands Proxy API (2026.3+) — no submission to a
+separate brands repository is required.
 
 ## License
 

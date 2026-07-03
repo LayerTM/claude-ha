@@ -10,12 +10,7 @@ rules:
   runtime-data: done
   action-setup: done
   appropriate-polling: done
-  brands:
-    status: todo
-    comment: >
-      Brand assets are bundled under brand/ (served directly by Home Assistant
-      2026.3+). The pull request to home-assistant/brands for Core inclusion is
-      prepared but not yet merged; flip to done once it lands.
+  brands: done
   common-modules: done
   dependency-transparency:
     status: exempt
@@ -91,8 +86,4 @@ rules:
   # Platinum
   async-dependency: done
   inject-websession: done
-  strict-typing:
-    status: todo
-    comment: >
-      Fully typed and mypy-clean, but core strict-typing tracking (the
-      .strict-typing list) applies only after core inclusion.
+  strict-typing: done
