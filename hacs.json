@@ -1,0 +1,6 @@
+{
+  "name": "Claude",
+  "homeassistant": "2026.2.0",
+  "hacs": "2.0.0",
+  "hide_default_branch": true
+}

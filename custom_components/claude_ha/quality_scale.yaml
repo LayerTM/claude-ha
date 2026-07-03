@@ -1,0 +1,98 @@
+rules:
+  # Bronze
+  config-flow: done
+  config-flow-test-coverage: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  action-setup: done
+  appropriate-polling: done
+  brands:
+    status: todo
+    comment: >
+      Brand assets are bundled under brand/ (served directly by Home Assistant
+      2026.3+). The pull request to home-assistant/brands for Core inclusion is
+      prepared but not yet merged; flip to done once it lands.
+  common-modules: done
+  dependency-transparency:
+    status: exempt
+    comment: >
+      The integration has no PyPI requirements; it talks to the companion add-on
+      over HTTP using Home Assistant's own aiohttp client session.
+  entity-event-setup:
+    status: exempt
+    comment: >
+      Entities poll through the DataUpdateCoordinator and subscribe to no
+      external library events.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-actions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers.
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions.
+
+  # Silver
+  config-entry-unloading: done
+  entity-unavailable: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow:
+    status: exempt
+    comment: >
+      The shared token is provisioned by Supervisor discovery, not entered by the
+      user. If the add-on rotates it, discovery re-advertises and the entry is
+      updated automatically, so there is no user-facing re-auth step.
+  action-exceptions: done
+  integration-owner: done
+  test-coverage: done
+  docs-configuration-parameters:
+    status: exempt
+    comment: Setup is zero-touch via the add-on; there are no configurable options.
+  docs-installation-parameters: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery: done
+  discovery-update-info: done
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: The integration exposes a single diagnostic sensor plus the agent.
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow:
+    status: exempt
+    comment: There is nothing to reconfigure; connection details come from discovery.
+  repair-issues: done
+  dynamic-devices:
+    status: exempt
+    comment: The integration models a single service device.
+  stale-devices:
+    status: exempt
+    comment: The integration models a single service device.
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+
+  # Platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing:
+    status: todo
+    comment: >
+      Fully typed and mypy-clean, but core strict-typing tracking (the
+      .strict-typing list) applies only after core inclusion.

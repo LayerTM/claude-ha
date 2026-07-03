@@ -1,0 +1,18 @@
+{
+  "entity": {
+    "sensor": {
+      "status": {
+        "default": "mdi:robot-happy",
+        "state": {
+          "ready": "mdi:robot-happy",
+          "initializing": "mdi:robot-off"
+        }
+      }
+    }
+  },
+  "services": {
+    "ask": {
+      "service": "mdi:message-text"
+    }
+  }
+}

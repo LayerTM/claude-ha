@@ -1,0 +1,76 @@
+[project]
+name = "claude-ha"
+version = "0.1.0"
+description = "Home Assistant integration exposing Claude via the Claude Code add-on."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "A",      # builtins shadowing
+    "ASYNC",  # async pitfalls
+    "B",      # bugbear
+    "BLE",    # blind-except
+    "C4",     # comprehensions
+    "D",      # docstrings
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "ICN",    # import conventions
+    "N",      # pep8-naming
+    "PGH",    # pygrep hooks
+    "PL",     # pylint
+    "RUF",    # ruff-specific
+    "SIM",    # simplify
+    "UP",     # pyupgrade
+    "W",      # pycodestyle warnings
+]
+ignore = [
+    "D203",   # conflicts with D211
+    "D213",   # conflicts with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D100", "D101", "D102", "D103", "D104", "PLR2004", "PLC0415"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["homeassistant", "custom_components"]
+combine-as-imports = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.13"
+show_error_codes = true
+follow_imports = "silent"
+strict = true
+warn_unreachable = true
+# Home Assistant's hassio package re-exports AddonManager/etc. without __all__
+# on the pinned test build (dev adds it); accept those first-party imports.
+implicit_reexport = true
+disable_error_code = ["import-untyped"]
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov=custom_components.claude_ha --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["custom_components/claude_ha"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

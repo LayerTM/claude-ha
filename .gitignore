@@ -13,3 +13,11 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# tldr code-analysis tool cache — local only
+.tldr/
+.tldrignore
+.claude/
+
+# local build notes (verified 2026 HA API research) — not shipped
+.research/

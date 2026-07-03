@@ -1,0 +1,26 @@
+ask:
+  fields:
+    config_entry:
+      required: false
+      selector:
+        config_entry:
+          integration: claude_ha
+    prompt:
+      required: true
+      example: What's the temperature in the living room?
+      selector:
+        text:
+          multiline: true
+    mode:
+      required: false
+      default: read
+      selector:
+        select:
+          translation_key: mode
+          options:
+            - read
+            - write
+    intents:
+      required: false
+      selector:
+        object:

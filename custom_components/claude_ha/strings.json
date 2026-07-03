@@ -1,0 +1,156 @@
+{
+  "config": {
+    "flow_title": "{addon}",
+    "step": {
+      "on_supervisor": {
+        "title": "Set up Claude",
+        "description": "Claude for Home Assistant runs through the Claude Code add-on. Do you want to set it up using the add-on?",
+        "data": {
+          "use_addon": "Use the Claude Code add-on"
+        },
+        "data_description": {
+          "use_addon": "The add-on runs Claude on your Home Assistant host and is required by this integration."
+        }
+      },
+      "hassio_confirm": {
+        "title": "Set up Claude with the Claude Code add-on",
+        "description": "Do you want to set up Claude using the discovered {addon} add-on?"
+      },
+      "install_addon": {
+        "title": "Installing the Claude Code add-on"
+      },
+      "start_addon": {
+        "title": "Starting the Claude Code add-on"
+      }
+    },
+    "progress": {
+      "install_addon": "Please wait while the Claude Code add-on is installed. This can take several minutes.",
+      "start_addon": "Please wait while the Claude Code add-on starts."
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
+      "not_hassio": "This integration requires the Home Assistant Supervisor and the Claude Code add-on.",
+      "not_claude_addon": "The discovered add-on is not the Claude Code add-on.",
+      "addon_not_found": "The Claude Code add-on could not be found. Add its repository and install the add-on, then try again.",
+      "addon_required": "The Claude Code add-on is required to use this integration.",
+      "addon_info_failed": "Failed to get the Claude Code add-on info.",
+      "addon_install_failed": "Failed to install the Claude Code add-on.",
+      "addon_start_failed": "Failed to start the Claude Code add-on.",
+      "addon_get_discovery_info_failed": "Failed to get the Claude Code add-on connection details.",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "ready": "Ready",
+          "initializing": "Initializing"
+        }
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "read": "Read (answer and propose changes, safe)",
+        "write": "Write (act on the confirmed request)"
+      }
+    }
+  },
+  "services": {
+    "ask": {
+      "name": "Ask Claude",
+      "description": "Sends a prompt to Claude and returns its response.",
+      "fields": {
+        "config_entry": {
+          "name": "Claude",
+          "description": "The Claude configuration to use. Defaults to the only one if a single Claude is configured."
+        },
+        "prompt": {
+          "name": "Prompt",
+          "description": "The prompt to send to Claude."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "read (default) answers and proposes changes without acting; write lets Claude act, scoped to the confirmed request — only use this from trusted automations."
+        },
+        "intents": {
+          "name": "Intents",
+          "description": "Required for write mode: the confirmed intents to carry out, echoed from a prior read-mode proposal (at most 5)."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "unknown": {
+      "message": "Unexpected error talking to the Claude Code add-on."
+    },
+    "cannot_connect": {
+      "message": "The Claude Code add-on is not reachable."
+    },
+    "auth_error": {
+      "message": "The Claude Code add-on rejected the request. The shared token may be out of date."
+    },
+    "rate_limited": {
+      "message": "The Claude Code add-on is busy or rate-limited. Try again shortly."
+    },
+    "request_rejected": {
+      "message": "The Claude Code add-on rejected the request as invalid."
+    },
+    "invalid_config_entry": {
+      "message": "Claude configuration {config_entry} not found."
+    },
+    "no_config_entry": {
+      "message": "No single Claude configuration is available; specify which one to use."
+    },
+    "entry_not_loaded": {
+      "message": "The selected Claude configuration is not loaded."
+    },
+    "prompt_too_large": {
+      "message": "The prompt is too large. The maximum size is {max_bytes} bytes."
+    },
+    "write_requires_intents": {
+      "message": "Write mode requires the confirmed intents from a prior read-mode proposal."
+    },
+    "too_many_intents": {
+      "message": "Too many intents. At most {max} may be sent in a write request."
+    },
+    "intents_require_write": {
+      "message": "Intents can only be sent with mode 'write'."
+    },
+    "addon_not_ready": {
+      "message": "The Claude Code add-on is not ready yet."
+    },
+    "addon_info_failed": {
+      "message": "Failed to get the Claude Code add-on info."
+    },
+    "addon_not_installed": {
+      "message": "The Claude Code add-on is being installed."
+    },
+    "addon_not_running": {
+      "message": "The Claude Code add-on is starting."
+    }
+  },
+  "issues": {
+    "addon_not_running": {
+      "title": "The Claude Code add-on is not running",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Start the Claude Code add-on",
+            "description": "The Claude Code add-on is installed but not running, so Claude is unavailable. Do you want to start it now?"
+          }
+        },
+        "abort": {
+          "start_failed": "Failed to start the Claude Code add-on. Check the add-on logs and try again."
+        }
+      }
+    },
+    "addon_not_installed": {
+      "title": "The Claude Code add-on is not installed",
+      "description": "Claude is unavailable because the Claude Code add-on is not installed. Home Assistant is trying to install it; check the add-on for progress."
+    }
+  }
+}
