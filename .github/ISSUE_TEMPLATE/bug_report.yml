@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a problem with the Claude integration
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do **not** paste
+        tokens, long-lived access tokens, or other secrets — download
+        diagnostics from the integration's device page (they are redacted).
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      options:
+        - label: I am running a supported Home Assistant version (Supervised / HA OS).
+          required: true
+        - label: The Claude Code add-on is installed and running.
+          required: true
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.7.0"
+    validations:
+      required: true
+  - type: input
+    id: addon_version
+    attributes:
+      label: Claude Code add-on version
+      placeholder: "1.2.3"
+    validations:
+      required: false
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Home Assistant logs for `custom_components.claude_ha` (secrets removed).
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/LayerTM/claude-ha/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
+  - name: Claude Code add-on
+    url: https://github.com/LayerTM/ClaudeInHA
+    about: Issues with the companion add-on itself belong in the add-on repository.

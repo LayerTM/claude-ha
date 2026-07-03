@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Claude for Home Assistant">
+  <rect width="256" height="256" rx="58" fill="#D97757"/>
+  <g fill="none" stroke="#F7F3EC" stroke-width="17" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="86,94 152,128 86,162"/>
+    <line x1="98" y1="176" x2="170" y2="176"/>
+  </g>
+</svg>
