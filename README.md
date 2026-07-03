@@ -7,15 +7,17 @@
 **Chat with Claude from Home Assistant Assist, and call it from your automations** —
 powered by the companion Claude Code add-on running on your own hardware.
 
-[![CI](https://github.com/LayerTM/claude-ha/actions/workflows/ci.yaml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/ci.yaml)
-[![Release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
-[![License](https://img.shields.io/github/license/LayerTM/claude-ha?color=blue)](LICENSE)
-[![Quality scale](https://img.shields.io/badge/quality%20scale-platinum-E5E4E2)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
+[![release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![quality scale: platinum](https://img.shields.io/badge/quality%20scale-platinum-8A2BE2)](custom_components/claude_ha/quality_scale.yaml)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?logo=homeassistant&logoColor=white)](https://hacs.xyz)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![hassfest](https://github.com/LayerTM/claude-ha/actions/workflows/hassfest.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/hassfest.yml)
+[![hacs](https://github.com/LayerTM/claude-ha/actions/workflows/hacs.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/hacs.yml)
+[![lint](https://github.com/LayerTM/claude-ha/actions/workflows/lint.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/lint.yml)
+[![tests](https://github.com/LayerTM/claude-ha/actions/workflows/tests.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/tests.yml)
+[![secret-scan](https://github.com/LayerTM/claude-ha/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/secret-scan.yml)
 
 </div>
 

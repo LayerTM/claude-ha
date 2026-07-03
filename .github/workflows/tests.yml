@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements_test.txt
+      - name: mypy (strict)
+        run: mypy custom_components/claude_ha
+      - name: pytest (100% coverage)
+        run: |
+          pytest \
+            --cov=custom_components.claude_ha \
+            --cov-report=term-missing \
+            --cov-fail-under=100
