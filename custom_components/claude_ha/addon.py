@@ -24,8 +24,8 @@ def get_addon_manager(hass: HomeAssistant, slug: str) -> AddonManager:
     """Return a cached :class:`AddonManager` for the resolved add-on slug.
 
     Cached per slug in ``hass.data`` (rather than via ``@singleton``) because the
-    slug is only known at runtime and, under ``single_config_entry``, is stable
-    for the lifetime of the install.
+    slug is only known at runtime. There is one Claude Code add-on per install,
+    so the slug is stable for the lifetime of the entry.
     """
     managers: dict[str, AddonManager] = hass.data.setdefault(DATA_ADDON_MANAGERS, {})
     if slug not in managers:

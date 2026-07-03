@@ -43,10 +43,12 @@ cloud directly.**
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Security model](#security-model)
+- [How data is updated](#how-data-is-updated)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Removal](#removal)
 - [Development](#development)
+- [License](#license)
 
 ## How it works
 
