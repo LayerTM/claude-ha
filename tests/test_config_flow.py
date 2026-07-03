@@ -335,6 +335,8 @@ async def test_discovery_flow(
     )
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "hassio_confirm"
+    # The confirm description uses {addon}; guard that the placeholder is filled.
+    assert result["description_placeholders"]["addon"]
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.CREATE_ENTRY

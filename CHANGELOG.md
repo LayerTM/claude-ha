@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-03
+
+### Fixed
+
+- The discovered-add-on confirm step no longer renders a `{addon}` placeholder
+  error — the add-on name is now passed as a `description_placeholders` value
+  (previously only the flow title had it, so the step description was unfilled).
+
 ## [0.1.3] - 2026-07-03
 
 ### Added

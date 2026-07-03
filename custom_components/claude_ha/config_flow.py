@@ -85,7 +85,12 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         """Confirm setup of the discovered add-on."""
         if user_input is not None:
             return await self.async_step_on_supervisor({CONF_USE_ADDON: True})
-        return self.async_show_form(step_id="hassio_confirm")
+        # The hassio_confirm description uses {addon}; title_placeholders only
+        # fills the flow title, so the step description needs its own placeholder.
+        return self.async_show_form(
+            step_id="hassio_confirm",
+            description_placeholders={"addon": ADDON_NAME},
+        )
 
     async def async_step_on_supervisor(
         self, user_input: dict[str, Any] | None = None
