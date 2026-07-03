@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-03
+
+### Changed
+
+- Split CI into per-workflow files (hassfest, hacs, lint, tests, secret-scan),
+  each with least-privilege permissions.
+- Reworked the README badge set and brand assets; added community health files
+  (security policy, contributing guide, code of conduct, issue/PR templates,
+  Dependabot).
+
 ## [0.1.0] - 2026-07-03
 
 Initial release.
@@ -26,5 +36,6 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LayerTM/claude-ha/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/LayerTM/claude-ha/releases/tag/v0.1.0
