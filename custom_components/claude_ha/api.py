@@ -9,8 +9,10 @@ contract, so keep request/response shapes here in lockstep with it.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass, field
 from http import HTTPStatus
+import json
 from typing import Any, NoReturn
 
 from aiohttp import ClientError, ClientSession
@@ -21,10 +23,13 @@ from .const import (
     API_PROMPT,
     API_STATUS,
     API_USAGE,
+    CONTENT_TYPE_NDJSON,
     DOMAIN,
     HEADER_CALLER,
     MODE_READ,
     MODE_WRITE,
+    REQUEST_IMAGE_ENTITY,
+    REQUEST_STREAM,
     REQUEST_TIMEOUT,
     RESP_PROPOSAL,
     RESP_TEXT,
@@ -37,6 +42,11 @@ from .const import (
     STATUS_READY,
     STATUS_TIMEOUT,
     STATUS_VERSION,
+    STREAM_ERROR,
+    STREAM_KIND,
+    STREAM_KIND_DELTA,
+    STREAM_KIND_DONE,
+    STREAM_KIND_ERROR,
 )
 
 
@@ -98,6 +108,13 @@ class PromptResult:
     proposal: Proposal | None
     tools_used: list[str]
     truncated: bool
+
+
+@dataclass(slots=True)
+class StreamDelta:
+    """An incremental chunk of answer text from a streaming read."""
+
+    text: str
 
 
 @dataclass(slots=True)
@@ -170,11 +187,13 @@ class ClaudeClient:
         caller: str | None = None,
         intents: list[dict[str, Any]] | None = None,
         confirmation: str | None = None,
+        image_entity: str | None = None,
     ) -> PromptResult:
         """Send a prompt to Claude and return the structured result (contract §2).
 
         ``intents`` (the user-confirmed proposal intents) and ``confirmation``
         ("auto"/"confirmed") are sent only for ``mode="write"``, never for read.
+        ``image_entity`` (an Assist-exposed camera) is a read-only visual hint.
         """
         payload: dict[str, object] = {"prompt": prompt, "mode": mode}
         if conversation_id is not None:
@@ -183,6 +202,8 @@ class ClaudeClient:
             payload["intents"] = intents or []
             if confirmation is not None:
                 payload["confirmation"] = confirmation
+        elif image_entity is not None:
+            payload[REQUEST_IMAGE_ENTITY] = image_entity
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller
@@ -194,20 +215,58 @@ class ClaudeClient:
             headers=headers,
             timeout_s=REQUEST_TIMEOUT,
         )
+        return _parse_prompt_result(data)
 
-        proposal_raw = data.get(RESP_PROPOSAL)
-        proposal: Proposal | None = None
-        if isinstance(proposal_raw, dict):
-            proposal = Proposal(
-                summary=str(proposal_raw.get("summary", "")),
-                intents=list(proposal_raw.get("intents", []) or []),
-            )
-        return PromptResult(
-            text=str(data.get(RESP_TEXT, "")),
-            proposal=proposal,
-            tools_used=list(data.get(RESP_TOOLS_USED, []) or []),
-            truncated=bool(data.get(RESP_TRUNCATED, False)),
-        )
+    async def async_prompt_stream(
+        self,
+        prompt: str,
+        *,
+        conversation_id: str | None = None,
+        caller: str | None = None,
+        image_entity: str | None = None,
+    ) -> AsyncIterator[StreamDelta | PromptResult]:
+        """Stream a read: yield text deltas, then one final ``PromptResult``.
+
+        Requests the add-on's NDJSON stream (add-on >= 1.17.0). An add-on that
+        can't stream answers a normal JSON body instead — detected by
+        Content-Type — so a single ``PromptResult`` is yielded and no deltas.
+        Streaming is read-only (contract §2). The last item is always the
+        authoritative ``PromptResult`` (its proposal drives auto/confirm).
+        """
+        payload: dict[str, object] = {
+            "prompt": prompt,
+            "mode": MODE_READ,
+            REQUEST_STREAM: True,
+        }
+        if conversation_id is not None:
+            payload["conversation_id"] = conversation_id
+        if image_entity is not None:
+            payload[REQUEST_IMAGE_ENTITY] = image_entity
+        headers = self._auth_headers
+        if caller:
+            headers[HEADER_CALLER] = caller
+
+        url = f"{self._base_url}{API_PROMPT}"
+        try:
+            async with (
+                asyncio.timeout(REQUEST_TIMEOUT),
+                self._session.request(
+                    "POST", url, json=payload, headers=headers
+                ) as resp,
+            ):
+                if resp.status >= HTTPStatus.BAD_REQUEST:
+                    _raise_for_status(resp.status)
+                content_type = resp.headers.get("Content-Type", "")
+                if CONTENT_TYPE_NDJSON not in content_type:
+                    data = await resp.json(content_type=None) or {}
+                    yield _parse_prompt_result(data)
+                    return
+                async for chunk in _iter_ndjson(resp.content):
+                    yield chunk
+        except TimeoutError as err:
+            raise ClaudeConnectionError("Timed out talking to the add-on") from err
+        except ClientError as err:
+            raise ClaudeConnectionError(str(err)) from err
 
     async def _request(
         self,
@@ -237,6 +296,46 @@ class ClaudeClient:
             raise ClaudeConnectionError("Timed out talking to the add-on") from err
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
+
+
+def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
+    """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object."""
+    proposal_raw = data.get(RESP_PROPOSAL)
+    proposal: Proposal | None = None
+    if isinstance(proposal_raw, dict):
+        proposal = Proposal(
+            summary=str(proposal_raw.get("summary", "")),
+            intents=list(proposal_raw.get("intents", []) or []),
+        )
+    return PromptResult(
+        text=str(data.get(RESP_TEXT, "")),
+        proposal=proposal,
+        tools_used=list(data.get(RESP_TOOLS_USED, []) or []),
+        truncated=bool(data.get(RESP_TRUNCATED, False)),
+    )
+
+
+async def _iter_ndjson(
+    stream: AsyncIterable[bytes],
+) -> AsyncIterator[StreamDelta | PromptResult]:
+    """Yield deltas then the final result from an NDJSON stream (contract §2)."""
+    async for raw in stream:
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as err:
+            raise ClaudeConnectionError("Malformed stream from the add-on") from err
+        kind = event.get(STREAM_KIND)
+        if kind == STREAM_KIND_DELTA:
+            yield StreamDelta(str(event.get(RESP_TEXT, "")))
+        elif kind == STREAM_KIND_DONE:
+            yield _parse_prompt_result(event)
+            return
+        elif kind == STREAM_KIND_ERROR:
+            raise ClaudeConnectionError(str(event.get(STREAM_ERROR, "stream error")))
+    raise ClaudeConnectionError("Stream ended without a final result")
 
 
 def _raise_for_status(status: int) -> NoReturn:

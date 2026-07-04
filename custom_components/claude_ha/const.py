@@ -28,6 +28,9 @@ CONF_USE_ADDON: Final = "use_addon"
 # Options (additive; not part of the config-entry data schema).
 CONF_CRITICAL_ENTITIES: Final = "critical_entities"
 CONF_AUTO_EXECUTE: Final = "auto_execute"
+# Camera vision (add-on >= 1.17.0): opt-in, off by default because a snapshot is
+# more sensitive than state. Only ever an Assist-exposed camera is sent.
+CONF_CAMERA_VISION: Final = "camera_vision"
 
 # Default prompt-server port (contract §4; bound 0.0.0.0, not published to host).
 DEFAULT_PORT: Final = 8126
@@ -75,6 +78,22 @@ RESP_TOOLS_USED: Final = "tools_used"
 RESP_TRUNCATED: Final = "truncated"
 PROPOSAL_SUMMARY: Final = "summary"
 PROPOSAL_INTENTS: Final = "intents"
+
+# Streaming read (add-on >= 1.17.0): opt-in via this request field; the add-on
+# answers application/x-ndjson (one JSON object per line) or, when it can't
+# stream, a normal JSON body — the client branches on the response Content-Type.
+REQUEST_STREAM: Final = "stream"
+CONTENT_TYPE_NDJSON: Final = "application/x-ndjson"
+STREAM_KIND: Final = "type"
+STREAM_KIND_DELTA: Final = "delta"
+STREAM_KIND_DONE: Final = "done"
+STREAM_KIND_ERROR: Final = "error"
+STREAM_ERROR: Final = "error"
+
+# Optional camera snapshot for a read (add-on >= 1.17.0): a camera entity_id the
+# add-on fetches, downscales and lets Claude see. Only ever an Assist-exposed
+# camera; the integration passes the entity_id, never a path.
+REQUEST_IMAGE_ENTITY: Final = "image_entity"
 
 # GET /api/status 200-response keys.
 STATUS_READY: Final = "ready"

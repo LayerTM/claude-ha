@@ -41,7 +41,8 @@ cloud directly.**
 
 | | |
 |---|---|
-| 💬 **Conversation agent** | Talk to Claude from HA Assist — it acts on benign requests immediately and confirms important ones (judged per action). |
+| 💬 **Conversation agent** | Talk to Claude from HA Assist — replies stream in live, it acts on benign requests immediately and confirms important ones (judged per action). |
+| 👁️ **Camera vision** | Optionally, a visual question ("who's at the door?") sends one snapshot of an Assist-exposed camera to Claude. Off by default. |
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
 | 📟 **Sensors** | Add-on readiness, active model, and Claude token usage + prompt-API cost. |
@@ -117,6 +118,8 @@ the add-on for you. There are no options to fill in.
 
 Select **Claude** as a conversation agent under **Settings → Voice assistants**,
 or target it directly. It answers in any language, and it can **act** on your home.
+Answers **stream in live**, token by token (with the Claude Code add-on ≥ 1.17.0;
+older add-ons return the whole answer at once).
 
 Every request is read first. If it would change state, Claude proposes the exact
 actions, and the integration decides — **per action, from live entity metadata** —
@@ -141,6 +144,14 @@ change, or list entities that must always be confirmed.
 
 > Claude can only ever touch entities you have exposed to Assist — that exposure
 > list is the outer ceiling; the per-action classifier is the inner gate.
+
+**Camera vision** (opt-in, off by default; add-on ≥ 1.17.0). Turn on *Let Claude
+look at cameras* in the options and a clearly visual question — "who's at the
+door?", "look at the backyard camera" — sends **one** snapshot to Claude. Only a
+camera you have exposed to Assist is ever sent, only when the message is visual
+and exactly one camera resolves (by name, area or floor); it never guesses
+between cameras. The add-on fetches and downscales the snapshot itself; the
+integration passes only the entity id.
 
 ### Dashboard card
 

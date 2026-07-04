@@ -34,6 +34,7 @@ from .const import (
     ADDON_SLUG_SUFFIX,
     CONF_ADDON_SLUG,
     CONF_AUTO_EXECUTE,
+    CONF_CAMERA_VISION,
     CONF_CRITICAL_ENTITIES,
     CONF_HOST,
     CONF_PORT,
@@ -289,6 +290,10 @@ class ClaudeOptionsFlow(OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(multiple=True)
                 ),
+                vol.Required(
+                    CONF_CAMERA_VISION,
+                    default=options.get(CONF_CAMERA_VISION, False),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

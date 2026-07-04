@@ -19,19 +19,20 @@ from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .api import ClaudeError, Proposal
+from .api import ClaudeError, PromptResult, Proposal, StreamDelta
 from .confirm import CHAT_PENDING_TTL, DATA_PENDING_CHAT, PendingProposal
 from .const import (
     CONF_AUTO_EXECUTE,
+    CONF_CAMERA_VISION,
     CONF_CRITICAL_ENTITIES,
     CONFIRMATION_AUTO,
     CONFIRMATION_CONFIRMED,
-    MODE_READ,
     MODE_WRITE,
 )
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .entity import build_device_info
 from .risk import is_auto_ok
+from .vision import resolve_camera
 
 # Declared for the parallel-updates quality rule. Conversation turns are not
 # entity state updates, so this does not gate them; the add-on owns concurrency
@@ -83,8 +84,9 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
-    # The add-on returns a full JSON body, not a token stream.
-    _attr_supports_streaming = False
+    # The add-on can stream the answer as NDJSON deltas (>= 1.17.0); older
+    # add-ons return a full JSON body, which the client yields as one result.
+    _attr_supports_streaming = True
 
     def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
         """Init from the runtime coordinator (which owns the API client)."""
@@ -134,19 +136,23 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 return self._reply(user_input, chat_log, "Cancelled.")
             # Neither/expired: fall through and treat as a fresh request.
 
-        # B. Fresh read.
+        # B. Fresh read, streamed live into the chat log. When vision is enabled,
+        # attach at most one Assist-exposed camera the message clearly refers to.
+        image_entity = (
+            resolve_camera(hass, text)
+            if entry.options.get(CONF_CAMERA_VISION, False)
+            else None
+        )
         try:
-            result = await self.coordinator.client.async_prompt(
-                text, mode=MODE_READ, conversation_id=conv_id, caller=caller
+            result, streamed = await self._async_stream_read(
+                user_input, chat_log, text, conv_id, caller, image_entity
             )
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
 
         proposal = result.proposal
         if proposal is None or not proposal.intents:
-            return self._reply(
-                user_input, chat_log, _render_proposal(result.text, proposal)
-            )
+            return self._answer_reply(user_input, chat_log, result.text, streamed)
 
         summary = proposal.summary.strip() or "the requested change"
 
@@ -168,7 +174,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             else:
                 return self._reply(user_input, chat_log, f"Done: {summary}")
 
-        # E. Hold the exact validated intents and ask for confirmation.
+        # E. Hold the exact validated intents and ask for confirmation. The answer
+        # already streamed, so append only the proposal + confirmation affordance.
         pending_store[conv_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=text,
@@ -177,8 +184,68 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             summary=summary,
             expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
         )
-        message = f"{_render_proposal(result.text, proposal)}\n\nConfirm? (yes/no)"
+        answer = "" if streamed else result.text
+        message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
         return self._reply(user_input, chat_log, message.strip())
+
+    async def _async_stream_read(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        text: str,
+        conv_id: str,
+        caller: str | None,
+        image_entity: str | None,
+    ) -> tuple[PromptResult, bool]:
+        """Stream a read into the chat log; return its result and if it streamed.
+
+        Text deltas are added live; the final ``PromptResult`` (carrying the
+        proposal) is captured out of band. ``streamed`` is False when the add-on
+        answered with a plain JSON body (no deltas) so the caller records it.
+        """
+        captured: dict[str, PromptResult] = {}
+        streamed = False
+
+        async def _deltas() -> Any:
+            nonlocal streamed
+            started = False
+            async for chunk in self.coordinator.client.async_prompt_stream(
+                text,
+                conversation_id=conv_id,
+                caller=caller,
+                image_entity=image_entity,
+            ):
+                if isinstance(chunk, PromptResult):
+                    captured["result"] = chunk
+                elif isinstance(chunk, StreamDelta) and chunk.text:
+                    if not started:
+                        yield {"role": "assistant"}
+                        started = True
+                    streamed = True
+                    yield {"content": chunk.text}
+
+        async for _content in chat_log.async_add_delta_content_stream(
+            user_input.agent_id, _deltas()
+        ):
+            pass
+
+        result = captured.get("result")
+        if result is None:
+            raise ClaudeError("The add-on returned no result")
+        return result, streamed
+
+    def _answer_reply(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        text: str,
+        streamed: bool,
+    ) -> conversation.ConversationResult:
+        """Return a pure-answer turn (no proposal)."""
+        if streamed:
+            # The streamed deltas are already the assistant turn.
+            return conversation.async_get_result_from_chat_log(user_input, chat_log)
+        return self._reply(user_input, chat_log, text)
 
     async def _async_write(
         self,

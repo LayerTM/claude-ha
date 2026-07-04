@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-07-04
+
+### Added
+
+- **Streaming replies**: the conversation agent now streams Claude's answer token
+  by token instead of waiting for the whole response (add-on ≥ 1.17.0, NDJSON).
+  Older add-ons that return a single JSON body still work — the client detects
+  the response type. The hybrid auto/confirm behaviour is unchanged.
+- **Camera vision** (opt-in, off by default; add-on ≥ 1.17.0): a new *Let Claude
+  look at cameras* option. A clearly visual question sends one snapshot of an
+  Assist-exposed camera to Claude, resolved by name/area/floor; ambiguous cases
+  never guess. The integration passes only the camera entity id.
+
+### Security
+
+- A camera snapshot is only ever sent for a camera exposed to Assist
+  (`async_should_expose`), only when vision is enabled and exactly one camera
+  resolves. Streaming remains read-only; writes are never streamed.
+
 ## [0.1.6] - 2026-07-04
 
 ### Added
@@ -101,7 +120,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/LayerTM/claude-ha/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/LayerTM/claude-ha/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/LayerTM/claude-ha/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/LayerTM/claude-ha/compare/v0.1.3...v0.1.4
