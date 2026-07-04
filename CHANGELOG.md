@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-04
+
+### Added
+
+- **Health checks**: the integration now detects the "chat can't see your home"
+  gaps — Claude not logged in, no HA token, the Model Context Protocol Server
+  integration missing/unreachable, or nothing exposed to Assist — and raises a
+  repair with the exact fix. Evaluated on each status poll (no Claude cost); the
+  new **Check Claude health** button runs a deeper reachability probe. The status
+  sensor gains `health`, `ha_mcp_connected` and `exposed_to_assist` attributes.
+  Reachability needs the Claude Code add-on ≥ 1.14.0.
+- **Local voice one-click**: a `claude_ha.setup_voice` action that installs and
+  starts the Whisper (STT) and Piper (TTS) add-ons for a chosen language and
+  creates an Assist pipeline wired to the Claude conversation agent.
+
 ## [0.1.5] - 2026-07-04
 
 ### Added
@@ -86,7 +101,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/LayerTM/claude-ha/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/LayerTM/claude-ha/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/LayerTM/claude-ha/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/LayerTM/claude-ha/compare/v0.1.2...v0.1.3

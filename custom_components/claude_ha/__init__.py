@@ -8,7 +8,7 @@ from homeassistant.components.hassio import (
     AddonState,
 )
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -24,6 +24,7 @@ from .const import (
     CONF_PORT,
     CONF_TOKEN,
     DOMAIN,
+    HEALTH_ISSUES,
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
 )
@@ -34,9 +35,10 @@ from .coordinator import (
     ClaudeUsageCoordinator,
 )
 from .frontend import async_register_card
+from .health import async_apply as async_apply_health, evaluate as evaluate_health
 from .services import async_setup_services
 
-PLATFORMS = (Platform.CONVERSATION, Platform.SENSOR)
+PLATFORMS = (Platform.BUTTON, Platform.CONVERSATION, Platform.SENSOR)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -70,13 +72,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
 
     entry.runtime_data = ClaudeRuntimeData(client=client, status=status, usage=usage)
 
+    _async_setup_health(hass, entry, status)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
+@callback
+def _async_setup_health(
+    hass: HomeAssistant, entry: ClaudeConfigEntry, status: ClaudeStatusCoordinator
+) -> None:
+    """Re-evaluate health repairs after each status poll (no Claude cost)."""
+
+    @callback
+    def _refresh_health() -> None:
+        async_apply_health(hass, evaluate_health(hass, status.data))
+
+    entry.async_on_unload(status.async_add_listener(_refresh_health))
+    _refresh_health()
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
     """Unload a config entry and its platforms."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        for issue_id in HEALTH_ISSUES:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    return unloaded
 
 
 async def _async_ensure_addon_running(

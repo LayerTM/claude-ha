@@ -82,6 +82,9 @@ STATUS_VERSION: Final = "version"
 STATUS_CLAUDE_VERSION: Final = "claude_version"
 STATUS_MODEL: Final = "model"
 STATUS_HA_MCP: Final = "ha_mcp"
+# Whether the LAST chat read actually reached the HA MCP server (add-on >= 1.14.0;
+# null until the first read). Distinct from ha_mcp, which only says a config exists.
+STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
@@ -97,11 +100,16 @@ USAGE_SCAN_INTERVAL: Final = 300
 
 # --- Services ---------------------------------------------------------------
 SERVICE_ASK: Final = "ask"
+SERVICE_SETUP_VOICE: Final = "setup_voice"
 ATTR_CONFIG_ENTRY: Final = "config_entry"
 ATTR_PROMPT: Final = "prompt"
 ATTR_MODE: Final = "mode"
 ATTR_INTENTS: Final = "intents"
 ATTR_NOTIFY: Final = "notify"
+ATTR_LANGUAGE: Final = "language"
+ATTR_STT_MODEL: Final = "stt_model"
+ATTR_TTS_VOICE: Final = "tts_voice"
+ATTR_PIPELINE_NAME: Final = "pipeline_name"
 
 # Event fired after a confirmed write executes (for automations/logbook).
 EVENT_ACTION_EXECUTED: Final = f"{DOMAIN}_action_executed"
@@ -109,3 +117,22 @@ EVENT_ACTION_EXECUTED: Final = f"{DOMAIN}_action_executed"
 # --- Repair issues ----------------------------------------------------------
 ISSUE_ADDON_NOT_RUNNING: Final = "addon_not_running"
 ISSUE_ADDON_NOT_INSTALLED: Final = "addon_not_installed"
+# Health-check issues: the chat can reach the add-on but can't see/act on the home.
+ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
+ISSUE_NO_HA_TOKEN: Final = "no_ha_token"
+ISSUE_MCP_UNREACHABLE: Final = "mcp_unreachable"
+ISSUE_NO_EXPOSED_ENTITIES: Final = "no_exposed_entities"
+# Health issues cleared together on unload.
+HEALTH_ISSUES: Final = (
+    ISSUE_NOT_LOGGED_IN,
+    ISSUE_NO_HA_TOKEN,
+    ISSUE_MCP_UNREACHABLE,
+    ISSUE_NO_EXPOSED_ENTITIES,
+)
+
+# The Model Context Protocol Server integration Claude reads the home through.
+MCP_SERVER_DOMAIN: Final = "mcp_server"
+# The Assist assistant key entity exposure is scoped to.
+ASSIST_ASSISTANT: Final = "conversation"
+# Tiny read used to populate ha_mcp_connected on an explicit health probe.
+HEALTH_PROBE_PROMPT: Final = "ping"

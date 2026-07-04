@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     STATUS_CLAUDE_VERSION,
     STATUS_HA_MCP,
+    STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
     STATUS_VERSION,
 )
@@ -26,6 +27,7 @@ from .coordinator import (
     ClaudeUsageCoordinator,
 )
 from .entity import build_device_info
+from .health import evaluate as evaluate_health
 
 # Read-only sensors fed by coordinators; no outbound writes to serialize.
 PARALLEL_UPDATES = 0
@@ -79,13 +81,17 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the add-on and Claude versions, active model and HA-MCP flag."""
+        """Expose versions, model, HA-MCP flags and the current health summary."""
         data = self.coordinator.data
+        report = evaluate_health(self.hass, data)
         return {
             STATUS_VERSION: data.version,
             STATUS_CLAUDE_VERSION: data.claude_version,
             STATUS_MODEL: data.model,
             STATUS_HA_MCP: data.ha_mcp,
+            STATUS_HA_MCP_CONNECTED: data.ha_mcp_connected,
+            "health": report.problem or "ok",
+            "exposed_to_assist": report.exposed_to_assist,
         }
 
 

@@ -1,5 +1,10 @@
 {
   "entity": {
+    "button": {
+      "check_health": {
+        "default": "mdi:stethoscope"
+      }
+    },
     "sensor": {
       "status": {
         "default": "mdi:robot-happy",
@@ -19,6 +24,9 @@
   "services": {
     "ask": {
       "service": "mdi:message-text"
+    },
+    "setup_voice": {
+      "service": "mdi:microphone-message"
     }
   }
 }

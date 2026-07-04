@@ -30,10 +30,11 @@ TEST_BASE_URL = f"http://{TEST_HOST}:{TEST_PORT}"
 
 STATUS_PAYLOAD = {
     "ready": True,
-    "version": "1.7.0",
+    "version": "1.14.0",
     "claude_version": "2.0.1",
     "model": "claude-sonnet-4-6",
     "ha_mcp": True,
+    "ha_mcp_connected": True,
 }
 PROMPT_PAYLOAD = {
     "text": "The living room is 21 °C.",

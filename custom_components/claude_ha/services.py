@@ -15,15 +15,23 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import config_validation as cv, selector
+from homeassistant.helpers import (
+    config_validation as cv,
+    entity_registry as er,
+    selector,
+)
 
 from .confirm import ConfirmationRequest, async_send_proposal_notification
 from .const import (
     ATTR_CONFIG_ENTRY,
     ATTR_INTENTS,
+    ATTR_LANGUAGE,
     ATTR_MODE,
     ATTR_NOTIFY,
+    ATTR_PIPELINE_NAME,
     ATTR_PROMPT,
+    ATTR_STT_MODEL,
+    ATTR_TTS_VOICE,
     DOMAIN,
     MAX_WRITE_INTENTS,
     MODE_READ,
@@ -35,8 +43,10 @@ from .const import (
     RESP_TOOLS_USED,
     RESP_TRUNCATED,
     SERVICE_ASK,
+    SERVICE_SETUP_VOICE,
 )
 from .coordinator import ClaudeConfigEntry
+from .voice import DEFAULT_WHISPER_MODEL, async_setup_voice_pipeline, default_voice
 
 ASK_SCHEMA = vol.Schema(
     {
@@ -50,6 +60,18 @@ ASK_SCHEMA = vol.Schema(
     }
 )
 
+SETUP_VOICE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_CONFIG_ENTRY): selector.ConfigEntrySelector(
+            {"integration": DOMAIN}
+        ),
+        vol.Required(ATTR_LANGUAGE): cv.string,
+        vol.Optional(ATTR_STT_MODEL): cv.string,
+        vol.Optional(ATTR_TTS_VOICE): cv.string,
+        vol.Optional(ATTR_PIPELINE_NAME): cv.string,
+    }
+)
+
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
@@ -59,6 +81,13 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_ASK,
         _async_handle_ask,
         schema=ASK_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SETUP_VOICE,
+        _async_handle_setup_voice,
+        schema=SETUP_VOICE_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -157,3 +186,42 @@ async def _async_handle_ask(call: ServiceCall) -> ServiceResponse:
         RESP_TRUNCATED: result.truncated,
     }
     return response
+
+
+async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:
+    """Handle ``claude_ha.setup_voice``: install Whisper/Piper and wire a pipeline."""
+    hass = call.hass
+    entry = _async_get_entry(hass, call)
+    language = call.data[ATTR_LANGUAGE].lower()
+
+    conversation_entity_id = er.async_get(hass).async_get_entity_id(
+        "conversation", DOMAIN, entry.entry_id
+    )
+    if conversation_entity_id is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="entry_not_loaded"
+        )
+
+    voice: str | None = call.data.get(ATTR_TTS_VOICE) or default_voice(language)
+    if not voice:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="voice_unknown_language",
+            translation_placeholders={"language": language},
+        )
+
+    result = await async_setup_voice_pipeline(
+        hass,
+        conversation_entity_id,
+        language=language,
+        whisper_model=call.data.get(ATTR_STT_MODEL, DEFAULT_WHISPER_MODEL),
+        piper_voice=voice,
+        pipeline_name=call.data.get(ATTR_PIPELINE_NAME) or f"Claude ({language})",
+    )
+    return {
+        "stt_engine": result.stt_engine,
+        "tts_engine": result.tts_engine,
+        "tts_voice": voice,
+        "pipeline_id": result.pipeline_id,
+        "created_pipeline": result.pipeline_id is not None,
+    }

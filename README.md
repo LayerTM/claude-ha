@@ -45,6 +45,8 @@ cloud directly.**
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
 | 📟 **Sensors** | Add-on readiness, active model, and Claude token usage + prompt-API cost. |
+| 🩺 **Health checks** | Detects the "chat can't see your home" gaps and raises a repair with the exact fix. |
+| 🎙️ **Local voice one-click** | `claude_ha.setup_voice` installs Whisper + Piper and builds an Assist pipeline for your language. |
 | 🔒 **Secure by design** | Read-only by default, bearer-token auth, scoped writes, no cloud calls. |
 | 🚀 **Zero-touch setup** | Discovered, installed and started for you via the Supervisor. |
 
@@ -198,13 +200,50 @@ data:
 ### Sensors
 
 - **Status** — `ready` / `initializing`, with the add-on version, Claude version,
-  active model and whether a scoped HA MCP is configured as attributes.
+  active model, whether a scoped HA MCP is configured and reachable, a `health`
+  summary and the count of entities exposed to Assist as attributes.
 - **Token usage today** — today's input + output tokens (unit `tokens`), with the
   full usage report (per-period and per-model token totals, message counts) as
   attributes. Polled slowly (~5 min; the add-on caches it).
 - **Prompt API cost** — the total prompt-API cost in USD (interactive-console use
   is measured in tokens, not dollars). The usage/cost sensors need the Claude
   Code add-on ≥ 1.7.0 and stay unavailable otherwise.
+
+### Health checks
+
+The most common "dead on arrival" failure is a chat that reaches Claude but can't
+actually *see* your home. The integration checks for this on every status poll and
+raises a repair with the exact fix when it finds:
+
+- Claude isn't logged in (the add-on is up but unauthenticated);
+- Claude has no Home Assistant token to read your home;
+- the **Model Context Protocol Server** integration is missing or unreachable;
+- nothing is exposed to Assist (so there's nothing to see or control).
+
+These checks cost nothing (they read the status poll, not Claude). Press the
+**Check Claude health** button to run a deeper probe — a tiny read that confirms
+Claude can actually reach the MCP server right now. Needs the add-on ≥ 1.14.0 for
+the reachability signal.
+
+### Local voice (one-click)
+
+`claude_ha.setup_voice` turns local voice chat with Claude into one action. Give
+it a language and it installs and starts the official **Whisper** (speech-to-text)
+and **Piper** (text-to-speech) add-ons, then creates an Assist pipeline whose
+conversation agent is Claude:
+
+```yaml
+action: claude_ha.setup_voice
+data:
+  language: uk        # uk, pl, en, de, …
+  # tts_voice: uk_UA-ukrainian_tts-medium   # override the default voice
+  # stt_model: small-int8                    # override the Whisper model
+```
+
+Then pick the new pipeline on your phone. Honest caveats: Whisper on CPU takes a
+few seconds per phrase, and some voices (Ukrainian especially) are weaker than
+others — pass `tts_voice` or switch to Cloud TTS if the default doesn't fit. The
+service returns the engines it wired and the pipeline id.
 
 ## Security model
 

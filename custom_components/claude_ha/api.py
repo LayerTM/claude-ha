@@ -32,6 +32,7 @@ from .const import (
     RESP_TRUNCATED,
     STATUS_CLAUDE_VERSION,
     STATUS_HA_MCP,
+    STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
     STATUS_READY,
     STATUS_TIMEOUT,
@@ -108,6 +109,7 @@ class StatusResult:
     claude_version: str | None
     model: str | None
     ha_mcp: bool | None
+    ha_mcp_connected: bool | None
 
 
 @dataclass(slots=True)
@@ -137,12 +139,14 @@ class ClaudeClient:
         """Fetch add-on readiness/versions (contract §3)."""
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
         ha_mcp = data.get(STATUS_HA_MCP)
+        connected = data.get(STATUS_HA_MCP_CONNECTED)
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
             claude_version=data.get(STATUS_CLAUDE_VERSION),
             model=data.get(STATUS_MODEL),
             ha_mcp=None if ha_mcp is None else bool(ha_mcp),
+            ha_mcp_connected=None if connected is None else bool(connected),
         )
 
     async def async_get_usage(self) -> UsageResult:

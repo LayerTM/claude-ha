@@ -29,3 +29,30 @@ ask:
       example: mobile_app_my_phone
       selector:
         text:
+setup_voice:
+  fields:
+    config_entry:
+      required: false
+      selector:
+        config_entry:
+          integration: claude_ha
+    language:
+      required: true
+      example: uk
+      selector:
+        text:
+    stt_model:
+      required: false
+      example: small-int8
+      selector:
+        text:
+    tts_voice:
+      required: false
+      example: uk_UA-ukrainian_tts-medium
+      selector:
+        text:
+    pipeline_name:
+      required: false
+      example: Claude (Ukrainian)
+      selector:
+        text:

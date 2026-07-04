@@ -33,6 +33,7 @@ async def test_status_parsing(
     status = await _client(hass).async_get_status()
     assert status.ready is True
     assert status.model == "claude-sonnet-4-6"
+    assert status.ha_mcp_connected is True
 
 
 async def test_prompt_sends_headers_and_body(

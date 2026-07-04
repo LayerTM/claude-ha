@@ -35,8 +35,10 @@ async def test_status_sensor_ready(
     assert state.state == "ready"
     assert state.attributes["claude_version"] == "2.0.1"
     assert state.attributes["model"] == "claude-sonnet-4-6"
-    assert state.attributes["version"] == "1.7.0"
+    assert state.attributes["version"] == "1.14.0"
     assert state.attributes["ha_mcp"] is True
+    assert state.attributes["ha_mcp_connected"] is True
+    assert "health" in state.attributes
 
 
 async def test_status_sensor_initializing(

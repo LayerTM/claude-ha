@@ -56,6 +56,11 @@
     }
   },
   "entity": {
+    "button": {
+      "check_health": {
+        "name": "Check Claude health"
+      }
+    },
     "sensor": {
       "status": {
         "name": "Status",
@@ -104,6 +109,32 @@
         "notify": {
           "name": "Confirm via",
           "description": "Optional notify service (e.g. mobile_app_my_phone). If Claude proposes a change, an actionable Approve/Dismiss notification is sent there; Approve runs the confirmed change."
+        }
+      }
+    },
+    "setup_voice": {
+      "name": "Set up local voice",
+      "description": "Installs the Whisper (speech-to-text) and Piper (text-to-speech) add-ons for a language and creates an Assist pipeline that talks to Claude. Whisper on CPU takes a few seconds per phrase, and some voices (e.g. Ukrainian) are weaker than others — override the voice or use Cloud TTS if needed.",
+      "fields": {
+        "config_entry": {
+          "name": "Claude",
+          "description": "The Claude configuration to use. Defaults to the only one if a single Claude is configured."
+        },
+        "language": {
+          "name": "Language",
+          "description": "The language code for speech, e.g. uk, pl, en, de."
+        },
+        "stt_model": {
+          "name": "Whisper model",
+          "description": "The Whisper speech-to-text model. Defaults to small-int8, a multilingual model that runs on CPU."
+        },
+        "tts_voice": {
+          "name": "Piper voice",
+          "description": "The Piper text-to-speech voice, e.g. uk_UA-ukrainian_tts-medium. Defaults to a known voice for the language; override if it is unavailable."
+        },
+        "pipeline_name": {
+          "name": "Pipeline name",
+          "description": "Name for the created Assist pipeline. Defaults to 'Claude (<language>)'."
         }
       }
     }
@@ -156,6 +187,12 @@
     },
     "addon_not_running": {
       "message": "The Claude Code add-on is starting."
+    },
+    "voice_unknown_language": {
+      "message": "No default Piper voice is known for language '{language}'. Pass a voice via the tts_voice field."
+    },
+    "voice_addon_failed": {
+      "message": "Failed to set up the {addon} add-on: {error}"
     }
   },
   "issues": {
@@ -176,6 +213,22 @@
     "addon_not_installed": {
       "title": "The Claude Code add-on is not installed",
       "description": "Claude is unavailable because the Claude Code add-on is not installed. Home Assistant is trying to install it; check the add-on for progress."
+    },
+    "not_logged_in": {
+      "title": "Claude isn't logged in",
+      "description": "The Claude Code add-on is running but Claude isn't authenticated, so chat can't answer. Open the Claude Code add-on and run `claude` to log in (or set an OAuth token in the add-on options), then check again."
+    },
+    "no_ha_token": {
+      "title": "Claude has no token to read your home",
+      "description": "Claude is logged in but has no Home Assistant token, so chat can answer general questions but can't see or control your home. Set the 'Prompt API HA Token' (or 'HA Token') in the Claude Code add-on options, then check again."
+    },
+    "mcp_unreachable": {
+      "title": "Claude can't reach the Model Context Protocol Server",
+      "description": "Claude has a token but the Model Context Protocol Server integration is missing or unreachable, so chat can't see your home. Add it under Settings → Devices & services → Add integration → Model Context Protocol Server, expose entities to Assist, then check again."
+    },
+    "no_exposed_entities": {
+      "title": "No entities are exposed to Assist",
+      "description": "Claude can reach your home but nothing is exposed to Assist, so there is nothing for it to see or control. Expose some entities under Settings → Voice assistants → Expose, then check again."
     }
   }
 }
