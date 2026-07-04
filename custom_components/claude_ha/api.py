@@ -165,17 +165,20 @@ class ClaudeClient:
         conversation_id: str | None = None,
         caller: str | None = None,
         intents: list[dict[str, Any]] | None = None,
+        confirmation: str | None = None,
     ) -> PromptResult:
         """Send a prompt to Claude and return the structured result (contract §2).
 
-        ``intents`` (the user-confirmed proposal intents) are sent only for
-        ``mode="write"`` and never for read, per the contract.
+        ``intents`` (the user-confirmed proposal intents) and ``confirmation``
+        ("auto"/"confirmed") are sent only for ``mode="write"``, never for read.
         """
         payload: dict[str, object] = {"prompt": prompt, "mode": mode}
         if conversation_id is not None:
             payload["conversation_id"] = conversation_id
         if mode == MODE_WRITE:
             payload["intents"] = intents or []
+            if confirmation is not None:
+                payload["confirmation"] = confirmation
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller

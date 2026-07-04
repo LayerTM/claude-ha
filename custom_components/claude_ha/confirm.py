@@ -26,10 +26,14 @@ EVENT_MOBILE_APP_ACTION = "mobile_app_notification_action"
 APPROVE_PREFIX = "CLAUDE_HA_APPROVE_"
 DISMISS_PREFIX = "CLAUDE_HA_DISMISS_"
 
+# Pending proposals awaiting a notification Approve/Dismiss, keyed by pid.
 DATA_PENDING = f"{DOMAIN}_pending_proposals"
 DATA_CONFIRM_LISTENER = f"{DOMAIN}_confirm_listener"
+# Pending chat confirmations, keyed by conversation_id (see conversation.py).
+DATA_PENDING_CHAT = f"{DOMAIN}_pending_chat"
 
 PENDING_TTL = timedelta(minutes=10)
+CHAT_PENDING_TTL = timedelta(minutes=2)
 LOGBOOK_NAME = "Claude"
 
 

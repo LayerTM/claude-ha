@@ -13,8 +13,15 @@ from homeassistant.components.hassio import (
     AddonManager,
     AddonState,
 )
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.hassio import is_hassio
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
@@ -26,6 +33,8 @@ from .const import (
     ADDON_OPTION_API_TOKEN,
     ADDON_SLUG_SUFFIX,
     CONF_ADDON_SLUG,
+    CONF_AUTO_EXECUTE,
+    CONF_CRITICAL_ENTITIES,
     CONF_HOST,
     CONF_PORT,
     CONF_TOKEN,
@@ -42,6 +51,12 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Claude, backed by the Claude Code add-on."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> ClaudeOptionsFlow:
+        """Return the options flow."""
+        return ClaudeOptionsFlow()
 
     def __init__(self) -> None:
         """Init flow state."""
@@ -249,3 +264,31 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
             CONF_PORT: info.options.get("api_port", DEFAULT_PORT),
             CONF_TOKEN: token,
         }
+
+
+class ClaudeOptionsFlow(OptionsFlow):
+    """Options for how chat-driven actions are confirmed."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the auto-execute and critical-entities options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_AUTO_EXECUTE,
+                    default=options.get(CONF_AUTO_EXECUTE, True),
+                ): bool,
+                vol.Optional(
+                    CONF_CRITICAL_ENTITIES,
+                    default=options.get(CONF_CRITICAL_ENTITIES, []),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(multiple=True)
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

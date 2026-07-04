@@ -40,6 +40,21 @@
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Chat action settings",
+        "data": {
+          "auto_execute": "Act automatically on benign requests",
+          "critical_entities": "Always confirm these entities"
+        },
+        "data_description": {
+          "auto_execute": "When on, Claude carries out low-risk requests from chat immediately and only asks you to confirm important ones. When off, every change is confirmed first.",
+          "critical_entities": "Entities that always require confirmation, on top of the automatic per-action risk checks."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "status": {

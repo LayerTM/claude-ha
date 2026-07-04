@@ -25,6 +25,10 @@ CONF_PORT: Final = "port"
 CONF_TOKEN: Final = "token"
 CONF_USE_ADDON: Final = "use_addon"
 
+# Options (additive; not part of the config-entry data schema).
+CONF_CRITICAL_ENTITIES: Final = "critical_entities"
+CONF_AUTO_EXECUTE: Final = "auto_execute"
+
 # Default prompt-server port (contract §4; bound 0.0.0.0, not published to host).
 DEFAULT_PORT: Final = 8126
 
@@ -48,6 +52,17 @@ MODES: Final = (MODE_READ, MODE_WRITE)
 # (echoed verbatim from a prior read-mode proposal), at most this many, and they
 # are forbidden for `mode:"read"`.
 MAX_WRITE_INTENTS: Final = 5
+
+# Write confirmation levels (contract, add-on >= 1.8.0). "auto" is refused by the
+# add-on's coarse domain backstop for inherently critical domains.
+CONFIRMATION_AUTO: Final = "auto"
+CONFIRMATION_CONFIRMED: Final = "confirmed"
+
+# Per-intent risk hint carried on a proposal (untrusted model output; a hint,
+# never the sole gate). Absent => treat as sensitive.
+INTENT_RISK: Final = "risk"
+RISK_LOW: Final = "low"
+RISK_SENSITIVE: Final = "sensitive"
 
 # Prompt-server hard cap on prompt size (bytes) — mirrored client-side so callers
 # get a clean validation error instead of a 413.

@@ -41,7 +41,7 @@ cloud directly.**
 
 | | |
 |---|---|
-| 💬 **Conversation agent** | Talk to Claude from HA Assist (text or voice, any device), selectable like any other assistant. |
+| 💬 **Conversation agent** | Talk to Claude from HA Assist — it acts on benign requests immediately and confirms important ones (judged per action). |
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
 | 📟 **Sensors** | Add-on readiness, active model, and Claude token usage + prompt-API cost. |
@@ -114,12 +114,31 @@ the add-on for you. There are no options to fill in.
 ### Conversation agent
 
 Select **Claude** as a conversation agent under **Settings → Voice assistants**,
-or target it directly. It answers in any language.
+or target it directly. It answers in any language, and it can **act** on your home.
 
-Every chat turn runs the add-on in **read-only** mode: Claude answers questions
-and reads exposed Home Assistant state, but changes nothing. If a message would
-change state, Claude returns a described *proposal* and the integration surfaces
-it in the reply rather than acting on it.
+Every request is read first. If it would change state, Claude proposes the exact
+actions, and the integration decides — **per action, from live entity metadata** —
+whether to carry it out immediately or confirm:
+
+- **Benign, low-risk actions run right away** (e.g. turning a light on) and reply
+  `Done: …`.
+- **Important actions are held and confirmed** with a plain `yes` / `no` — anything
+  the deterministic classifier flags (locks, alarms, garage/door/gate covers,
+  firmware updates, router/AP and other config entities, and opaque-effect
+  wrappers like scenes, scripts and automations), anything Claude itself marks
+  non-low-risk, or anything you pin as critical. The classifier only auto-runs an
+  action it can *positively* prove benign — anything it can't resolve or bound
+  falls back to confirmation. The confirmation replays the *exact validated
+  actions*, so it never depends on the model remembering them.
+
+Criticality is judged per action, not per domain — a shade and a garage door are
+both `cover`, but only the garage door is confirmed. Requires the Claude Code
+add-on ≥ 1.8.0 (older add-ons simply confirm everything). Tune it under the
+integration's **Configure** options: turn off *auto-execute* to confirm every
+change, or list entities that must always be confirmed.
+
+> Claude can only ever touch entities you have exposed to Assist — that exposure
+> list is the outer ceiling; the per-action classifier is the inner gate.
 
 ### Dashboard card
 

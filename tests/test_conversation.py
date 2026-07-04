@@ -8,7 +8,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.claude_ha.api import Proposal
 from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
-from custom_components.claude_ha.conversation import _render_reply
+from custom_components.claude_ha.conversation import _render_proposal
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import entity_registry as er, intent
@@ -52,7 +52,7 @@ async def test_conversation_surfaces_proposal(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A read-mode proposal is surfaced but not executed."""
+    """A proposal without a low-risk hint is surfaced and confirmed, not run."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={
@@ -79,7 +79,7 @@ async def test_conversation_surfaces_proposal(
     speech = result.response.speech["plain"]["speech"]
     assert "Turn off the heater" in speech
     assert "switch.heater" in speech
-    assert "did not make any changes" in speech
+    assert "Confirm? (yes/no)" in speech
 
 
 async def test_conversation_supported_languages(
@@ -145,9 +145,9 @@ async def test_conversation_propagates_id_and_caller(
     assert aioclient_mock.mock_calls[-1][2]["conversation_id"] == first.conversation_id
 
 
-def test_render_reply_no_proposal() -> None:
+def test_render_proposal_no_proposal() -> None:
     """With no proposal, the reply is Claude's text verbatim."""
-    assert _render_reply("just an answer", None) == "just an answer"
+    assert _render_proposal("just an answer", None) == "just an answer"
 
 
 @pytest.mark.parametrize(
@@ -156,31 +156,31 @@ def test_render_reply_no_proposal() -> None:
         (
             "answer",
             Proposal(summary="", intents=[]),
-            ["answer", "did not make any changes"],
-            ["Proposed action:", "Affects:"],
+            ["answer"],
+            ["Proposed:", "Affects:"],
         ),
         (
             "answer",
             Proposal(summary="Do X", intents=[{"intent": "HassX"}]),
-            ["Proposed action: Do X", "did not make any changes"],
+            ["answer", "Proposed: Do X"],
             ["Affects:"],
         ),
         (
             "",
             Proposal(summary="Do X", intents=[{"targets": ["light.x"]}]),
-            ["Proposed action: Do X", "Affects: light.x", "did not make any changes"],
+            ["Proposed: Do X", "Affects: light.x"],
             [],
         ),
     ],
 )
-def test_render_reply_variants(
+def test_render_proposal_variants(
     text: str,
     proposal: Proposal,
     expect_present: list[str],
     expect_absent: list[str],
 ) -> None:
-    """Proposal rendering omits empty parts and always ends with the disclaimer."""
-    reply = _render_reply(text, proposal)
+    """Proposal rendering omits empty parts (no execute/disclaimer text)."""
+    reply = _render_proposal(text, proposal)
     for fragment in expect_present:
         assert fragment in reply
     for fragment in expect_absent:

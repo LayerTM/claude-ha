@@ -46,6 +46,10 @@ combine-as-imports = true
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
 
+[tool.ruff.lint.pylint]
+# The API client method legitimately takes several optional keyword-only args.
+max-args = 7
+
 [tool.mypy]
 python_version = "3.14"
 show_error_codes = true

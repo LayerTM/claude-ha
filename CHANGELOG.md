@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-04
+
+### Added
+
+- **The conversation agent now acts on Home Assistant** (needs the Claude Code
+  add-on ≥ 1.8.0): benign, low-risk actions run immediately; important ones are
+  held and confirmed with a plain yes/no. Criticality is judged per action from
+  live entity metadata (`risk.py`) — the model's risk hint is only advisory.
+- Options flow: *auto-execute* toggle and an *always-confirm entities* list.
+- `confirmation` ("auto"/"confirmed") on the client's write call.
+
+### Security
+
+- Auto-execution requires BOTH the model's `risk == "low"` AND the deterministic
+  classifier clearing every target; confirmed writes replay only the stored,
+  validated intents, never the new chat text.
+- The classifier fails closed: it auto-runs only actions it can positively prove
+  benign. A cover's device class is resolved from live state as well as the
+  registry (registry-less garage doors are still caught); opaque-effect wrappers
+  (scene/script/automation) always confirm; intents with empty targets or
+  entity-routing `data` slots are never auto-executed; and malformed
+  model-supplied intents are treated as critical instead of raising.
+
 ## [0.1.4] - 2026-07-03
 
 ### Fixed
@@ -63,7 +86,9 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/LayerTM/claude-ha/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/LayerTM/claude-ha/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/LayerTM/claude-ha/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/LayerTM/claude-ha/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LayerTM/claude-ha/compare/v0.1.0...v0.1.1
