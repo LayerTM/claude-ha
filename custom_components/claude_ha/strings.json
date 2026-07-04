@@ -134,7 +134,7 @@
         },
         "pipeline_name": {
           "name": "Pipeline name",
-          "description": "Name for the created Assist pipeline. Defaults to 'Claude (<language>)'."
+          "description": "Name for the created Assist pipeline. Defaults to Claude and the language, for example Claude (uk)."
         }
       }
     }
@@ -189,7 +189,7 @@
       "message": "The Claude Code add-on is starting."
     },
     "voice_unknown_language": {
-      "message": "No default Piper voice is known for language '{language}'. Pass a voice via the tts_voice field."
+      "message": "No default Piper voice is known for the language {language}. Pass a voice via the tts_voice field."
     },
     "voice_addon_failed": {
       "message": "Failed to set up the {addon} add-on: {error}"
