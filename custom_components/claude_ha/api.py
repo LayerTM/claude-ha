@@ -36,11 +36,13 @@ from .const import (
     RESP_TEXT,
     RESP_TOOLS_USED,
     RESP_TRUNCATED,
+    STATUS_BUDGET,
     STATUS_CHAT_HEALTH,
     STATUS_CLAUDE_VERSION,
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
+    STATUS_PROMPT_TIMEOUT_MS,
     STATUS_READY,
     STATUS_TIMEOUT,
     STATUS_VERSION,
@@ -49,6 +51,7 @@ from .const import (
     STREAM_KIND_DELTA,
     STREAM_KIND_DONE,
     STREAM_KIND_ERROR,
+    TIMEOUT_MARGIN,
 )
 
 
@@ -130,6 +133,14 @@ class ChatHealth:
 
 
 @dataclass(slots=True)
+class Budget:
+    """Daily spend cap from ``/api/status`` (add-on >= 1.21.0); limit 0 = unlimited."""
+
+    limit: float
+    spent: float
+
+
+@dataclass(slots=True)
 class StatusResult:
     """Parsed 200 response of ``GET /api/status``."""
 
@@ -140,6 +151,8 @@ class StatusResult:
     ha_mcp: bool | None
     ha_mcp_connected: bool | None
     chat_health: ChatHealth | None = None
+    prompt_timeout_ms: int | None = None
+    budget: Budget | None = None
 
 
 @dataclass(slots=True)
@@ -160,10 +173,31 @@ class ClaudeClient:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._token = token
+        self._read_timeout = float(REQUEST_TIMEOUT)
 
     @property
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"}
+
+    @property
+    def read_timeout(self) -> float:
+        """The current prompt-read wall-clock (tracks the add-on's budget)."""
+        return self._read_timeout
+
+    def note_prompt_timeout(self, prompt_timeout_ms: int | None) -> None:
+        """Track the add-on's prompt budget so our wall-clock stays just above it.
+
+        Keeps the read timeout at ``max(REQUEST_TIMEOUT, budget + margin)`` so the
+        add-on's graceful timeout answer always lands before the client gives up,
+        even if the user raises the add-on's prompt timeout. Falls back to the floor
+        when the add-on doesn't report a budget.
+        """
+        if prompt_timeout_ms is None:
+            self._read_timeout = float(REQUEST_TIMEOUT)
+        else:
+            self._read_timeout = max(
+                float(REQUEST_TIMEOUT), prompt_timeout_ms / 1000 + TIMEOUT_MARGIN
+            )
 
     async def async_get_status(self) -> StatusResult:
         """Fetch add-on readiness/versions (contract §3)."""
@@ -181,6 +215,19 @@ class ClaudeClient:
             if isinstance(raw_health, dict)
             else None
         )
+        raw_timeout = data.get(STATUS_PROMPT_TIMEOUT_MS)
+        prompt_timeout_ms = (
+            int(raw_timeout) if isinstance(raw_timeout, (int, float)) else None
+        )
+        raw_budget = data.get(STATUS_BUDGET)
+        budget = (
+            Budget(
+                limit=float(raw_budget.get("limit", 0.0)),
+                spent=float(raw_budget.get("spent", 0.0)),
+            )
+            if isinstance(raw_budget, dict)
+            else None
+        )
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
@@ -189,6 +236,8 @@ class ClaudeClient:
             ha_mcp=None if ha_mcp is None else bool(ha_mcp),
             ha_mcp_connected=None if connected is None else bool(connected),
             chat_health=chat_health,
+            prompt_timeout_ms=prompt_timeout_ms,
+            budget=budget,
         )
 
     async def async_get_usage(self) -> UsageResult:
@@ -243,7 +292,7 @@ class ClaudeClient:
             API_PROMPT,
             json=payload,
             headers=headers,
-            timeout_s=REQUEST_TIMEOUT,
+            timeout_s=self._read_timeout,
         )
         return _parse_prompt_result(data)
 
@@ -282,7 +331,7 @@ class ClaudeClient:
         url = f"{self._base_url}{API_PROMPT}"
         try:
             async with (
-                asyncio.timeout(REQUEST_TIMEOUT),
+                asyncio.timeout(self._read_timeout),
                 self._session.request(
                     "POST", url, json=payload, headers=headers
                 ) as resp,

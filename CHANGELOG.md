@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-07-05
+
+### Added
+
+- **A "Daily budget spend" diagnostic sensor.** With a recent add-on (≥ 1.21.0)
+  that reports a daily spend cap, `sensor.*_budget` shows today's spend, with the
+  cap, remaining, fraction used and a soft "near the cap" flag as attributes — a
+  glanceable indicator, never a repair. An unlimited cap leaves the cap-derived
+  attributes empty; older add-ons leave the sensor unavailable.
+
+### Changed
+
+- **The request timeout now follows the add-on's own budget.** Instead of a fixed
+  135 s, the client reads the add-on's reported prompt timeout (add-on ≥ 1.21.0)
+  and keeps its own wall-clock a margin above it, so if you raise the add-on's
+  timeout, a slow answer still arrives instead of being cut off client-side. It
+  never drops below the 135 s floor, and falls back to it on older add-ons.
+
 ## [0.1.12] - 2026-07-05
 
 ### Fixed
@@ -191,7 +209,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/LayerTM/claude-ha/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/LayerTM/claude-ha/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/LayerTM/claude-ha/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/LayerTM/claude-ha/compare/v0.1.9...v0.1.10

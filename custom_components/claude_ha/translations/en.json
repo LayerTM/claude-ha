@@ -78,6 +78,9 @@
           "degraded": "Degraded"
         }
       },
+      "budget": {
+        "name": "Daily budget spend"
+      },
       "usage": {
         "name": "Token usage today"
       },

@@ -40,6 +40,9 @@ STATE_INITIALIZING = "initializing"
 STATE_CHAT_OK = "ok"
 STATE_CHAT_DEGRADED = "degraded"
 
+# Fraction of the daily budget at which the soft "near the cap" flag trips.
+_NEAR_CAP_FRACTION = 0.9
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -52,6 +55,7 @@ async def async_setup_entry(
         [
             ClaudeStatusSensor(data.status),
             ClaudeChatHealthSensor(data.status),
+            ClaudeBudgetSensor(data.status),
             ClaudeUsageSensor(data.usage),
             ClaudeCostSensor(data.usage),
         ]
@@ -146,6 +150,55 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
             "degraded": health.degraded,
             "recovered": health.recovered,
             "last_reason": health.last_reason,
+        }
+
+
+class ClaudeBudgetSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):
+    """Today's spend against the add-on's daily budget, with a soft near-cap flag.
+
+    A diagnostic dollar sensor — never a repair. The value is today's spend;
+    attributes carry the cap, remaining, fraction used and a ``near_cap`` flag. An
+    unlimited cap (limit 0) leaves the cap-derived attributes null; an add-on that
+    reports no budget leaves the sensor unavailable.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "budget"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "USD"
+
+    def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
+        """Init from the status coordinator."""
+        super().__init__(coordinator)
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_budget"
+        self._attr_device_info = build_device_info(entry)
+
+    @property
+    def available(self) -> bool:
+        """Unavailable on add-ons that don't report a budget (< 1.21.0)."""
+        data = self.coordinator.data
+        return super().available and data is not None and data.budget is not None
+
+    @property
+    def native_value(self) -> float | None:
+        """Today's spend in USD."""
+        budget = self.coordinator.data.budget
+        return budget.spent if budget is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Cap, remaining, fraction used and the soft near-cap flag."""
+        budget = self.coordinator.data.budget
+        if budget is None:
+            return {}
+        limited = budget.limit > 0
+        return {
+            "limit": budget.limit,
+            "remaining": budget.limit - budget.spent if limited else None,
+            "fraction_used": budget.spent / budget.limit if limited else None,
+            "near_cap": limited and budget.spent >= _NEAR_CAP_FRACTION * budget.limit,
         }
 
 

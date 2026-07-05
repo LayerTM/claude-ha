@@ -112,6 +112,11 @@ STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 # last_reason}. last_reason is a reason TOKEN from the runner's enum, never prompt
 # content. Absent on older add-ons (the chat-health sensor is then unavailable).
 STATUS_CHAT_HEALTH: Final = "chat_health"
+# The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
+# its wall-clock just above this so the add-on's graceful timeout answer always lands.
+STATUS_PROMPT_TIMEOUT_MS: Final = "prompt_timeout_ms"
+# Daily spend cap (add-on >= 1.21.0): {limit, spent} in USD; limit 0 means unlimited.
+STATUS_BUDGET: Final = "budget"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
@@ -121,7 +126,11 @@ STATUS_CHAT_HEALTH: Final = "chat_health"
 # terminal `done` on a timed-out read always arrives before we abort; otherwise the
 # user gets a hard timeout instead of the friendly degraded message (add-on >=1.18.0).
 # If the add-on timeout is raised, raise this to match (budget + ~15s headroom).
+# Floor value; the client tracks the add-on's reported `prompt_timeout_ms` and uses
+# max(REQUEST_TIMEOUT, that + TIMEOUT_MARGIN) so its graceful answer always lands.
 REQUEST_TIMEOUT: Final = 135
+# Headroom (seconds) the client keeps above the add-on's prompt budget.
+TIMEOUT_MARGIN: Final = 15
 # Shorter timeout for the lightweight status poll.
 STATUS_TIMEOUT: Final = 15
 # Coordinator poll interval for the status sensor.

@@ -48,9 +48,12 @@ class ClaudeStatusCoordinator(DataUpdateCoordinator[StatusResult]):
     async def _async_update_data(self) -> StatusResult:
         """Fetch the latest add-on status."""
         try:
-            return await self.client.async_get_status()
+            status = await self.client.async_get_status()
         except ClaudeError as err:
             raise UpdateFailed(str(err) or "Add-on status unavailable") from err
+        # Keep the prompt wall-clock just above the add-on's reported budget.
+        self.client.note_prompt_timeout(status.prompt_timeout_ms)
+        return status
 
 
 class ClaudeUsageCoordinator(DataUpdateCoordinator[UsageResult]):

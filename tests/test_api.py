@@ -69,6 +69,47 @@ async def test_status_chat_health_absent_is_none(
     assert status.chat_health is None
 
 
+async def test_status_parses_timeout_and_budget(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """prompt_timeout_ms and budget (add-on >= 1.21.0) parse into the status."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "prompt_timeout_ms": 120000,
+            "budget": {"limit": 5.0, "spent": 1.5},
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.prompt_timeout_ms == 120000
+    assert status.budget is not None
+    assert status.budget.limit == 5.0
+    assert status.budget.spent == 1.5
+
+
+async def test_status_timeout_and_budget_absent_are_none(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Older add-ons omit both fields → None (backward-compatible)."""
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json={"ready": True})
+    status = await _client(hass).async_get_status()
+    assert status.prompt_timeout_ms is None
+    assert status.budget is None
+
+
+async def test_note_prompt_timeout_tracks_addon_budget(hass: HomeAssistant) -> None:
+    """The read timeout stays a margin above the add-on budget, never below floor."""
+    client = _client(hass)
+    assert client.read_timeout == 135.0  # floor
+    client.note_prompt_timeout(200000)  # 200s + 15s margin
+    assert client.read_timeout == 215.0
+    client.note_prompt_timeout(60000)  # 60s + 15 < floor → floor
+    assert client.read_timeout == 135.0
+    client.note_prompt_timeout(None)  # no report → floor
+    assert client.read_timeout == 135.0
+
+
 async def test_prompt_sends_headers_and_body(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
