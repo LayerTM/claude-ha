@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
+from custom_components.claude_ha.api import StatusResult
 from custom_components.claude_ha.const import DOMAIN
+from custom_components.claude_ha.sensor import ClaudeChatHealthSensor
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
@@ -153,6 +157,30 @@ async def test_chat_health_sensor_degraded(
     assert state.state == "degraded"
     assert state.attributes["degraded"] == 2
     assert state.attributes["last_reason"] == "model-error"
+
+
+def test_chat_health_sensor_none_data_guards(
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The None-data guards return safe defaults (unreachable via the entity state).
+
+    When chat_health is absent the sensor is unavailable, so HA never calls these;
+    this exercises the defensive guards directly.
+    """
+    coordinator = MagicMock()
+    coordinator.config_entry = mock_config_entry
+    coordinator.data = StatusResult(
+        ready=True,
+        version=None,
+        claude_version=None,
+        model=None,
+        ha_mcp=None,
+        ha_mcp_connected=None,
+        chat_health=None,
+    )
+    sensor = ClaudeChatHealthSensor(coordinator)
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {}
 
 
 async def test_usage_sensors(
