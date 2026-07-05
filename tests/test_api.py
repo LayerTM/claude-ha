@@ -87,6 +87,30 @@ async def test_prompt_read_mode_omits_intents(
     assert body["mode"] == "read"
 
 
+async def test_prompt_sends_language_when_given(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The HA conversation language is forwarded so the add-on can localize."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    await _client(hass).async_prompt("привіт", language="uk")
+    assert aioclient_mock.mock_calls[-1][2]["language"] == "uk"
+
+
+async def test_prompt_omits_language_when_absent(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """No language means no field — additive, backward-compatible with old add-ons."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    await _client(hass).async_prompt("hello")
+    assert "language" not in aioclient_mock.mock_calls[-1][2]
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [

@@ -47,8 +47,9 @@ combine-as-imports = true
 convention = "pep257"
 
 [tool.ruff.lint.pylint]
-# The API client method legitimately takes several optional keyword-only args.
-max-args = 7
+# The API client method legitimately takes several optional keyword-only args
+# (mode, conversation_id, caller, intents, confirmation, image_entity, language).
+max-args = 8
 
 [tool.mypy]
 python_version = "3.14"

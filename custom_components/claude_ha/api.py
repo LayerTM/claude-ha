@@ -29,6 +29,7 @@ from .const import (
     MODE_READ,
     MODE_WRITE,
     REQUEST_IMAGE_ENTITY,
+    REQUEST_LANGUAGE,
     REQUEST_STREAM,
     REQUEST_TIMEOUT,
     RESP_PROPOSAL,
@@ -188,16 +189,21 @@ class ClaudeClient:
         intents: list[dict[str, Any]] | None = None,
         confirmation: str | None = None,
         image_entity: str | None = None,
+        language: str | None = None,
     ) -> PromptResult:
         """Send a prompt to Claude and return the structured result (contract §2).
 
         ``intents`` (the user-confirmed proposal intents) and ``confirmation``
         ("auto"/"confirmed") are sent only for ``mode="write"``, never for read.
         ``image_entity`` (an Assist-exposed camera) is a read-only visual hint.
+        ``language`` (the HA conversation language) lets the add-on localize its
+        server-authored messages; additive, ignored by older add-ons.
         """
         payload: dict[str, object] = {"prompt": prompt, "mode": mode}
         if conversation_id is not None:
             payload["conversation_id"] = conversation_id
+        if language is not None:
+            payload[REQUEST_LANGUAGE] = language
         if mode == MODE_WRITE:
             payload["intents"] = intents or []
             if confirmation is not None:
@@ -224,6 +230,7 @@ class ClaudeClient:
         conversation_id: str | None = None,
         caller: str | None = None,
         image_entity: str | None = None,
+        language: str | None = None,
     ) -> AsyncIterator[StreamDelta | PromptResult]:
         """Stream a read: yield text deltas, then one final ``PromptResult``.
 
@@ -242,6 +249,8 @@ class ClaudeClient:
             payload["conversation_id"] = conversation_id
         if image_entity is not None:
             payload[REQUEST_IMAGE_ENTITY] = image_entity
+        if language is not None:
+            payload[REQUEST_LANGUAGE] = language
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller

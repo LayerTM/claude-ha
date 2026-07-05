@@ -46,6 +46,32 @@ async def test_conversation_reply(
     assert "living room is 21" in result.response.speech["plain"]["speech"]
 
 
+async def test_conversation_forwards_language(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """The turn's language is forwarded so the add-on can localize its messages."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    await conversation.async_converse(
+        hass,
+        "what's the weather?",
+        None,
+        context=Context(),
+        language="uk",
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+
+    posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+    assert posts[-1][2]["language"] == "uk"
+
+
 async def test_conversation_surfaces_proposal(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,

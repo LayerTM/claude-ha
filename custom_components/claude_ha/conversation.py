@@ -168,6 +168,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                     confirmation=CONFIRMATION_AUTO,
                     conversation_id=conv_id,
                     caller=caller,
+                    language=user_input.language,
                 )
             except ClaudeError:
                 pass  # e.g. the add-on's 403 backstop -> fall through to confirm
@@ -214,6 +215,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 conversation_id=conv_id,
                 caller=caller,
                 image_entity=image_entity,
+                language=user_input.language,
             ):
                 if isinstance(chunk, PromptResult):
                     captured["result"] = chunk
@@ -264,6 +266,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 confirmation=CONFIRMATION_CONFIRMED,
                 conversation_id=chat_log.conversation_id,
                 caller=user_input.context.user_id,
+                language=user_input.language,
             )
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)

@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-07-05
+
+### Added
+
+- **The conversation language is now sent to the add-on** (additive `language`
+  field on `/api/prompt`, from `user_input.language`) so the add-on can localize
+  its own server-authored messages — the "couldn't finish that response" apology
+  and the daily-budget notice — to the user's language instead of always English.
+  Backward-compatible: an add-on that doesn't use it simply ignores it, and a
+  missing language falls back to English (needs the matching add-on release to see
+  a localized message).
+
 ## [0.1.8] - 2026-07-05
 
 ### Fixed
@@ -137,7 +149,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/LayerTM/claude-ha/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/LayerTM/claude-ha/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/LayerTM/claude-ha/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/LayerTM/claude-ha/compare/v0.1.5...v0.1.6

@@ -94,6 +94,10 @@ STREAM_ERROR: Final = "error"
 # add-on fetches, downscales and lets Claude see. Only ever an Assist-exposed
 # camera; the integration passes the entity_id, never a path.
 REQUEST_IMAGE_ENTITY: Final = "image_entity"
+# Optional HA conversation language (e.g. "uk"/"en"/"pl") so the add-on can localize
+# its server-authored messages (the degraded-read apology, the budget notice). Purely
+# additive: an add-on that doesn't read it — or a missing value — falls back to English.
+REQUEST_LANGUAGE: Final = "language"
 
 # GET /api/status 200-response keys.
 STATUS_READY: Final = "ready"
