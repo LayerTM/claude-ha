@@ -121,10 +121,14 @@ def evaluate(
         problem = ISSUE_NO_EXPOSED_ENTITIES
 
     # Independent advisory: vision is on but no camera is exposed, so it can never
-    # fire. Only surfaced when the fundamentals are otherwise fine (a live problem
-    # already covers "Claude can't see anything").
+    # fire. Only surfaced when the fundamentals are otherwise fine, and only once HA
+    # is fully running — at startup the camera entities aren't loaded yet, so a bare
+    # count of 0 is a transient, not a real "no cameras exposed".
     camera_vision_inert = (
-        camera_vision and problem is None and _exposed_camera_count(hass) == 0
+        camera_vision
+        and problem is None
+        and running
+        and _exposed_camera_count(hass) == 0
     )
 
     return HealthReport(

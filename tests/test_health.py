@@ -54,7 +54,8 @@ def expose(monkeypatch: pytest.MonkeyPatch) -> Callable[[bool], None]:
 
 
 def _healthy(hass: HomeAssistant) -> None:
-    """Put the environment in the fully-healthy shape."""
+    """Put the environment in the fully-healthy shape (fully started, MCP, exposed)."""
+    hass.set_state(CoreState.running)
     hass.config.components.add(MCP_SERVER_DOMAIN)
     hass.states.async_set("light.kitchen", "on")
 
@@ -186,6 +187,25 @@ async def test_camera_vision_inert_when_no_camera_exposed(
     report = health.evaluate(hass, _status(), camera_vision=True)
     assert report.problem is None
     assert report.camera_vision_inert is True
+
+
+async def test_camera_vision_inert_ignored_during_startup(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At startup the camera entities aren't loaded yet → no false inert repair.
+
+    Regression: the camera-exposure guard flashed a scary repair right after a
+    restart because the exposed-camera count was transiently 0 (same class as the
+    mcp_server startup transient).
+    """
+    hass.config.components.add(MCP_SERVER_DOMAIN)
+    hass.states.async_set("light.kitchen", "on")
+    hass.states.async_set("camera.front", "idle")
+    hass.set_state(CoreState.starting)
+    _expose_except_cameras(monkeypatch)
+    report = health.evaluate(hass, _status(), camera_vision=True)
+    assert report.problem is None
+    assert report.camera_vision_inert is False
 
 
 async def test_camera_vision_not_inert_when_a_camera_is_exposed(

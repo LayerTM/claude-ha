@@ -6,7 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.14] - 2026-07-05
+## [0.1.15] - 2026-07-05
+
+### Fixed
+
+- **No more spurious "Camera vision is on, but no cameras are exposed" repair right
+  after a restart.** Like the earlier Model-Context-Protocol-Server case, the
+  camera-exposure guard was evaluating before Home Assistant finished loading the
+  camera entities, so it briefly saw zero exposed cameras and raised a repair that
+  then cleared itself. It now waits until Home Assistant has fully started before
+  concluding no cameras are exposed.
 
 ### Fixed
 
@@ -221,7 +230,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.14...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/LayerTM/claude-ha/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/LayerTM/claude-ha/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/LayerTM/claude-ha/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/LayerTM/claude-ha/compare/v0.1.11...v0.1.12
