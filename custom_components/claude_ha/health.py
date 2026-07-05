@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 
 from .api import ClaudeClient, ClaudeError, StatusResult
@@ -23,6 +23,7 @@ from .const import (
     ASSIST_ASSISTANT,
     DOMAIN,
     HEALTH_PROBE_PROMPT,
+    ISSUE_CAMERA_VISION_NO_CAMERAS,
     ISSUE_MCP_UNREACHABLE,
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_NO_HA_TOKEN,
@@ -61,6 +62,7 @@ class HealthReport:
     exposed_to_assist: int | None
     mcp_server_loaded: bool
     ha_mcp_connected: bool | None
+    camera_vision_inert: bool = False
 
 
 @callback
@@ -76,15 +78,35 @@ def _assist_exposed_count(hass: HomeAssistant) -> int | None:
 
 
 @callback
-def evaluate(hass: HomeAssistant, status: StatusResult | None) -> HealthReport:
+def _exposed_camera_count(hass: HomeAssistant) -> int | None:
+    """Count cameras exposed to Assist, or None if exposure data isn't ready."""
+    try:
+        return sum(
+            async_should_expose(hass, ASSIST_ASSISTANT, entity_id)
+            for entity_id in hass.states.async_entity_ids("camera")
+        )
+    except KeyError:
+        return None
+
+
+@callback
+def evaluate(
+    hass: HomeAssistant,
+    status: StatusResult | None,
+    camera_vision: bool = False,
+) -> HealthReport:
     """Classify the single most fundamental 'Claude can't see the home' problem.
 
     Pure and cheap: reads only status and HA state, fires no request. Unknown
-    signals (``None``) never raise a problem — only positively-bad states do.
+    signals (``None``) never raise a problem — only positively-bad states do. A
+    missing ``mcp_server`` is trusted only once HA is fully running, so a startup
+    transient (the integration still loading after a restart) doesn't flash a
+    scary repair that then clears itself.
     """
     exposed = _assist_exposed_count(hass)
     mcp_loaded = MCP_SERVER_DOMAIN in hass.config.components
     connected = status.ha_mcp_connected if status is not None else None
+    running = hass.state is CoreState.running
 
     problem: str | None = None
     if status is None:
@@ -93,16 +115,24 @@ def evaluate(hass: HomeAssistant, status: StatusResult | None) -> HealthReport:
         problem = ISSUE_NOT_LOGGED_IN
     elif status.ha_mcp is False:
         problem = ISSUE_NO_HA_TOKEN
-    elif not mcp_loaded or connected is False:
+    elif connected is False or (not mcp_loaded and running):
         problem = ISSUE_MCP_UNREACHABLE
     elif exposed == 0:
         problem = ISSUE_NO_EXPOSED_ENTITIES
+
+    # Independent advisory: vision is on but no camera is exposed, so it can never
+    # fire. Only surfaced when the fundamentals are otherwise fine (a live problem
+    # already covers "Claude can't see anything").
+    camera_vision_inert = (
+        camera_vision and problem is None and _exposed_camera_count(hass) == 0
+    )
 
     return HealthReport(
         problem=problem,
         exposed_to_assist=exposed,
         mcp_server_loaded=mcp_loaded,
         ha_mcp_connected=connected,
+        camera_vision_inert=camera_vision_inert,
     )
 
 
@@ -122,6 +152,21 @@ def async_apply(hass: HomeAssistant, report: HealthReport) -> None:
             )
         else:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+    # Independent of the single-problem set above: the camera-vision advisory can
+    # coexist with an otherwise-healthy home, so raise/clear it on its own.
+    if report.camera_vision_inert:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            ISSUE_CAMERA_VISION_NO_CAMERAS,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_CAMERA_VISION_NO_CAMERAS,
+            learn_more_url="https://www.home-assistant.io/voice_control/voice_remote_expose_devices/",
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_CAMERA_VISION_NO_CAMERAS)
 
 
 async def async_probe(hass: HomeAssistant, client: ClaudeClient) -> None:

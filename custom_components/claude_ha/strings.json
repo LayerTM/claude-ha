@@ -231,6 +231,10 @@
     "no_exposed_entities": {
       "title": "No entities are exposed to Assist",
       "description": "Claude can reach your home but nothing is exposed to Assist, so there is nothing for it to see or control. Expose some entities under Settings → Voice assistants → Expose, then check again."
+    },
+    "camera_vision_no_cameras": {
+      "title": "Camera vision is on, but no cameras are exposed to Assist",
+      "description": "You turned on 'Let Claude look at cameras', but no camera is exposed to Assist, so Claude can never see one — Home Assistant hides cameras from Assist by default as security devices. Expose the camera(s) you want Claude to see under Settings → Voice assistants → Expose (the high-resolution channel of each camera), then check again."
     }
   }
 }

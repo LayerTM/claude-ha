@@ -150,12 +150,16 @@ ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
 ISSUE_NO_HA_TOKEN: Final = "no_ha_token"
 ISSUE_MCP_UNREACHABLE: Final = "mcp_unreachable"
 ISSUE_NO_EXPOSED_ENTITIES: Final = "no_exposed_entities"
+# Camera vision is on but no camera is exposed to Assist, so the feature is inert
+# (HA hides cameras from Assist by default as security devices). Independent advisory.
+ISSUE_CAMERA_VISION_NO_CAMERAS: Final = "camera_vision_no_cameras"
 # Health issues cleared together on unload.
 HEALTH_ISSUES: Final = (
     ISSUE_NOT_LOGGED_IN,
     ISSUE_NO_HA_TOKEN,
     ISSUE_MCP_UNREACHABLE,
     ISSUE_NO_EXPOSED_ENTITIES,
+    ISSUE_CAMERA_VISION_NO_CAMERAS,
 )
 
 # The Model Context Protocol Server integration Claude reads the home through.

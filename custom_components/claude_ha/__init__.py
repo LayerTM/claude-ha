@@ -20,6 +20,7 @@ from .api import ClaudeClient
 from .confirm import async_setup_confirm
 from .const import (
     CONF_ADDON_SLUG,
+    CONF_CAMERA_VISION,
     CONF_HOST,
     CONF_PORT,
     CONF_TOKEN,
@@ -86,7 +87,8 @@ def _async_setup_health(
 
     @callback
     def _refresh_health() -> None:
-        async_apply_health(hass, evaluate_health(hass, status.data))
+        camera_vision = entry.options.get(CONF_CAMERA_VISION, False)
+        async_apply_health(hass, evaluate_health(hass, status.data, camera_vision))
 
     entry.async_on_unload(status.async_add_listener(_refresh_health))
     _refresh_health()

@@ -6,7 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.9] - 2026-07-05
+## [0.1.10] - 2026-07-05
+
+### Added
+
+- **A repair now tells you when camera vision is on but no camera is visible to
+  Claude.** Home Assistant hides cameras from Assist by default (they count as
+  security devices), so turning on "Let Claude look at cameras" did nothing until
+  you also exposed a camera — with no hint why. The integration now raises a
+  guided repair when vision is enabled but zero cameras are exposed to Assist,
+  pointing you to the expose page. It clears itself once you expose one.
+
+### Fixed
+
+- **No more spurious "Claude can't reach the Model Context Protocol Server" repair
+  right after a restart.** The health check treated the `mcp_server` integration
+  as missing while Home Assistant was still starting it up, flashing a repair that
+  cleared itself moments later. It now waits until Home Assistant has fully started
+  before concluding the server is genuinely missing.
 
 ### Added
 
@@ -149,7 +166,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/LayerTM/claude-ha/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/LayerTM/claude-ha/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/LayerTM/claude-ha/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/LayerTM/claude-ha/compare/v0.1.6...v0.1.7
