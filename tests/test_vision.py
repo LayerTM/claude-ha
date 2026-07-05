@@ -521,3 +521,97 @@ def test_prefer_high_res_skips_entities_without_state(hass: HomeAssistant) -> No
     """The high-res pick tolerates a channel id with no state, then falls back."""
     hass.states.async_set("camera.b", "idle", {"friendly_name": "B"})
     assert vision._prefer_high_res(hass, ["camera.b", "camera.a"]) == "camera.a"
+
+
+# --- D5: separator-insensitive matching + parenthetical location -----------------
+# Live repro (shared/D5-camera-name-match-separator.md): the user named the AREA
+# "Frontyard" (no space) and exposed BOTH G4 channels. The old raw-substring matcher
+# had "frontyard" ∉ "front yard", so named=[] and (2 exposed) vision silently declined.
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Front Yard", "frontyard"),
+        ("front-yard", "frontyard"),
+        ("Front_Yard", "frontyard"),
+        ("Frontyard", "frontyard"),
+        ("G4 Instant (Front Yard)", "g4instantfrontyard"),
+        ("!!!", ""),
+    ],
+)
+def test_normalize(raw: str, expected: str) -> None:
+    """Separators, punctuation and case are dropped for matching."""
+    assert vision._normalize(raw) == expected
+
+
+def _two_channels(
+    hass: HomeAssistant,
+    entry_id: str,
+    friendlies: list[str],
+    *,
+    area_name: str | None = None,
+) -> list[str]:
+    """Two exposed channels of one physical camera; return entity ids."""
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry_id, identifiers={(DOMAIN, "g4")}, name="G4 Instant"
+    )
+    ent = er.async_get(hass)
+    area_id = ar.async_get(hass).async_create(area_name).id if area_name else None
+    ids: list[str] = []
+    for index, friendly in enumerate(friendlies):
+        reg = ent.async_get_or_create(
+            "camera", "unifi", f"g4_{index}", device_id=device.id
+        )
+        if area_id is not None:
+            ent.async_update_entity(reg.entity_id, area_id=area_id)
+        hass.states.async_set(reg.entity_id, "idle", {"friendly_name": friendly})
+        ids.append(reg.entity_id)
+    return ids
+
+
+def test_d5_area_without_space_resolves(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, expose_all: None
+) -> None:
+    """LIVE D5: area 'Frontyard' (no space) + 2 channels + spoken 'front yard'."""
+    mock_config_entry.add_to_hass(hass)
+    high, _med = _two_channels(
+        hass,
+        mock_config_entry.entry_id,
+        ["G4 Instant (High)", "G4 Instant (Medium)"],
+        area_name="Frontyard",  # the user named it WITHOUT a space
+    )
+    result = vision.resolve_camera(hass, "подивись на камеру front yard, що видно?")
+    assert result == high
+
+
+def test_d5_parenthetical_location_resolves(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, expose_all: None
+) -> None:
+    """A long friendly name embedding '(Front Yard)' resolves via the parenthetical."""
+    mock_config_entry.add_to_hass(hass)
+    high, _med = _two_channels(
+        hass,
+        mock_config_entry.entry_id,
+        [
+            "G4 Instant (Front Yard) High Resolution Channel",
+            "G4 Instant (Front Yard) Medium Resolution Channel",
+        ],
+    )
+    assert vision.resolve_camera(hass, "подивись на камеру front yard") == high
+
+
+def test_d5_hyphen_and_case_variants(hass: HomeAssistant, expose_all: None) -> None:
+    """Hyphen and case differences still match (separator-insensitive)."""
+    hass.states.async_set("camera.a", "idle", {"friendly_name": "Front-Yard"})
+    hass.states.async_set("camera.b", "idle", {"friendly_name": "Garage"})
+    assert vision.resolve_camera(hass, "подивись на камеру FRONT YARD") == "camera.a"
+
+
+def test_name_matcher_skips_empty_normalized_candidate(
+    hass: HomeAssistant, expose_all: None
+) -> None:
+    """A punctuation-only label normalizes to '' and must not match everything."""
+    hass.states.async_set("camera.a", "idle", {"friendly_name": "!!!"})
+    hass.states.async_set("camera.b", "idle", {"friendly_name": "Garage"})
+    assert vision.resolve_camera(hass, "подивись на камеру front yard") is None

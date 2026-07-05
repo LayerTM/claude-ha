@@ -9,6 +9,8 @@ snapshot itself.
 
 from __future__ import annotations
 
+import re
+
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import (
@@ -18,7 +20,20 @@ from homeassistant.helpers import (
     floor_registry as fr,
 )
 
-from .const import ASSIST_ASSISTANT
+from .const import ASSIST_ASSISTANT, LOGGER
+
+# Separators and punctuation are ignored when matching a camera label to the message,
+# so an area named "Frontyard" matches the spoken "front yard" (and "front-yard").
+_SEPARATORS = re.compile(r"[\W_]+")
+# UniFi-style friendly names embed the location in parentheses ("G4 Instant (Front
+# Yard) High Resolution Channel"); that inner text is its own candidate label.
+_PARENTHETICAL = re.compile(r"\(([^)]+)\)")
+
+
+def _normalize(text: str) -> str:
+    """Lowercase and drop separators/punctuation for separator-insensitive matching."""
+    return _SEPARATORS.sub("", text.lower())
+
 
 # Message must clearly ask to look before a snapshot is ever attached (cost,
 # latency, privacy). Kept small and multilingual; matched as lowercase substrings.
@@ -109,7 +124,8 @@ def _camera_names(hass: HomeAssistant, entity_id: str) -> list[str]:
             names.append(floor.name.lower())
 
     # Also match each label with a camera-channel suffix stripped, so "Front yard"
-    # resolves a "Front Yard High Resolution Channel" entity (I6).
+    # resolves a "Front Yard High Resolution Channel" entity, plus any parenthetical
+    # location a long friendly name embeds (I6 / D5).
     resolved: list[str] = []
     for name in names:
         if not name:
@@ -118,6 +134,7 @@ def _camera_names(hass: HomeAssistant, entity_id: str) -> list[str]:
         stripped = _strip_channel_suffix(name)
         if stripped and stripped != name:
             resolved.append(stripped)
+        resolved.extend(_PARENTHETICAL.findall(name))
     return list(dict.fromkeys(resolved))
 
 
@@ -153,6 +170,16 @@ def _dedupe_channels(hass: HomeAssistant, entity_ids: list[str]) -> list[str]:
 
 
 @callback
+def _name_matches(hass: HomeAssistant, entity_id: str, normalized_text: str) -> bool:
+    """Return True if a camera label appears in the message (ignoring separators)."""
+    for name in _camera_names(hass, entity_id):
+        candidate = _normalize(name)
+        if candidate and candidate in normalized_text:
+            return True
+    return False
+
+
+@callback
 def resolve_camera(hass: HomeAssistant, text: str) -> str | None:
     """Return the one Assist-exposed camera the message refers to, else None.
 
@@ -169,17 +196,24 @@ def resolve_camera(hass: HomeAssistant, text: str) -> str | None:
     if not exposed:
         return None
 
-    lowered = text.lower()
+    normalized = _normalize(text)
     named = [
-        entity_id
-        for entity_id in exposed
-        if any(name in lowered for name in _camera_names(hass, entity_id))
+        entity_id for entity_id in exposed if _name_matches(hass, entity_id, normalized)
     ]
     if named:
         # Several matches that are all channels of ONE camera resolve to one; matches
         # across distinct cameras stay ambiguous (never guess).
         collapsed = _dedupe_channels(hass, named)
-        return collapsed[0] if len(collapsed) == 1 else None
-    if len(exposed) == 1:
-        return exposed[0]
-    return None
+        result = collapsed[0] if len(collapsed) == 1 else None
+    elif len(exposed) == 1:
+        result = exposed[0]
+    else:
+        result = None
+    LOGGER.debug(
+        "resolve_camera(%r): exposed=%d named=%s -> %s",
+        text,
+        len(exposed),
+        named,
+        result,
+    )
+    return result

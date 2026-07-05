@@ -6,7 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.13] - 2026-07-05
+## [0.1.14] - 2026-07-05
+
+### Fixed
+
+- **Camera vision now matches a camera's location even when the spelling differs
+  by a space, hyphen or case.** A camera in an area named "Frontyard" was not
+  matched when you said "front yard" (and, with two channels exposed, vision
+  silently answered from state instead of looking). Matching is now
+  separator-insensitive on both sides ("Frontyard" = "front yard" = "front-yard"),
+  and a location embedded in parentheses in a long name (e.g. "G4 Instant (Front
+  Yard) High Resolution Channel") is matched too. The exposed-only ceiling and the
+  never-guess-between-cameras rule are unchanged. Resolving now also logs at debug
+  level to make future diagnosis easy.
 
 ### Added
 
@@ -209,7 +221,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.14...HEAD
+[0.1.14]: https://github.com/LayerTM/claude-ha/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/LayerTM/claude-ha/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/LayerTM/claude-ha/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/LayerTM/claude-ha/compare/v0.1.10...v0.1.11
