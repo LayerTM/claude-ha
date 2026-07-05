@@ -6,7 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.11] - 2026-07-05
+## [0.1.12] - 2026-07-05
+
+### Fixed
+
+- **Multi-channel cameras no longer confuse camera vision.** A UniFi-style camera
+  exposes several channels (high/medium) of the same physical camera. If you
+  exposed more than one, a visual question matched them all and the "never guess
+  between cameras" rule declined — so nothing was sent. Channels of the *same*
+  camera are now collapsed to one (the high-resolution one), so it resolves;
+  genuinely different cameras still stay ambiguous.
+- **Cameras named "… Resolution Channel" now match by location.** A camera whose
+  name carries a channel suffix (e.g. "Front Yard High Resolution Channel") is now
+  matched when you just say its location ("Front yard"), by also matching the name
+  with that channel suffix stripped.
 
 ### Added
 
@@ -178,7 +191,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/LayerTM/claude-ha/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/LayerTM/claude-ha/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/LayerTM/claude-ha/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/LayerTM/claude-ha/compare/v0.1.8...v0.1.9

@@ -412,3 +412,112 @@ def test_resolves_by_area_name_already(
     _make_unifi_camera(hass, eid, "other", friendly="Back yard")
 
     assert vision.resolve_camera(hass, "подивись на камеру Front yard") == g4
+
+
+# --- rec#3 + I6: multi-channel cameras and channel-suffix name matching ---------
+# A physical UniFi camera exposes 2 channels (high+medium) in the same area, each
+# named "<location> …Resolution Channel". Exposing both used to trip the ≥2-ambiguity
+# guard → silent decline. rec#3 collapses same-device channels; I6 matches the label
+# with the channel suffix stripped.
+
+
+def _make_channels(
+    hass: HomeAssistant,
+    entry_id: str,
+    unique: str,
+    device_name: str,
+    friendlies: list[str],
+) -> list[str]:
+    """Create N channels of ONE physical camera (one device) and return entity ids."""
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry_id,
+        identifiers={(DOMAIN, unique)},
+        name=device_name,
+    )
+    ent = er.async_get(hass)
+    ids: list[str] = []
+    for index, friendly in enumerate(friendlies):
+        reg = ent.async_get_or_create(
+            "camera", "unifi", f"{unique}_{index}", device_id=device.id
+        )
+        hass.states.async_set(reg.entity_id, "idle", {"friendly_name": friendly})
+        ids.append(reg.entity_id)
+    return ids
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("front yard high resolution channel", "front yard"),
+        ("front yard medium resolution channel", "front yard"),
+        ("front yard low resolution channel", "front yard"),
+        ("garage resolution channel", "garage"),
+        ("hallway channel", "hallway"),
+        ("kitchen", "kitchen"),
+    ],
+)
+def test_strip_channel_suffix(raw: str, expected: str) -> None:
+    """A trailing camera-channel suffix is dropped; plain names are untouched."""
+    assert vision._strip_channel_suffix(raw) == expected
+
+
+def test_channel_suffix_stripped_for_matching(
+    hass: HomeAssistant, expose_all: None
+) -> None:
+    """I6: a resolution-channel friendly name still matches the plain location."""
+    hass.states.async_set(
+        "camera.g4", "idle", {"friendly_name": "Front Yard High Resolution Channel"}
+    )
+    hass.states.async_set("camera.back", "idle", {"friendly_name": "Back Yard"})
+    assert vision.resolve_camera(hass, "подивись на камеру front yard") == "camera.g4"
+
+
+def test_multichannel_same_device_resolves_to_high(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, expose_all: None
+) -> None:
+    """rec#3: two exposed channels of ONE camera resolve (to the high-res one)."""
+    mock_config_entry.add_to_hass(hass)
+    eid = mock_config_entry.entry_id
+    high, _med = _make_channels(
+        hass,
+        eid,
+        "g4",
+        "Front Yard",
+        ["Front Yard High Resolution Channel", "Front Yard Medium Resolution Channel"],
+    )
+    _make_unifi_camera(hass, eid, "back", friendly="Back Yard")
+
+    assert vision.resolve_camera(hass, "подивись на камеру front yard") == high
+
+
+def test_multichannel_no_high_label_falls_back_deterministically(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, expose_all: None
+) -> None:
+    """rec#3: same-device channels with no 'high' label → deterministic single pick."""
+    mock_config_entry.add_to_hass(hass)
+    eid = mock_config_entry.entry_id
+    ids = _make_channels(
+        hass, eid, "g4", "Front Yard", ["Front Yard Stream A", "Front Yard Stream B"]
+    )
+    result = vision.resolve_camera(hass, "подивись на камеру front yard")
+    assert result == sorted(ids)[0]
+
+
+def test_multichannel_distinct_cameras_stay_ambiguous(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, expose_all: None
+) -> None:
+    """Matches across DISTINCT physical cameras stay ambiguous → None."""
+    mock_config_entry.add_to_hass(hass)
+    eid = mock_config_entry.entry_id
+    _make_unifi_camera(hass, eid, "a", device_name="Front Yard", friendly="Cam A")
+    _make_unifi_camera(hass, eid, "b", device_name="Front Gate", friendly="Cam B")
+
+    assert (
+        vision.resolve_camera(hass, "подивись на камеру front yard front gate") is None
+    )
+
+
+def test_prefer_high_res_skips_entities_without_state(hass: HomeAssistant) -> None:
+    """The high-res pick tolerates a channel id with no state, then falls back."""
+    hass.states.async_set("camera.b", "idle", {"friendly_name": "B"})
+    assert vision._prefer_high_res(hass, ["camera.b", "camera.a"]) == "camera.a"

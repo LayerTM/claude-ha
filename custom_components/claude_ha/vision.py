@@ -52,6 +52,27 @@ def _is_visual(text: str) -> bool:
     return any(cue in lowered for cue in _VISUAL_CUES)
 
 
+# A physical camera (UniFi Protect etc.) exposes several channels, each labelled
+# "<location> High/Medium/Low Resolution Channel". Users say the location, so we also
+# match the label with this channel suffix stripped ("… High …Channel" → "front yard").
+_CHANNEL_SUFFIXES = (
+    "high resolution channel",
+    "medium resolution channel",
+    "low resolution channel",
+    "resolution channel",
+    "channel",
+)
+
+
+@callback
+def _strip_channel_suffix(name: str) -> str:
+    """Drop a trailing camera-channel suffix so a location label matches a mention."""
+    for suffix in _CHANNEL_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)].strip()
+    return name
+
+
 @callback
 def _camera_names(hass: HomeAssistant, entity_id: str) -> list[str]:
     """Return the lowercase labels a user might call a camera by.
@@ -86,7 +107,49 @@ def _camera_names(hass: HomeAssistant, entity_id: str) -> list[str]:
             floor := fr.async_get(hass).async_get_floor(area.floor_id)
         ):
             names.append(floor.name.lower())
-    return [name for name in dict.fromkeys(names) if name]
+
+    # Also match each label with a camera-channel suffix stripped, so "Front yard"
+    # resolves a "Front Yard High Resolution Channel" entity (I6).
+    resolved: list[str] = []
+    for name in names:
+        if not name:
+            continue
+        resolved.append(name)
+        stripped = _strip_channel_suffix(name)
+        if stripped and stripped != name:
+            resolved.append(stripped)
+    return list(dict.fromkeys(resolved))
+
+
+@callback
+def _prefer_high_res(hass: HomeAssistant, entity_ids: list[str]) -> str:
+    """Pick the high-resolution channel among channels of one camera (best source)."""
+    for entity_id in sorted(entity_ids):
+        state = hass.states.get(entity_id)
+        if state is not None and "high" in state.name.lower():
+            return entity_id
+    return sorted(entity_ids)[0]
+
+
+@callback
+def _dedupe_channels(hass: HomeAssistant, entity_ids: list[str]) -> list[str]:
+    """Collapse channels of the SAME physical camera to one (they share a device).
+
+    Two exposed channels of one camera are not a real ambiguity — they show the
+    same view — so they should resolve, not trip the never-guess guard.
+    """
+    registry = er.async_get(hass)
+    by_device: dict[str, list[str]] = {}
+    result: list[str] = []
+    for entity_id in entity_ids:
+        entry = registry.async_get(entity_id)
+        device_id = entry.device_id if entry is not None else None
+        if device_id is None:
+            result.append(entity_id)
+        else:
+            by_device.setdefault(device_id, []).append(entity_id)
+    result.extend(_prefer_high_res(hass, group) for group in by_device.values())
+    return result
 
 
 @callback
@@ -94,7 +157,7 @@ def resolve_camera(hass: HomeAssistant, text: str) -> str | None:
     """Return the one Assist-exposed camera the message refers to, else None.
 
     None means "don't attach an image": the message isn't visual, no camera is
-    exposed, or the choice is ambiguous (never guess between cameras).
+    exposed, or the choice is ambiguous (never guess between distinct cameras).
     """
     if not _is_visual(text):
         return None
@@ -112,8 +175,11 @@ def resolve_camera(hass: HomeAssistant, text: str) -> str | None:
         for entity_id in exposed
         if any(name in lowered for name in _camera_names(hass, entity_id))
     ]
-    if len(named) == 1:
-        return named[0]
-    if not named and len(exposed) == 1:
+    if named:
+        # Several matches that are all channels of ONE camera resolve to one; matches
+        # across distinct cameras stay ambiguous (never guess).
+        collapsed = _dedupe_channels(hass, named)
+        return collapsed[0] if len(collapsed) == 1 else None
+    if len(exposed) == 1:
         return exposed[0]
     return None
