@@ -36,6 +36,7 @@ from .const import (
     RESP_TEXT,
     RESP_TOOLS_USED,
     RESP_TRUNCATED,
+    STATUS_CHAT_HEALTH,
     STATUS_CLAUDE_VERSION,
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
@@ -119,6 +120,16 @@ class StreamDelta:
 
 
 @dataclass(slots=True)
+class ChatHealth:
+    """Rolling chat-reliability summary from ``/api/status`` (add-on >= 1.20.0)."""
+
+    recent: int
+    degraded: int
+    recovered: int
+    last_reason: str | None
+
+
+@dataclass(slots=True)
 class StatusResult:
     """Parsed 200 response of ``GET /api/status``."""
 
@@ -128,6 +139,7 @@ class StatusResult:
     model: str | None
     ha_mcp: bool | None
     ha_mcp_connected: bool | None
+    chat_health: ChatHealth | None = None
 
 
 @dataclass(slots=True)
@@ -158,6 +170,17 @@ class ClaudeClient:
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
         ha_mcp = data.get(STATUS_HA_MCP)
         connected = data.get(STATUS_HA_MCP_CONNECTED)
+        raw_health = data.get(STATUS_CHAT_HEALTH)
+        chat_health = (
+            ChatHealth(
+                recent=int(raw_health.get("recent", 0)),
+                degraded=int(raw_health.get("degraded", 0)),
+                recovered=int(raw_health.get("recovered", 0)),
+                last_reason=raw_health.get("last_reason"),
+            )
+            if isinstance(raw_health, dict)
+            else None
+        )
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
@@ -165,6 +188,7 @@ class ClaudeClient:
             model=data.get(STATUS_MODEL),
             ha_mcp=None if ha_mcp is None else bool(ha_mcp),
             ha_mcp_connected=None if connected is None else bool(connected),
+            chat_health=chat_health,
         )
 
     async def async_get_usage(self) -> UsageResult:

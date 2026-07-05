@@ -85,6 +85,76 @@ async def test_status_sensor_becomes_unavailable(
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
 
+async def test_chat_health_sensor_unavailable_without_field(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+) -> None:
+    """An add-on that doesn't report chat_health leaves the sensor unavailable."""
+    await setup_integration(hass, mock_config_entry)
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == STATE_UNAVAILABLE
+
+
+async def test_chat_health_sensor_ok(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Zero recent degraded reads → the soft indicator reads ok, counts as attrs."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 8,
+                "degraded": 0,
+                "recovered": 2,
+                "last_reason": None,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "ok"
+    assert state.attributes["recent"] == 8
+    assert state.attributes["degraded"] == 0
+    assert state.attributes["recovered"] == 2
+    assert state.attributes.get("last_reason") is None
+
+
+async def test_chat_health_sensor_degraded(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A recent degraded read flips the indicator to degraded with the reason token."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 8,
+                "degraded": 2,
+                "recovered": 1,
+                "last_reason": "model-error",
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "degraded"
+    assert state.attributes["degraded"] == 2
+    assert state.attributes["last_reason"] == "model-error"
+
+
 async def test_usage_sensors(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,

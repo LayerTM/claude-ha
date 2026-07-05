@@ -71,6 +71,13 @@
           "initializing": "Initializing"
         }
       },
+      "chat_health": {
+        "name": "Chat health",
+        "state": {
+          "ok": "OK",
+          "degraded": "Degraded"
+        }
+      },
       "usage": {
         "name": "Token usage today"
       },

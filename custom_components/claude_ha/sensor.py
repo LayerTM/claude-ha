@@ -36,6 +36,10 @@ PARALLEL_UPDATES = 0
 STATE_READY = "ready"
 STATE_INITIALIZING = "initializing"
 
+# Possible states of the chat-health sensor (soft indicator, not a repair).
+STATE_CHAT_OK = "ok"
+STATE_CHAT_DEGRADED = "degraded"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -47,6 +51,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             ClaudeStatusSensor(data.status),
+            ClaudeChatHealthSensor(data.status),
             ClaudeUsageSensor(data.usage),
             ClaudeCostSensor(data.usage),
         ]
@@ -92,6 +97,55 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
             STATUS_HA_MCP_CONNECTED: data.ha_mcp_connected,
             "health": report.problem or "ok",
             "exposed_to_assist": report.exposed_to_assist,
+        }
+
+
+class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):
+    """Soft indicator of recent chat reliability (degraded vs recovered reads).
+
+    A glanceable diagnostic — never a repair — surfacing the add-on's rolling
+    chat-health summary. ``degraded`` counts reads that failed even after a retry;
+    ``recovered`` counts reads a retry rescued (a success, so it stays "ok").
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "chat_health"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+
+    def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
+        """Init from the status coordinator."""
+        super().__init__(coordinator)
+        self._attr_options = [STATE_CHAT_OK, STATE_CHAT_DEGRADED]
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_chat_health"
+        self._attr_device_info = build_device_info(entry)
+
+    @property
+    def available(self) -> bool:
+        """Unavailable on add-ons that don't report chat health (< 1.20.0)."""
+        data = self.coordinator.data
+        return super().available and data is not None and data.chat_health is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Degraded when a recent read failed even after retry, else OK."""
+        health = self.coordinator.data.chat_health
+        if health is None:
+            return None
+        return STATE_CHAT_DEGRADED if health.degraded > 0 else STATE_CHAT_OK
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the rolling counts and the last failure reason token."""
+        health = self.coordinator.data.chat_health
+        if health is None:
+            return {}
+        return {
+            "recent": health.recent,
+            "degraded": health.degraded,
+            "recovered": health.recovered,
+            "last_reason": health.last_reason,
         }
 
 

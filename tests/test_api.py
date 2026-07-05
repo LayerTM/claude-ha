@@ -36,6 +36,39 @@ async def test_status_parsing(
     assert status.ha_mcp_connected is True
 
 
+async def test_status_parses_chat_health(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A chat_health object (add-on >= 1.20.0) parses into ChatHealth."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 3,
+                "degraded": 1,
+                "recovered": 2,
+                "last_reason": "no-result",
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.recent == 3
+    assert status.chat_health.degraded == 1
+    assert status.chat_health.recovered == 2
+    assert status.chat_health.last_reason == "no-result"
+
+
+async def test_status_chat_health_absent_is_none(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An older add-on that omits chat_health yields None (backward-compatible)."""
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json={"ready": True})
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is None
+
+
 async def test_prompt_sends_headers_and_body(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

@@ -108,6 +108,10 @@ STATUS_HA_MCP: Final = "ha_mcp"
 # Whether the LAST chat read actually reached the HA MCP server (add-on >= 1.14.0;
 # null until the first read). Distinct from ha_mcp, which only says a config exists.
 STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
+# Rolling chat-reliability summary (add-on >= 1.20.0): {recent, degraded, recovered,
+# last_reason}. last_reason is a reason TOKEN from the runner's enum, never prompt
+# content. Absent on older add-ons (the chat-health sensor is then unavailable).
+STATUS_CHAT_HEALTH: Final = "chat_health"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run

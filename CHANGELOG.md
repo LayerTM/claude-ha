@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-07-05
+
+### Added
+
+- **A "Chat health" diagnostic sensor.** When paired with a recent add-on
+  (≥ 1.20.0), a new `sensor.*_chat_health` shows `ok` / `degraded` at a glance and
+  carries the rolling counts as attributes — `recent`, `degraded` (reads that
+  failed even after a retry), `recovered` (reads a retry quietly rescued), and
+  `last_reason` (a short failure-reason token, never your prompt text). It's a soft
+  indicator, deliberately **not** a repair, so occasional transient blips don't
+  nag you. On older add-ons that don't report it, the sensor stays unavailable.
+
 ## [0.1.10] - 2026-07-05
 
 ### Added
@@ -166,7 +178,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/LayerTM/claude-ha/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/LayerTM/claude-ha/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/LayerTM/claude-ha/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/LayerTM/claude-ha/compare/v0.1.7...v0.1.8
