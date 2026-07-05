@@ -18,6 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   aliases (English and Ukrainian). The Assist-exposed-only ceiling and the
   never-guess-between-cameras rule are unchanged. Confirmed against live Home
   Assistant; no add-on update required (works with add-on ≥ 1.17.0).
+- **Request timeout raised 120 s → 135 s** so a read that the add-on (≥ 1.18.0)
+  gracefully recovers or degrades right at its own 120 s budget delivers its
+  friendly answer instead of being cut off by a client-side timeout. Normal reads
+  finish well under this; the change only affects the rare at-the-ceiling case.
 
 ## [0.1.7] - 2026-07-04
 

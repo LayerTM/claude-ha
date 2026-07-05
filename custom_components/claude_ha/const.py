@@ -107,8 +107,13 @@ STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
-# on the add-on side can take a while).
-REQUEST_TIMEOUT: Final = 120
+# on the add-on side can take a while). Must stay ABOVE the add-on's whole-request
+# budget (`CLAUDE_PROMPT_TIMEOUT_MS`, default 120s — retry runs on the remaining
+# budget, not a fresh one, so the ceiling is 120s not 2x) so the add-on's graceful
+# terminal `done` on a timed-out read always arrives before we abort; otherwise the
+# user gets a hard timeout instead of the friendly degraded message (add-on >=1.18.0).
+# If the add-on timeout is raised, raise this to match (budget + ~15s headroom).
+REQUEST_TIMEOUT: Final = 135
 # Shorter timeout for the lightweight status poll.
 STATUS_TIMEOUT: Final = 15
 # Coordinator poll interval for the status sensor.
