@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-07-05
+
+### Fixed
+
+- **Camera vision now recognises the camera by its location.** A visual question
+  that named a camera by its **device name** or a registered **Assist alias**
+  (e.g. "look at the Front yard camera") resolved to nothing, so no snapshot was
+  ever sent — camera name matching only considered the entity's friendly name,
+  area and floor. It now also matches the device name and the user's explicit
+  aliases (English and Ukrainian). The Assist-exposed-only ceiling and the
+  never-guess-between-cameras rule are unchanged. Confirmed against live Home
+  Assistant; no add-on update required (works with add-on ≥ 1.17.0).
+
 ## [0.1.7] - 2026-07-04
 
 ### Added
@@ -120,7 +133,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/LayerTM/claude-ha/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/LayerTM/claude-ha/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/LayerTM/claude-ha/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/LayerTM/claude-ha/compare/v0.1.4...v0.1.5

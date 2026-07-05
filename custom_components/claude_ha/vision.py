@@ -54,23 +54,39 @@ def _is_visual(text: str) -> bool:
 
 @callback
 def _camera_names(hass: HomeAssistant, entity_id: str) -> list[str]:
-    """Return lowercase names that identify a camera: its own name, area, floor."""
+    """Return the lowercase labels a user might call a camera by.
+
+    Covers what people actually say: the entity's friendly name and registered
+    Assist aliases, its device name, and its area/floor — because a user names a
+    camera by its location ("Front yard") far more than by its model ("G4 Instant")
+    or entity_id. Assist exposure is enforced by the caller, not here.
+    """
     names: list[str] = []
     if (state := hass.states.get(entity_id)) is not None:
         names.append(state.name.lower())
+
     entry = er.async_get(hass).async_get(entity_id)
+    device = None
+    if entry is not None:
+        # aliases may hold a COMPUTED_NAME sentinel (the friendly name, already
+        # captured via state.name); keep only the user's explicit string aliases.
+        names.extend(alias.lower() for alias in entry.aliases if isinstance(alias, str))
+        if entry.device_id is not None:
+            device = dr.async_get(hass).async_get(entry.device_id)
+    if device is not None:
+        names.append((device.name_by_user or device.name or "").lower())
+
+    # Prefer the entity's own area; fall back to the device's when it has none.
     area_id = entry.area_id if entry is not None else None
-    if entry is not None and area_id is None and entry.device_id is not None:
-        # Fall back to the device's area when the entity has no explicit one.
-        device = dr.async_get(hass).async_get(entry.device_id)
-        area_id = device.area_id if device is not None else None
+    if area_id is None and device is not None:
+        area_id = device.area_id
     if area_id is not None and (area := ar.async_get(hass).async_get_area(area_id)):
         names.append(area.name.lower())
         if area.floor_id is not None and (
             floor := fr.async_get(hass).async_get_floor(area.floor_id)
         ):
             names.append(floor.name.lower())
-    return [name for name in names if name]
+    return [name for name in dict.fromkeys(names) if name]
 
 
 @callback
