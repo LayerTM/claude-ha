@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-09
+
+### Added
+
+- **Create automations by describing them, with a confirmation.** Ask Claude to
+  create an automation and it drafts the config, shows it to you, and — when you
+  reply "yes" — creates it in Home Assistant (voice gets a short spoken "…say yes
+  to confirm"). Before anything is written, the draft is re-validated against Home
+  Assistant's own automation schema and passed through a strict safety allow-list:
+  it may only call everyday device, helper and notify services, and any draft that
+  reaches for a shell command, a script runtime, a templated service name, a way to
+  reproduce arbitrary entity states across other domains, or any service outside
+  that set is refused — not created. Nothing is written unless the whole draft
+  passes. Needs the Claude add-on ≥ 1.34.0.
+
 ## [1.1.1] - 2026-07-09
 
 ### Fixed

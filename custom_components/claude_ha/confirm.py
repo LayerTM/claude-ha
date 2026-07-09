@@ -48,7 +48,12 @@ class ConfirmationRequest:
 
 @dataclass(slots=True)
 class PendingProposal:
-    """A proposal awaiting the user's Approve/Dismiss decision."""
+    """A proposal awaiting the user's Approve/Dismiss decision.
+
+    Carries either entity-control ``intents`` (the notification/chat write path) or,
+    when ``automation`` is set, a drafted automation config awaiting a confirmed
+    in-process commit (the chat-only automation path).
+    """
 
     entry_id: str
     prompt: str
@@ -56,6 +61,7 @@ class PendingProposal:
     caller: str | None
     summary: str
     expires_at: datetime
+    automation: dict[str, Any] | None = None
 
 
 @callback
