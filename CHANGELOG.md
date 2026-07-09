@@ -6,6 +6,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-09
+
+First stable release. The integration has been in daily live use and is
+feature-complete across chat, voice, camera vision, health checks and usage
+reporting, at Home Assistant's **platinum** quality scale with 100% test
+coverage. 1.0.0 marks the public surface below as stable — future changes keep it
+backward-compatible or land in a new major.
+
+### Stable surface
+
+- **Conversation agent** — Claude as an Assist conversation entity that can read
+  and (with confirmation) act on Home Assistant; benign low-risk actions run
+  immediately, everything else is held for a plain yes/no confirmation.
+- **Voice** — concise, spoken-friendly replies on voice turns (one short sentence,
+  no markdown), with a one-click local Whisper + Piper Assist pipeline setup.
+- **Camera vision** — Claude can look at an Assist-exposed camera a question
+  clearly refers to.
+- **Sensors** — Status, Chat health, Daily budget spend, Token usage today and
+  Prompt API cost, plus a ready-made built-in-card **usage dashboard** (see the
+  README).
+- **Health checks & repairs** — proactive detection of the "chat can't see your
+  home" failures, each with an actionable repair.
+- **The `claude_ha.ask` action** and the shipped Claude chat card.
+
+### Added
+
+- **Usage dashboard** — a copy-paste Lovelace overview (cost, budget gauge, chat
+  health, MCP state, token/cost history) built entirely from Home Assistant's
+  built-in cards; no custom resource to install. Documented in the README.
+
+### Documentation
+
+- The Sensors section now lists all five sensors with their entity ids and the
+  add-on version each needs.
+
 ## [0.1.17] - 2026-07-09
 
 ### Changed

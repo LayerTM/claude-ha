@@ -210,15 +210,69 @@ data:
 
 ### Sensors
 
-- **Status** — `ready` / `initializing`, with the add-on version, Claude version,
-  active model, whether a scoped HA MCP is configured and reachable, a `health`
-  summary and the count of entities exposed to Assist as attributes.
-- **Token usage today** — today's input + output tokens (unit `tokens`), with the
-  full usage report (per-period and per-model token totals, message counts) as
-  attributes. Polled slowly (~5 min; the add-on caches it).
-- **Prompt API cost** — the total prompt-API cost in USD (interactive-console use
-  is measured in tokens, not dollars). The usage/cost sensors need the Claude
-  Code add-on ≥ 1.7.0 and stay unavailable otherwise.
+- **Status** (`sensor.claude_code_status`) — `ready` / `initializing`, with the
+  add-on version, Claude version, active model, whether a scoped HA MCP is
+  configured and reachable, a `health` summary and the count of entities exposed
+  to Assist as attributes.
+- **Chat health** (`sensor.claude_code_chat_health`) — a rolling summary of recent
+  chat outcomes (`ok` / `degraded`), with recent/degraded/recovered counts and the
+  last degrade reason (a token, never prompt content) as attributes. Needs add-on
+  ≥ 1.20.0; unavailable otherwise.
+- **Daily budget spend** (`sensor.claude_code_daily_budget_spend`) — today's spend
+  in USD against the add-on's daily budget, with `limit` / `remaining` /
+  `fraction_used` / a soft `near_cap` flag as attributes (a limit of 0 = unlimited
+  leaves those null). Diagnostic; never a repair. Needs add-on ≥ 1.21.0.
+- **Token usage today** (`sensor.claude_code_token_usage_today`) — today's input +
+  output tokens (unit `tokens`), with the full usage report (per-period and
+  per-model token totals, message counts) as attributes. Polled slowly (~5 min;
+  the add-on caches it).
+- **Prompt API cost** (`sensor.claude_code_prompt_api_cost`) — the total prompt-API
+  cost in USD (interactive-console use is measured in tokens, not dollars). The
+  usage/cost sensors need the Claude Code add-on ≥ 1.7.0 and stay unavailable
+  otherwise.
+
+Entity ids above are the defaults (device *Claude Code* + entity name); adjust to
+your own if you've renamed them.
+
+### Usage dashboard
+
+A ready-made overview using only built-in cards — paste it into a dashboard (**Edit
+dashboard → Add card → Manual**) to see cost, budget, chat health and MCP state at a
+glance. No extra install; adjust the entity ids if yours differ, and set the gauge
+`max` to your add-on's daily budget cap.
+
+```yaml
+type: vertical-stack
+cards:
+  - type: entities
+    title: Claude
+    entities:
+      - entity: sensor.claude_code_status
+        name: Status
+      - entity: sensor.claude_code_chat_health
+        name: Chat health
+      - entity: sensor.claude_code_daily_budget_spend
+        name: Budget spent today
+      - entity: sensor.claude_code_token_usage_today
+        name: Tokens today
+      - entity: sensor.claude_code_prompt_api_cost
+        name: Total API cost
+  - type: gauge
+    entity: sensor.claude_code_daily_budget_spend
+    name: Daily budget
+    needle: true
+    max: 5 # set to your add-on's daily budget cap
+    severity:
+      green: 0
+      yellow: 3.5
+      red: 4.5
+  - type: history-graph
+    title: Cost & tokens (24 h)
+    hours_to_show: 24
+    entities:
+      - sensor.claude_code_prompt_api_cost
+      - sensor.claude_code_token_usage_today
+```
 
 ### Health checks
 
