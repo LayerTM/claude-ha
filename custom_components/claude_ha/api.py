@@ -16,10 +16,12 @@ import json
 from typing import Any, NoReturn
 
 from aiohttp import ClientError, ClientSession
+from awesomeversion import AwesomeVersion, AwesomeVersionException
 
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
+    ADDON_MIN_SURFACE_VERSION,
     API_PROMPT,
     API_STATUS,
     API_USAGE,
@@ -31,6 +33,7 @@ from .const import (
     REQUEST_IMAGE_ENTITY,
     REQUEST_LANGUAGE,
     REQUEST_STREAM,
+    REQUEST_SURFACE,
     REQUEST_TIMEOUT,
     RESP_PROPOSAL,
     RESP_TEXT,
@@ -174,6 +177,7 @@ class ClaudeClient:
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._read_timeout = float(REQUEST_TIMEOUT)
+        self._addon_version: str | None = None
 
     @property
     def _auth_headers(self) -> dict[str, str]:
@@ -183,6 +187,29 @@ class ClaudeClient:
     def read_timeout(self) -> float:
         """The current prompt-read wall-clock (tracks the add-on's budget)."""
         return self._read_timeout
+
+    @property
+    def _supports_surface(self) -> bool:
+        """Whether the connected add-on accepts the ``surface`` field.
+
+        A pre-1.28.0 add-on rejects unknown request keys, so the caller must only
+        send ``surface`` once we've observed a new-enough version via a status
+        poll. Absent/unparseable version -> treat as unsupported (send nothing).
+        """
+        if self._addon_version is None:
+            return False
+        try:
+            return AwesomeVersion(self._addon_version) >= ADDON_MIN_SURFACE_VERSION
+        except AwesomeVersionException:
+            return False
+
+    def note_version(self, version: str | None) -> None:
+        """Record the add-on version last reported by ``/api/status``.
+
+        Gates additive request fields (e.g. ``surface``) that older add-ons would
+        reject, so a field is only put on the wire once the peer supports it.
+        """
+        self._addon_version = version
 
     def note_prompt_timeout(self, prompt_timeout_ms: int | None) -> None:
         """Track the add-on's prompt budget so our wall-clock stays just above it.
@@ -263,6 +290,7 @@ class ClaudeClient:
         confirmation: str | None = None,
         image_entity: str | None = None,
         language: str | None = None,
+        surface: str | None = None,
     ) -> PromptResult:
         """Send a prompt to Claude and return the structured result (contract §2).
 
@@ -271,12 +299,16 @@ class ClaudeClient:
         ``image_entity`` (an Assist-exposed camera) is a read-only visual hint.
         ``language`` (the HA conversation language) lets the add-on localize its
         server-authored messages; additive, ignored by older add-ons.
+        ``surface`` ("voice"/"text") is only sent to add-ons that accept it
+        (>= 1.28.0); older ones reject unknown keys, so it is dropped for them.
         """
         payload: dict[str, object] = {"prompt": prompt, "mode": mode}
         if conversation_id is not None:
             payload["conversation_id"] = conversation_id
         if language is not None:
             payload[REQUEST_LANGUAGE] = language
+        if surface is not None and self._supports_surface:
+            payload[REQUEST_SURFACE] = surface
         if mode == MODE_WRITE:
             payload["intents"] = intents or []
             if confirmation is not None:
@@ -304,6 +336,7 @@ class ClaudeClient:
         caller: str | None = None,
         image_entity: str | None = None,
         language: str | None = None,
+        surface: str | None = None,
     ) -> AsyncIterator[StreamDelta | PromptResult]:
         """Stream a read: yield text deltas, then one final ``PromptResult``.
 
@@ -324,6 +357,8 @@ class ClaudeClient:
             payload[REQUEST_IMAGE_ENTITY] = image_entity
         if language is not None:
             payload[REQUEST_LANGUAGE] = language
+        if surface is not None and self._supports_surface:
+            payload[REQUEST_SURFACE] = surface
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller

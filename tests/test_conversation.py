@@ -8,12 +8,21 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.claude_ha.api import Proposal
 from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
-from custom_components.claude_ha.conversation import _render_proposal
+from custom_components.claude_ha.conversation import _render_proposal, _spoken_confirm
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import entity_registry as er, intent
 
-from .conftest import TEST_BASE_URL, setup_integration
+from .conftest import (
+    STATUS_PAYLOAD,
+    TEST_BASE_URL,
+    USAGE_PAYLOAD,
+    setup_integration,
+)
+
+# A voice satellite entity id — HA sets this on ConversationInput only for turns
+# that arrive through an assist_satellite (audio in, TTS out).
+VOICE_SATELLITE = "assist_satellite.kitchen"
 
 
 def _agent_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
@@ -211,3 +220,118 @@ def test_render_proposal_variants(
         assert fragment in reply
     for fragment in expect_absent:
         assert fragment not in reply
+
+
+def _mock_status(aioclient_mock: AiohttpClientMocker, version: str) -> None:
+    """Register /api/status (with a chosen add-on version) and /api/usage."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status", json={**STATUS_PAYLOAD, "version": version}
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+
+
+@pytest.mark.parametrize(
+    ("satellite_id", "expected"),
+    [(VOICE_SATELLITE, "voice"), (None, "text")],
+)
+async def test_conversation_forwards_surface(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    satellite_id: str | None,
+    expected: str,
+) -> None:
+    """A new-enough add-on gets surface=voice for satellite turns, text otherwise."""
+    _mock_status(aioclient_mock, "1.28.0")
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    await conversation.async_converse(
+        hass,
+        "what's the weather?",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+        satellite_id=satellite_id,
+    )
+
+    posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+    assert posts[-1][2]["surface"] == expected
+
+
+async def test_conversation_omits_surface_for_old_addon(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An add-on below 1.28.0 rejects unknown keys, so surface is never sent."""
+    _mock_status(aioclient_mock, "1.27.9")
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    await conversation.async_converse(
+        hass,
+        "what's the weather?",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+        satellite_id=VOICE_SATELLITE,
+    )
+
+    posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+    assert "surface" not in posts[-1][2]
+
+
+async def test_voice_confirmation_is_spoken_friendly(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A voice proposal is confirmed with a short spoken prompt, not markdown."""
+    _mock_status(aioclient_mock, "1.28.0")
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "You asked me to turn off the heater.",
+            "proposal": {
+                "summary": "Turn off the heater",
+                "intents": [
+                    {"intent": "HassTurnOff", "targets": ["switch.heater"], "data": {}}
+                ],
+            },
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "turn off the heater",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+        satellite_id=VOICE_SATELLITE,
+    )
+    speech = result.response.speech["plain"]["speech"]
+    assert "Say yes to confirm" in speech
+    # None of the aloud-noisy affordances leak into a spoken turn.
+    assert "Confirm? (yes/no)" not in speech
+    assert "switch.heater" not in speech
+    assert "Affects:" not in speech
+
+
+def test_spoken_confirm_keeps_unstreamed_answer() -> None:
+    """When the read hasn't streamed, the answer is kept before the confirm line."""
+    assert _spoken_confirm("It is 21 degrees.", "Turn on the fan") == (
+        "It is 21 degrees. Turn on the fan. Say yes to confirm."
+    )
+    assert (
+        _spoken_confirm("", "Turn on the fan") == "Turn on the fan. Say yes to confirm."
+    )

@@ -53,6 +53,9 @@ class ClaudeStatusCoordinator(DataUpdateCoordinator[StatusResult]):
             raise UpdateFailed(str(err) or "Add-on status unavailable") from err
         # Keep the prompt wall-clock just above the add-on's reported budget.
         self.client.note_prompt_timeout(status.prompt_timeout_ms)
+        # Track the add-on version so version-gated request fields (e.g. surface)
+        # are only sent to peers that accept them.
+        self.client.note_version(status.version)
         return status
 
 

@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-07-09
+
+### Added
+
+- **Voice replies are now concise.** When a turn arrives by voice (a voice
+  satellite, the companion-app microphone, or VoIP — anything Home Assistant
+  will speak back through text-to-speech), the integration now tells the add-on
+  the turn is spoken, so Claude answers in one short, natural sentence instead of
+  a paragraph with markdown, lists or URLs that sound like noise aloud. Typed
+  chat is unchanged. Voice confirmations were shortened to match — instead of a
+  multi-line proposal ending in "Confirm? (yes/no)", a spoken turn now asks a
+  brief "…Say yes to confirm." This needs the Claude add-on at version 1.28.0 or
+  newer; with an older add-on the integration stays on its previous behaviour.
+
 ## [0.1.15] - 2026-07-05
 
 ### Fixed

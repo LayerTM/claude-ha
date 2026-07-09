@@ -28,6 +28,8 @@ from .const import (
     CONFIRMATION_AUTO,
     CONFIRMATION_CONFIRMED,
     MODE_WRITE,
+    SURFACE_TEXT,
+    SURFACE_VOICE,
 )
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .entity import build_device_info
@@ -68,6 +70,17 @@ def _decision(text: str) -> bool | None:
     if normalized in _DENY:
         return False
     return None
+
+
+def _surface(user_input: conversation.ConversationInput) -> str:
+    """Whether this turn will be spoken aloud.
+
+    HA only sets ``satellite_id`` when the turn comes through an assist_satellite
+    (a voice satellite, VoIP, or the companion-app mic) — i.e. audio in, TTS out.
+    Text chat leaves it None. That's the sole reliable "will be spoken" signal on
+    ``ConversationInput``; the pipeline's TTS stage is not exposed to the agent.
+    """
+    return SURFACE_VOICE if user_input.satellite_id is not None else SURFACE_TEXT
 
 
 async def async_setup_entry(
@@ -169,6 +182,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                     conversation_id=conv_id,
                     caller=caller,
                     language=user_input.language,
+                    surface=_surface(user_input),
                 )
             except ClaudeError:
                 pass  # e.g. the add-on's 403 backstop -> fall through to confirm
@@ -186,7 +200,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
         )
         answer = "" if streamed else result.text
-        message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
+        if _surface(user_input) == SURFACE_VOICE:
+            # Spoken: drop the markdown proposal block, targets and "(yes/no)" —
+            # all noise aloud — for one short, speakable confirmation.
+            message = _spoken_confirm(answer, summary)
+        else:
+            message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
         return self._reply(user_input, chat_log, message.strip())
 
     async def _async_stream_read(
@@ -216,6 +235,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 caller=caller,
                 image_entity=image_entity,
                 language=user_input.language,
+                surface=_surface(user_input),
             ):
                 if isinstance(chunk, PromptResult):
                     captured["result"] = chunk
@@ -267,6 +287,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 conversation_id=chat_log.conversation_id,
                 caller=user_input.context.user_id,
                 language=user_input.language,
+                surface=_surface(user_input),
             )
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
@@ -299,6 +320,18 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         return conversation.ConversationResult(
             response=response, conversation_id=chat_log.conversation_id
         )
+
+
+def _spoken_confirm(answer: str, summary: str) -> str:
+    """Build a short, TTS-friendly confirmation (no markdown, targets or slashes).
+
+    The read answer has usually already streamed (``answer`` empty then); when it
+    hasn't, it is kept so the spoken turn still carries it. "Say yes" pairs with
+    the affirm vocabulary in :data:`_AFFIRM`.
+    """
+    parts = [answer.strip()] if answer.strip() else []
+    parts.append(f"{summary}. Say yes to confirm.")
+    return " ".join(parts)
 
 
 def _render_proposal(text: str, proposal: Proposal | None) -> str:

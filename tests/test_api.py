@@ -25,6 +25,38 @@ def _client(hass: HomeAssistant) -> ClaudeClient:
     return ClaudeClient(async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN)
 
 
+@pytest.mark.parametrize(
+    ("version", "sent"),
+    [
+        (None, False),  # no status seen yet -> never send
+        ("not-a-version", False),  # unparseable -> treat as unsupported
+        ("1.27.9", False),  # below the gate
+        ("1.28.0", True),  # exactly the gate
+        ("1.29.0", True),  # above the gate
+    ],
+)
+async def test_surface_gated_on_addon_version(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    version: str | None,
+    sent: bool,
+) -> None:
+    """`surface` is only put on the wire for add-ons >= 1.28.0 (else dropped)."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    client = _client(hass)
+    client.note_version(version)
+
+    await client.async_prompt("hi", surface="voice")
+
+    body = aioclient_mock.mock_calls[-1][2]
+    assert ("surface" in body) is sent
+    if sent:
+        assert body["surface"] == "voice"
+
+
 async def test_status_parsing(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

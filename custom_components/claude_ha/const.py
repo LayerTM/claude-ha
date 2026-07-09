@@ -98,6 +98,17 @@ REQUEST_IMAGE_ENTITY: Final = "image_entity"
 # its server-authored messages (the degraded-read apology, the budget notice). Purely
 # additive: an add-on that doesn't read it — or a missing value — falls back to English.
 REQUEST_LANGUAGE: Final = "language"
+# Optional surface hint (add-on >= 1.28.0): "voice" when the turn will be spoken aloud
+# by text-to-speech, else "text". On "voice" the add-on tells the model to keep the
+# answer to one short, plain, speakable sentence. Unlike the older additive fields, a
+# pre-1.28.0 add-on validates request keys against an allowlist and 400s on an unknown
+# one, so the client only sends this when the add-on is new enough (see below).
+REQUEST_SURFACE: Final = "surface"
+SURFACE_VOICE: Final = "voice"
+SURFACE_TEXT: Final = "text"
+# First add-on version that accepts REQUEST_SURFACE (see above — the client
+# send-gates the field on this version so older add-ons never see an unknown key).
+ADDON_MIN_SURFACE_VERSION: Final = "1.28.0"
 
 # GET /api/status 200-response keys.
 STATUS_READY: Final = "ready"
