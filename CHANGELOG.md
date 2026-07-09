@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-09
+
+### Fixed
+
+- **Usage dashboard: the cost history was unreadable.** The example plotted API
+  cost (USD, ~0–5) and token usage (thousands–millions) on one history graph;
+  because a graph shares a single y-axis, the cost line was flattened to the
+  bottom and effectively invisible. Cost and tokens are now split into two graphs,
+  each auto-scaling to its own range. Also documented that the budget gauge is only
+  meaningful when a daily budget is set on the add-on. Docs-only; re-copy the
+  dashboard YAML from the README if you added it.
+
 ## [1.0.0] - 2026-07-09
 
 First stable release. The integration has been in daily live use and is

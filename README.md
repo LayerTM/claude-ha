@@ -267,12 +267,21 @@ cards:
       yellow: 3.5
       red: 4.5
   - type: history-graph
-    title: Cost & tokens (24 h)
+    title: API cost (24 h)
     hours_to_show: 24
     entities:
       - sensor.claude_code_prompt_api_cost
+  - type: history-graph
+    title: Tokens today (24 h)
+    hours_to_show: 24
+    entities:
       - sensor.claude_code_token_usage_today
 ```
+
+Cost (USD) and tokens are on **separate** graphs on purpose — a single graph shares
+one y-axis, so the small USD range would be flattened against the much larger token
+count. The budget gauge is only meaningful with a daily budget set on the add-on;
+with no budget (unlimited) the spend still shows but the gauge scale is arbitrary.
 
 ### Health checks
 
