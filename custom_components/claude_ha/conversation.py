@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import yaml
+
 from homeassistant.components import conversation
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
@@ -163,6 +165,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
 
+        # N1 Phase-1: the model drafted an automation. Show it read-only — no write,
+        # no confirm yet (a future phase adds the validated in-process commit).
+        if result.automation is not None:
+            return self._automation_draft_reply(user_input, chat_log, result, streamed)
+
         proposal = result.proposal
         if proposal is None or not proposal.intents:
             return self._answer_reply(user_input, chat_log, result.text, streamed)
@@ -269,6 +276,25 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             return conversation.async_get_result_from_chat_log(user_input, chat_log)
         return self._reply(user_input, chat_log, text)
 
+    def _automation_draft_reply(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        result: PromptResult,
+        streamed: bool,
+    ) -> conversation.ConversationResult:
+        """Show a model-drafted automation read-only (N1 Phase-1: never writes it).
+
+        Voice turns skip the YAML block (it is noise aloud); the spoken prose already
+        summarizes the draft. Text turns get the exact config as a YAML block so the
+        user can read or copy it. ``result.automation`` is guaranteed non-None here.
+        """
+        if _surface(user_input) == SURFACE_VOICE:
+            return self._answer_reply(user_input, chat_log, result.text, streamed)
+        answer = "" if streamed else result.text
+        message = _render_automation_draft(answer, result.automation)
+        return self._reply(user_input, chat_log, message)
+
     async def _async_write(
         self,
         user_input: conversation.ConversationInput,
@@ -346,3 +372,22 @@ def _render_proposal(text: str, proposal: Proposal | None) -> str:
     if targets:
         lines.append(f"Affects: {', '.join(targets)}.")
     return "\n".join(line for line in lines if line).strip()
+
+
+def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
+    """Render a drafted automation as a readable YAML block (N1 Phase-1, read-only).
+
+    The block is for the user to review or copy; nothing is written. ``text`` (the
+    model's plain-language summary) is kept above the block when present, e.g. on a
+    non-streamed turn.
+    """
+    alias = str(automation.get("alias") or "automation").strip() or "automation"
+    body = yaml.safe_dump(
+        automation, sort_keys=False, default_flow_style=False, allow_unicode=True
+    ).strip()
+    parts = [text.strip()] if text.strip() else []
+    parts.append(
+        f"Here's a draft automation — **{alias}**. Review it; I haven't created it."
+    )
+    parts.append(f"```yaml\n{body}\n```")
+    return "\n\n".join(parts)

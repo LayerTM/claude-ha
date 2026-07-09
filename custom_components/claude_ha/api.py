@@ -35,6 +35,7 @@ from .const import (
     REQUEST_STREAM,
     REQUEST_SURFACE,
     REQUEST_TIMEOUT,
+    RESP_AUTOMATION,
     RESP_PROPOSAL,
     RESP_TEXT,
     RESP_TOOLS_USED,
@@ -116,6 +117,7 @@ class PromptResult:
     proposal: Proposal | None
     tools_used: list[str]
     truncated: bool
+    automation: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -424,11 +426,14 @@ def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
             summary=str(proposal_raw.get("summary", "")),
             intents=list(proposal_raw.get("intents", []) or []),
         )
+    automation_raw = data.get(RESP_AUTOMATION)
+    automation = automation_raw if isinstance(automation_raw, dict) else None
     return PromptResult(
         text=str(data.get(RESP_TEXT, "")),
         proposal=proposal,
         tools_used=list(data.get(RESP_TOOLS_USED, []) or []),
         truncated=bool(data.get(RESP_TRUNCATED, False)),
+        automation=automation,
     )
 
 

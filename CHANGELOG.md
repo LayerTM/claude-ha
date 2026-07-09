@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-09
+
+### Added
+
+- **Describe an automation in words and see it drafted (preview).** Ask Claude to
+  create an automation ("create an automation that turns on the porch light at
+  sunset") and it now drafts the full Home Assistant config and shows it to you as
+  a YAML block you can read or copy — read-only, nothing is written yet. On voice
+  the reply stays a short spoken summary (the YAML isn't read aloud). Needs the
+  Claude add-on ≥ 1.34.0; with an older add-on nothing changes. Committing a draft
+  with a confirmation is coming in a later release.
+
 ## [1.0.1] - 2026-07-09
 
 ### Fixed

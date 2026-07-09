@@ -51,6 +51,10 @@ convention = "pep257"
 # (mode, conversation_id, caller, intents, confirmation, image_entity, language,
 # surface).
 max-args = 9
+# The conversation message handler is a dispatcher with several distinct terminal
+# outcomes (confirm-resolve, error, automation draft, answer, auto-done, confirm);
+# early returns are clearer here than nesting.
+max-returns = 7
 
 [tool.mypy]
 python_version = "3.14"

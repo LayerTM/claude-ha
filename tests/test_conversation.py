@@ -8,7 +8,11 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.claude_ha.api import Proposal
 from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
-from custom_components.claude_ha.conversation import _render_proposal, _spoken_confirm
+from custom_components.claude_ha.conversation import (
+    _render_automation_draft,
+    _render_proposal,
+    _spoken_confirm,
+)
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import entity_registry as er, intent
@@ -335,3 +339,92 @@ def test_spoken_confirm_keeps_unstreamed_answer() -> None:
     assert (
         _spoken_confirm("", "Turn on the fan") == "Turn on the fan. Say yes to confirm."
     )
+
+
+_DRAFT_BODY = {
+    "text": "I drafted an automation for you.",
+    "proposal": None,
+    "automation": {
+        "alias": "Morning greeting",
+        "triggers": [{"trigger": "time", "at": "08:00:00"}],
+        "actions": [{"action": "notify.notify", "data": {"message": "Good morning!"}}],
+        "mode": "single",
+    },
+    "tools_used": [],
+    "truncated": False,
+}
+
+
+async def test_automation_draft_renders_yaml_and_never_writes(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A drafted automation is shown as a YAML block, read-only — no write call."""
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "create an automation that greets me at 8am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+
+    speech = result.response.speech["plain"]["speech"]
+    assert "Morning greeting" in speech
+    assert "```yaml" in speech
+    assert "notify.notify" in speech  # the action survived into the block
+    assert "haven't created" in speech
+    # Phase-1 is display-only: nothing was written.
+    posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+    assert all(c[2].get("mode") != "write" for c in posts)
+
+
+async def test_automation_draft_voice_skips_yaml_block(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """On voice, the draft answer is the spoken prose — no YAML read aloud."""
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "create an automation that greets me at 8am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+        satellite_id=VOICE_SATELLITE,
+    )
+
+    speech = result.response.speech["plain"]["speech"]
+    assert "```yaml" not in speech
+    assert speech == "I drafted an automation for you."
+
+
+def test_render_automation_draft_includes_alias_and_yaml() -> None:
+    """The render carries the alias, a read-only disclaimer and a YAML block."""
+    out = _render_automation_draft(
+        "",
+        {
+            "alias": "X",
+            "triggers": [{"trigger": "time", "at": "08:00:00"}],
+            "actions": [{"action": "notify.notify"}],
+        },
+    )
+    assert "**X**" in out
+    assert "haven't created" in out
+    assert "```yaml" in out
+    assert "trigger: time" in out  # yaml body rendered, keys not reordered
+
+
+def test_render_automation_draft_keeps_prose_and_defaults_alias() -> None:
+    """Prose is kept above the block; a missing alias falls back to 'automation'."""
+    out = _render_automation_draft("Here you go.", {"triggers": [], "actions": []})
+    assert out.startswith("Here you go.")
+    assert "**automation**" in out

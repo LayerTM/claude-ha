@@ -78,6 +78,12 @@ RESP_TOOLS_USED: Final = "tools_used"
 RESP_TRUNCATED: Final = "truncated"
 PROPOSAL_SUMMARY: Final = "summary"
 PROPOSAL_INTENTS: Final = "intents"
+# Optional model-drafted automation config (add-on >= 1.34.0): a full HA automation
+# dict (alias/triggers/conditions/actions/mode) on a read where the user asked to
+# create one. OMITTED when there's no draft (absent-not-null), so key on presence.
+# The integration only DISPLAYS it (Phase-1); a future confirmed commit re-validates
+# and writes it in-process — the add-on never writes it.
+RESP_AUTOMATION: Final = "automation"
 
 # Streaming read (add-on >= 1.17.0): opt-in via this request field; the add-on
 # answers application/x-ndjson (one JSON object per line) or, when it can't

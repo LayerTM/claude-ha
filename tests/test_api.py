@@ -217,6 +217,43 @@ async def test_prompt_omits_language_when_absent(
     assert "language" not in aioclient_mock.mock_calls[-1][2]
 
 
+async def test_prompt_parses_automation_draft(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A drafted automation (add-on >= 1.34.0) is carried on the PromptResult."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "drafted",
+            "proposal": None,
+            "automation": {"alias": "A", "triggers": [{}], "actions": [{}]},
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    result = await _client(hass).async_prompt("make an automation")
+    assert result.automation is not None
+    assert result.automation["alias"] == "A"
+
+
+@pytest.mark.parametrize("automation", [None, "not-a-dict", 42])
+async def test_prompt_automation_absent_or_malformed_is_none(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, automation: object
+) -> None:
+    """No draft (absent) or a non-dict value both yield automation=None."""
+    body: dict[str, object] = {
+        "text": "ok",
+        "proposal": None,
+        "tools_used": [],
+        "truncated": False,
+    }
+    if automation is not None:
+        body["automation"] = automation
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=body)
+    result = await _client(hass).async_prompt("hello")
+    assert result.automation is None
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
