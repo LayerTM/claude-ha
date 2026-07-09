@@ -80,15 +80,24 @@ _ALLOWED_DOMAINS: frozenset[str] = frozenset(
     }
 )
 
-# Rejected services even though their domain is otherwise allowed. Two classes:
+# Rejected services even though their domain is otherwise allowed — each carries a
+# danger in its PAYLOAD that a name-only domain gate can't bound:
 #  - notify.file writes an arbitrary file.
-#  - scene.apply / scene.create take an inline `data.entities` map that reproduces
-#    arbitrary states on entities in ANY domain (e.g. disarm an alarm, unlock a
-#    lock) — a scope escape that defeats the domain allowlist, since the policy
-#    inspects the service name, not the payload. (Activating a user-defined scene
-#    via scene.turn_on stays allowed: those entities are already the user's.)
+#  - scene.apply / scene.create reproduce arbitrary states on entities in ANY domain
+#    (disarm an alarm, unlock a lock) via an inline `data.entities` map.
+#  - media_player.play_media fetches an arbitrary `media_content_id` URL (SSRF-class
+#    / plays attacker audio on the user's speakers).
+#  - vacuum.send_command relays an attacker-chosen raw command straight to the device.
+# (Activating a user-defined scene via scene.turn_on, or media_player.play/pause/
+#  volume, or vacuum.start, all stay allowed — the danger is the payload service.)
 _DENIED_SERVICES: frozenset[str] = frozenset(
-    {"notify.file", "scene.apply", "scene.create"}
+    {
+        "notify.file",
+        "scene.apply",
+        "scene.create",
+        "media_player.play_media",
+        "vacuum.send_command",
+    }
 )
 
 # Action TYPES that neither invoke a service nor nest further actions — safe leaves.
@@ -216,6 +225,13 @@ async def async_commit_automation(hass: HomeAssistant, config: dict[str, Any]) -
     """
     config_key = uuid.uuid4().hex
 
+    # 0. A blueprint-based automation sources its actions from a blueprint, so the
+    #    action allowlist below can't see (or bound) them — refuse it outright.
+    if "use_blueprint" in config:
+        raise ClaudeError(
+            "Blueprint-based automations can't be created this way; not created."
+        )
+
     # 1. Re-validate with HA's own automation schema (raise-on-error). Trust nothing.
     try:
         validated = await async_validate_config_item(hass, config_key, config)
@@ -231,13 +247,16 @@ async def async_commit_automation(hass: HomeAssistant, config: dict[str, Any]) -
     # 2. Strict reject-not-filter action allowlist over the validated action tree.
     _enforce_action_policy(validated)
 
-    # 3. Persist the raw draft (with a fresh id) and reload just this automation.
+    # 3. Persist the raw draft and reload just this automation. Our minted id ALWAYS
+    #    wins: any model-supplied `id` is dropped before the mint is set last, so a
+    #    draft can never target (and silently overwrite) an existing automation.
     alias = str(config.get("alias") or "automation").strip() or "automation"
+    stored = {key: value for key, value in config.items() if key != CONF_ID}
     path = hass.config.path(AUTOMATION_CONFIG_PATH)
     try:
         async with _STORE_LOCK:
             current = await hass.async_add_executor_job(_read_store, path)
-            current.append({CONF_ID: config_key, **config})
+            current.append({**stored, CONF_ID: config_key})
             await hass.async_add_executor_job(_write_store, path, current)
         await hass.services.async_call(
             AUTOMATION_DOMAIN, SERVICE_RELOAD, {CONF_ID: config_key}, blocking=True

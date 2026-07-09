@@ -49,6 +49,8 @@ BENIGN_TREES: list[list[dict[str, Any]]] = [
     [{"sequence": [{"action": "notify.mobile_app_phone"}]}],
     [{"delay": "00:01:00"}, {"stop": "done"}, {"variables": {"x": 1}}],
     [{"scene": "scene.night"}, {"wait_template": "{{ true }}"}],
+    # allowed domains keep their safe services even though one service is denied
+    [{"action": "media_player.media_pause"}, {"action": "vacuum.start"}],
 ]
 
 # Dangerous action trees — each must be REJECTED. Every nesting site is covered, plus
@@ -115,6 +117,9 @@ DANGEROUS_TREES: list[list[dict[str, Any]]] = [
     ],
     # Legacy 'service' key: unreachable post-validation, caught as defense-in-depth.
     [{"service": "shell_command.run"}],
+    # payload-danger services on allowed domains (URL fetch / raw device command)
+    [{"action": "media_player.play_media", "data": {"media_content_id": "http://x/a"}}],
+    [{"action": "vacuum.send_command", "data": {"command": "raw"}}],
 ]
 
 
@@ -183,6 +188,33 @@ async def test_commit_appends_to_existing_store(
     stored = load_yaml(isolated_config)
     assert isinstance(stored, list) and len(stored) == 2
     assert {entry["alias"] for entry in stored} == {"Existing", "Test automation"}
+
+
+async def test_commit_ignores_model_supplied_id(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A draft's own `id` can't override the minted uuid (no overwriting)."""
+    hass.services.async_register("automation", "reload", lambda call: None)
+    config = _valid_config([{"action": "light.turn_on"}])
+    config["id"] = "existing_user_automation"
+
+    await async_commit_automation(hass, config)
+
+    stored = load_yaml(isolated_config)
+    assert len(stored) == 1
+    assert stored[0]["id"] != "existing_user_automation"
+    assert len(stored[0]["id"]) == 32  # a freshly minted uuid hex
+
+
+async def test_commit_rejects_blueprint_automation(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A blueprint-based draft is refused — its actions can't be allow-listed."""
+    with pytest.raises(ClaudeError):
+        await async_commit_automation(
+            hass, {"alias": "bp", "use_blueprint": {"path": "x.yaml", "input": {}}}
+        )
+    assert not Path(isolated_config).is_file()
 
 
 async def test_commit_rejects_invalid_schema(
