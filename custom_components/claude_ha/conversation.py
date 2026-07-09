@@ -22,6 +22,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .api import ClaudeError, PromptResult, Proposal, StreamDelta
+from .automation_commit import async_commit_automation
 from .confirm import CHAT_PENDING_TTL, DATA_PENDING_CHAT, PendingProposal
 from .const import (
     CONF_AUTO_EXECUTE,
@@ -140,6 +141,10 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if pending is not None:
             decision = _decision(text)
             if decision is True and pending.expires_at >= dt_util.utcnow():
+                if pending.automation is not None:
+                    return await self._async_commit_automation(
+                        user_input, chat_log, pending.automation, pending.summary
+                    )
                 return await self._async_write(
                     user_input,
                     chat_log,
@@ -165,10 +170,23 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
 
-        # The model drafted an automation. Show it read-only — no write, no confirm
-        # yet (a later release adds the validated in-process commit).
+        # The model drafted an automation. Show it and hold it for a yes/no confirm;
+        # the confirmed commit re-validates + allow-lists + writes it in-process.
         if result.automation is not None:
-            return self._automation_draft_reply(user_input, chat_log, result, streamed)
+            automation = result.automation
+            alias = _automation_alias(automation)
+            pending_store[conv_id] = PendingProposal(
+                entry_id=entry.entry_id,
+                prompt=text,
+                intents=[],
+                caller=caller,
+                summary=alias,
+                expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
+                automation=automation,
+            )
+            return self._automation_confirm_reply(
+                user_input, chat_log, automation, result.text, streamed, alias
+            )
 
         proposal = result.proposal
         if proposal is None or not proposal.intents:
@@ -276,26 +294,41 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             return conversation.async_get_result_from_chat_log(user_input, chat_log)
         return self._reply(user_input, chat_log, text)
 
-    def _automation_draft_reply(
+    def _automation_confirm_reply(
         self,
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
-        result: PromptResult,
+        automation: dict[str, Any],
+        text: str,
         streamed: bool,
+        alias: str,
     ) -> conversation.ConversationResult:
-        """Show a model-drafted automation read-only — this never writes it.
+        """Show a drafted automation and ask to confirm — this never writes it.
 
-        Voice turns skip the YAML block (it is noise aloud); the spoken prose already
-        summarizes the draft. Text turns get the exact config as a YAML block so the
-        user can read or copy it. ``result.automation`` is guaranteed non-None here.
+        Text turns get the exact config as a YAML block plus a yes/no question. Voice
+        turns skip the YAML (noise aloud) for a short spoken confirmation. The commit
+        only happens on the next turn if the user confirms.
         """
-        automation = result.automation
-        assert automation is not None  # caller dispatches here only when it is set
+        answer = "" if streamed else text
         if _surface(user_input) == SURFACE_VOICE:
-            return self._answer_reply(user_input, chat_log, result.text, streamed)
-        answer = "" if streamed else result.text
-        message = _render_automation_draft(answer, automation)
-        return self._reply(user_input, chat_log, message)
+            message = _spoken_confirm(answer, f"Create automation {alias}")
+            return self._reply(user_input, chat_log, message)
+        block = _render_automation_draft(answer, automation)
+        return self._reply(user_input, chat_log, f"{block}\n\nCreate it? (yes/no)")
+
+    async def _async_commit_automation(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        automation: dict[str, Any],
+        summary: str,
+    ) -> conversation.ConversationResult:
+        """Commit a confirmed drafted automation; a rejection is a clean chat error."""
+        try:
+            await async_commit_automation(self.coordinator.hass, automation)
+        except ClaudeError as err:
+            return self._error(user_input, chat_log, err)
+        return self._reply(user_input, chat_log, f"Created automation: {summary}")
 
     async def _async_write(
         self,
@@ -376,20 +409,22 @@ def _render_proposal(text: str, proposal: Proposal | None) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
-def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
-    """Render a drafted automation as a readable YAML block (read-only).
+def _automation_alias(automation: dict[str, Any]) -> str:
+    """Return the drafted automation's display name, or a sane fallback."""
+    return str(automation.get("alias") or "automation").strip() or "automation"
 
-    The block is for the user to review or copy; nothing is written. ``text`` (the
-    model's plain-language summary) is kept above the block when present, e.g. on a
-    non-streamed turn.
+
+def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
+    """Render a drafted automation as a readable YAML block for review.
+
+    Nothing is written by rendering; the caller owns the confirm question. ``text``
+    (the model's plain-language summary) is kept above the block when present, e.g.
+    on a non-streamed turn.
     """
-    alias = str(automation.get("alias") or "automation").strip() or "automation"
     body = yaml.safe_dump(
         automation, sort_keys=False, default_flow_style=False, allow_unicode=True
     ).strip()
     parts = [text.strip()] if text.strip() else []
-    parts.append(
-        f"Here's a draft automation — **{alias}**. Review it; I haven't created it."
-    )
+    parts.append(f"Here's a draft automation — **{_automation_alias(automation)}**:")
     parts.append(f"```yaml\n{body}\n```")
     return "\n\n".join(parts)

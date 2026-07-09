@@ -6,7 +6,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.claude_ha.api import Proposal
+from custom_components.claude_ha.api import ClaudeError, Proposal
 from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
 from custom_components.claude_ha.conversation import (
     _render_automation_draft,
@@ -355,13 +355,32 @@ _DRAFT_BODY = {
 }
 
 
-async def test_automation_draft_renders_yaml_and_never_writes(
+async def _draft_then(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    second_text: str,
+) -> conversation.ConversationResult:
+    """Draft an automation (turn 1), then reply ``second_text`` (turn 2, same convo)."""
+    agent = _agent_id(hass, entry)
+    first = await conversation.async_converse(
+        hass,
+        "create an automation that greets me at 8am",
+        None,
+        context=Context(),
+        agent_id=agent,
+    )
+    return await conversation.async_converse(
+        hass, second_text, first.conversation_id, context=Context(), agent_id=agent
+    )
+
+
+async def test_automation_draft_shows_yaml_and_asks_confirm(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A drafted automation is shown as a YAML block, read-only — no write call."""
+    """A drafted automation shows the YAML and asks to confirm — no write on turn 1."""
     aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
     await setup_integration(hass, mock_config_entry)
 
@@ -376,20 +395,20 @@ async def test_automation_draft_renders_yaml_and_never_writes(
     speech = result.response.speech["plain"]["speech"]
     assert "Morning greeting" in speech
     assert "```yaml" in speech
-    assert "notify.notify" in speech  # the action survived into the block
-    assert "haven't created" in speech
-    # Phase-1 is display-only: nothing was written.
+    assert "notify.notify" in speech
+    assert "Create it? (yes/no)" in speech
+    # Drafting never writes: no write POST, and nothing is committed on this turn.
     posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
     assert all(c[2].get("mode") != "write" for c in posts)
 
 
-async def test_automation_draft_voice_skips_yaml_block(
+async def test_automation_draft_voice_asks_spoken_confirm(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """On voice, the draft answer is the spoken prose — no YAML read aloud."""
+    """On voice, the draft asks a short spoken confirmation — no YAML read aloud."""
     aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
     await setup_integration(hass, mock_config_entry)
 
@@ -404,11 +423,85 @@ async def test_automation_draft_voice_skips_yaml_block(
 
     speech = result.response.speech["plain"]["speech"]
     assert "```yaml" not in speech
-    assert speech == "I drafted an automation for you."
+    assert "Create automation Morning greeting" in speech
+    assert "Say yes to confirm" in speech
+
+
+async def test_automation_confirm_routes_to_commit(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Confirming a drafted automation runs the in-process commit and reports it."""
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
+    committed: list[dict] = []
+
+    async def _fake_commit(_hass: HomeAssistant, automation: dict) -> str:
+        committed.append(automation)
+        return str(automation["alias"])
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_commit_automation", _fake_commit
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await _draft_then(hass, mock_config_entry, "yes")
+
+    assert committed and committed[0]["alias"] == "Morning greeting"
+    assert (
+        "Created automation: Morning greeting"
+        in result.response.speech["plain"]["speech"]
+    )
+
+
+async def test_automation_commit_failure_is_a_clean_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rejected/failed commit returns a clean error response, never raises."""
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
+
+    async def _fake_commit(_hass: HomeAssistant, _automation: dict) -> str:
+        raise ClaudeError("that automation isn't allowed")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_commit_automation", _fake_commit
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await _draft_then(hass, mock_config_entry, "yes")
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+async def test_automation_decline_cancels_without_committing(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Declining a drafted automation cancels it and never calls the commit."""
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_DRAFT_BODY)
+
+    async def _fail_commit(_hass: HomeAssistant, _automation: dict) -> str:
+        raise AssertionError("commit must not run on decline")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_commit_automation", _fail_commit
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await _draft_then(hass, mock_config_entry, "no")
+    assert "Cancelled" in result.response.speech["plain"]["speech"]
 
 
 def test_render_automation_draft_includes_alias_and_yaml() -> None:
-    """The render carries the alias, a read-only disclaimer and a YAML block."""
+    """The render carries the alias lead-in and a faithful YAML block."""
     out = _render_automation_draft(
         "",
         {
@@ -417,8 +510,7 @@ def test_render_automation_draft_includes_alias_and_yaml() -> None:
             "actions": [{"action": "notify.notify"}],
         },
     )
-    assert "**X**" in out
-    assert "haven't created" in out
+    assert "draft automation — **X**" in out
     assert "```yaml" in out
     assert "trigger: time" in out  # yaml body rendered, keys not reordered
 

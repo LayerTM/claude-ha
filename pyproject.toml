@@ -36,7 +36,19 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["D100", "D101", "D102", "D103", "D104", "PLR2004", "PLC0415"]
+# Tests legitimately do blocking file IO in async test functions (ASYNC230/240) —
+# those rules target production async paths, not test fixtures.
+"tests/*" = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "PLR2004",
+    "PLC0415",
+    "ASYNC230",
+    "ASYNC240",
+]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
@@ -52,9 +64,9 @@ convention = "pep257"
 # surface).
 max-args = 9
 # The conversation message handler is a dispatcher with several distinct terminal
-# outcomes (confirm-resolve, error, automation draft, answer, auto-done, confirm);
-# early returns are clearer here than nesting.
-max-returns = 7
+# outcomes (confirm->commit, confirm->write, cancel, error, automation draft,
+# answer, auto-done, confirm); early returns are clearer here than nesting.
+max-returns = 8
 
 [tool.mypy]
 python_version = "3.14"
