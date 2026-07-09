@@ -295,3 +295,54 @@ async def test_probe_swallows_errors(hass: HomeAssistant) -> None:
             raise ClaudeConnectionError("down")
 
     await health.async_probe(hass, _Client())  # type: ignore[arg-type]
+
+
+def _mcp_report(
+    *,
+    problem: str | None = ISSUE_MCP_UNREACHABLE,
+    mcp_server_loaded: bool = True,
+    ha_mcp_connected: bool | None = False,
+) -> health.HealthReport:
+    """Build a HealthReport shaped for the MCP-unreachable debounce cases."""
+    return health.HealthReport(
+        problem=problem,
+        exposed_to_assist=5,
+        mcp_server_loaded=mcp_server_loaded,
+        ha_mcp_connected=ha_mcp_connected,
+    )
+
+
+def test_debounce_withholds_first_flappy_reading() -> None:
+    """A single add-on-reported disconnect is withheld, not alarmed (threshold 2)."""
+    report, streak = health.debounce_mcp_unreachable(_mcp_report(), 0)
+    assert report.problem is None  # withheld this poll
+    assert streak == 1
+
+
+def test_debounce_raises_once_threshold_reached() -> None:
+    """The second consecutive flappy poll confirms and raises the problem."""
+    report, streak = health.debounce_mcp_unreachable(_mcp_report(), 1)
+    assert report.problem == ISSUE_MCP_UNREACHABLE
+    assert streak == 2
+
+
+def test_debounce_resets_on_recovery() -> None:
+    """A non-flappy poll (healthy) resets the streak and passes through."""
+    report, streak = health.debounce_mcp_unreachable(_mcp_report(problem=None), 1)
+    assert report.problem is None
+    assert streak == 0
+
+
+def test_debounce_never_delays_unloaded_mcp_server() -> None:
+    """A genuinely-unloaded mcp_server is a hard fact — raised immediately, no wait."""
+    unloaded = _mcp_report(mcp_server_loaded=False, ha_mcp_connected=None)
+    report, streak = health.debounce_mcp_unreachable(unloaded, 0)
+    assert report.problem == ISSUE_MCP_UNREACHABLE
+    assert streak == 0
+
+
+def test_debounce_streak_caps_at_threshold() -> None:
+    """A sustained real outage keeps raising with the streak bounded at threshold."""
+    report, streak = health.debounce_mcp_unreachable(_mcp_report(), 2)
+    assert report.problem == ISSUE_MCP_UNREACHABLE
+    assert streak == 2  # capped, not 3

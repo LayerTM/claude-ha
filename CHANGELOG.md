@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-07-09
+
+### Changed
+
+- **The "Model Context Protocol Server unreachable" repair no longer flashes on a
+  brief transient.** The add-on's connectivity signal can momentarily read
+  "disconnected" for a single status poll (e.g. on a chat turn right after a
+  restart) even though it is working. The integration now waits for two
+  consecutive polls to agree before raising that repair, so a one-off blip no
+  longer pops a scary error that then clears itself. A genuinely missing Model
+  Context Protocol Server integration is still reported immediately — only the
+  transient blip is debounced. (Defense-in-depth on top of the add-on's own
+  root-cause fix in 1.30.0; no add-on update is required for this change.)
+
 ## [0.1.16] - 2026-07-09
 
 ### Added

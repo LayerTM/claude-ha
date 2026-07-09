@@ -36,7 +36,11 @@ from .coordinator import (
     ClaudeUsageCoordinator,
 )
 from .frontend import async_register_card
-from .health import async_apply as async_apply_health, evaluate as evaluate_health
+from .health import (
+    async_apply as async_apply_health,
+    debounce_mcp_unreachable,
+    evaluate as evaluate_health,
+)
 from .services import async_setup_services
 
 PLATFORMS = (Platform.BUTTON, Platform.CONVERSATION, Platform.SENSOR)
@@ -84,11 +88,17 @@ def _async_setup_health(
     hass: HomeAssistant, entry: ClaudeConfigEntry, status: ClaudeStatusCoordinator
 ) -> None:
     """Re-evaluate health repairs after each status poll (no Claude cost)."""
+    mcp_unreachable_streak = 0
 
     @callback
     def _refresh_health() -> None:
+        nonlocal mcp_unreachable_streak
         camera_vision = entry.options.get(CONF_CAMERA_VISION, False)
-        async_apply_health(hass, evaluate_health(hass, status.data, camera_vision))
+        report = evaluate_health(hass, status.data, camera_vision)
+        report, mcp_unreachable_streak = debounce_mcp_unreachable(
+            report, mcp_unreachable_streak
+        )
+        async_apply_health(hass, report)
 
     entry.async_on_unload(status.async_add_listener(_refresh_health))
     _refresh_health()

@@ -12,7 +12,7 @@ populate ``ha_mcp_connected`` for the deep reachability check.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.core import CoreState, HomeAssistant, callback
@@ -30,6 +30,7 @@ from .const import (
     ISSUE_NOT_LOGGED_IN,
     LOGGER,
     MCP_SERVER_DOMAIN,
+    MCP_UNREACHABLE_DEBOUNCE_POLLS,
     MODE_READ,
 )
 
@@ -138,6 +139,41 @@ def evaluate(
         ha_mcp_connected=connected,
         camera_vision_inert=camera_vision_inert,
     )
+
+
+def debounce_mcp_unreachable(
+    report: HealthReport,
+    streak: int,
+    threshold: int = MCP_UNREACHABLE_DEBOUNCE_POLLS,
+) -> tuple[HealthReport, int]:
+    """Withhold a flappy add-on-reported MCP-unreachable until it's confirmed.
+
+    The add-on's ``ha_mcp_connected`` can read false for a single poll on a
+    transient (e.g. a state-free chat turn just after a restart) even though MCP
+    works, which used to flash ISSUE_MCP_UNREACHABLE. Only that connected-signal
+    path is debounced: the problem is raised once ``threshold`` consecutive polls
+    agree. A genuinely-unloaded ``mcp_server`` (``mcp_server_loaded`` False — a hard
+    local fact, already startup-guarded in :func:`evaluate`) is never debounced and
+    fires immediately.
+
+    ``streak`` is the count of consecutive flappy polls so far; pass 0 on the first
+    call and thread the returned value back in. Returns the report to actually apply
+    (its ``problem`` cleared while still within the debounce window) and the new
+    streak. Any non-flappy poll resets the streak to 0, so recovery clears at once.
+    """
+    flappy = (
+        report.problem == ISSUE_MCP_UNREACHABLE
+        and report.ha_mcp_connected is False
+        and report.mcp_server_loaded
+    )
+    if not flappy:
+        return report, 0
+    streak = min(streak + 1, threshold)
+    if streak >= threshold:
+        return report, streak
+    # Still unconfirmed: withhold the alarm this poll. evaluate() already ranked
+    # this as the top problem, so nothing else outranks it — raise no issue yet.
+    return replace(report, problem=None), streak
 
 
 @callback

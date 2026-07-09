@@ -146,6 +146,14 @@ TIMEOUT_MARGIN: Final = 15
 STATUS_TIMEOUT: Final = 15
 # Coordinator poll interval for the status sensor.
 SCAN_INTERVAL: Final = 60
+# Consecutive status polls that must agree the add-on can't reach the HA MCP
+# before we raise ISSUE_MCP_UNREACHABLE. The add-on's ha_mcp_connected can read
+# false for a single poll on a transient (e.g. a state-free chat turn just after a
+# restart) even though MCP works; debouncing across polls stops that flap from
+# flashing a scary repair. At SCAN_INTERVAL each extra count is ~1 min of delay
+# for a genuine outage, so keep this small. Only the connected-signal path is
+# debounced — a genuinely-unloaded mcp_server (a hard local fact) still fires now.
+MCP_UNREACHABLE_DEBOUNCE_POLLS: Final = 2
 # The usage report is cached add-on side and heavy to build, so poll it slowly
 # (contract §3a: no more than ~every 5 minutes).
 USAGE_SCAN_INTERVAL: Final = 300
