@@ -289,10 +289,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         summarizes the draft. Text turns get the exact config as a YAML block so the
         user can read or copy it. ``result.automation`` is guaranteed non-None here.
         """
+        automation = result.automation
+        assert automation is not None  # caller dispatches here only when it is set
         if _surface(user_input) == SURFACE_VOICE:
             return self._answer_reply(user_input, chat_log, result.text, streamed)
         answer = "" if streamed else result.text
-        message = _render_automation_draft(answer, result.automation)
+        message = _render_automation_draft(answer, automation)
         return self._reply(user_input, chat_log, message)
 
     async def _async_write(

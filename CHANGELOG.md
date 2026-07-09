@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-09
+
+### Fixed
+
+- **CI type-check (mypy strict) on 1.1.0.** The automation-draft rendering added in
+  1.1.0 tripped strict typing: PyYAML had no type stubs, and the drafted-config
+  argument wasn't narrowed from `dict | None` at the call boundary. Added the
+  `types-PyYAML` stub to the test requirements and narrowed the value before use.
+  No behavior change; internal only.
+
 ## [1.1.0] - 2026-07-09
 
 ### Added
