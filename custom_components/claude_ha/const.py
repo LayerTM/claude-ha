@@ -81,8 +81,9 @@ PROPOSAL_INTENTS: Final = "intents"
 # Optional model-drafted automation config (add-on >= 1.34.0): a full HA automation
 # dict (alias/triggers/conditions/actions/mode) on a read where the user asked to
 # create one. OMITTED when there's no draft (absent-not-null), so key on presence.
-# The integration only DISPLAYS it (Phase-1); a future confirmed commit re-validates
-# and writes it in-process — the add-on never writes it.
+# The integration only DISPLAYS the draft; committing it (after a confirmation) is a
+# later capability that re-validates and writes it in-process — the add-on never
+# writes it.
 RESP_AUTOMATION: Final = "automation"
 
 # Streaming read (add-on >= 1.17.0): opt-in via this request field; the add-on
@@ -137,7 +138,7 @@ STATUS_BUDGET: Final = "budget"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
-# on the add-on side can take a while). Must stay ABOVE the add-on's whole-request
+# in the add-on can take a while). Must stay ABOVE the add-on's whole-request
 # budget (`CLAUDE_PROMPT_TIMEOUT_MS`, default 120s — retry runs on the remaining
 # budget, not a fresh one, so the ceiling is 120s not 2x) so the add-on's graceful
 # terminal `done` on a timed-out read always arrives before we abort; otherwise the
@@ -160,7 +161,7 @@ SCAN_INTERVAL: Final = 60
 # for a genuine outage, so keep this small. Only the connected-signal path is
 # debounced — a genuinely-unloaded mcp_server (a hard local fact) still fires now.
 MCP_UNREACHABLE_DEBOUNCE_POLLS: Final = 2
-# The usage report is cached add-on side and heavy to build, so poll it slowly
+# The usage report is cached by the add-on and heavy to build, so poll it slowly
 # (contract §3a: no more than ~every 5 minutes).
 USAGE_SCAN_INTERVAL: Final = 300
 

@@ -209,7 +209,7 @@ class ClaudeClient:
         """Record the add-on version last reported by ``/api/status``.
 
         Gates additive request fields (e.g. ``surface``) that older add-ons would
-        reject, so a field is only put on the wire once the peer supports it.
+        reject, so a field is only put on the wire once the add-on supports it.
         """
         self._addon_version = version
 

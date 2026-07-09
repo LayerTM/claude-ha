@@ -165,8 +165,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
 
-        # N1 Phase-1: the model drafted an automation. Show it read-only — no write,
-        # no confirm yet (a future phase adds the validated in-process commit).
+        # The model drafted an automation. Show it read-only — no write, no confirm
+        # yet (a later release adds the validated in-process commit).
         if result.automation is not None:
             return self._automation_draft_reply(user_input, chat_log, result, streamed)
 
@@ -283,7 +283,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         result: PromptResult,
         streamed: bool,
     ) -> conversation.ConversationResult:
-        """Show a model-drafted automation read-only (N1 Phase-1: never writes it).
+        """Show a model-drafted automation read-only — this never writes it.
 
         Voice turns skip the YAML block (it is noise aloud); the spoken prose already
         summarizes the draft. Text turns get the exact config as a YAML block so the
@@ -377,7 +377,7 @@ def _render_proposal(text: str, proposal: Proposal | None) -> str:
 
 
 def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
-    """Render a drafted automation as a readable YAML block (N1 Phase-1, read-only).
+    """Render a drafted automation as a readable YAML block (read-only).
 
     The block is for the user to review or copy; nothing is written. ``text`` (the
     model's plain-language summary) is kept above the block when present, e.g. on a

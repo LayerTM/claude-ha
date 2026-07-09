@@ -180,7 +180,7 @@ described state change, or `null`), `tools_used`, and `truncated`.
 
 To act on something, use the two-phase flow: a read call returns a `proposal`
 with `intents`; after your own confirmation, echo those exact `intents` back in a
-`write` call. Writes are scoped on the add-on side to just those confirmed
+`write` call. Writes are scoped by the Claude Code add-on to just those confirmed
 intents — only use `write` from automations you control, never on untrusted input.
 
 ```yaml

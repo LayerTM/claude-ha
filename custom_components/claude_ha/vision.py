@@ -125,7 +125,7 @@ def _camera_names(hass: HomeAssistant, entity_id: str) -> list[str]:
 
     # Also match each label with a camera-channel suffix stripped, so "Front yard"
     # resolves a "Front Yard High Resolution Channel" entity, plus any parenthetical
-    # location a long friendly name embeds (I6 / D5).
+    # location a long friendly name embeds.
     resolved: list[str] = []
     for name in names:
         if not name:

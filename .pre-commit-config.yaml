@@ -8,6 +8,15 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # mypy (strict) — mirrors the CI `tests` gate so a local commit catches what
+      # CI catches. Uses the environment's installed mypy + Home Assistant (keep the
+      # env in lockstep with requirements_test.txt so results match CI).
+      - id: mypy
+        name: mypy (strict)
+        entry: mypy custom_components/claude_ha
+        language: system
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.20

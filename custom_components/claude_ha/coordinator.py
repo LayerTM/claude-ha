@@ -60,7 +60,7 @@ class ClaudeStatusCoordinator(DataUpdateCoordinator[StatusResult]):
 
 
 class ClaudeUsageCoordinator(DataUpdateCoordinator[UsageResult]):
-    """Polls the add-on's ``/api/usage`` endpoint (slow; cached add-on side)."""
+    """Polls the add-on's ``/api/usage`` endpoint (slow; cached by the add-on)."""
 
     config_entry: ClaudeConfigEntry
 

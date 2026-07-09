@@ -21,3 +21,6 @@ build/
 
 # local build notes (verified 2026 HA API research) — not shipped
 .research/
+
+# local-only working directory — never tracked
+.maestri/
