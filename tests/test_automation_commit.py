@@ -72,6 +72,14 @@ BENIGN_TREES: list[list[dict[str, Any]]] = [
     [{"action": "light.turn_off"}],
     # legacy `data_template` with an allowed entity is fine (inspected, not blocked)
     [{"action": "light.turn_on", "data_template": {"entity_id": "light.x"}}],
+    # media_player.join group_members of allowed media_players is fine
+    [
+        {
+            "action": "media_player.join",
+            "target": {"entity_id": "media_player.a"},
+            "data": {"group_members": ["media_player.b", "media_player.c"]},
+        }
+    ],
 ]
 
 # Dangerous action trees — each must be REJECTED. Every nesting site is covered, plus
@@ -141,6 +149,13 @@ DANGEROUS_TREES: list[list[dict[str, Any]]] = [
         {
             "action": "scene.create",
             "data": {"snapshot_entities": ["alarm_control_panel.h"]},
+        }
+    ],
+    # media_player.join group_members (audited key) reaching a non-allowed domain
+    [
+        {
+            "action": "media_player.join",
+            "data": {"group_members": ["alarm_control_panel.home"]},
         }
     ],
     # Legacy 'service' key: unreachable post-validation, caught as defense-in-depth.
