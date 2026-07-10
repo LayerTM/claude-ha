@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-10
+
+### Added
+
+- **Delete an automation by describing it.** Say *"delete my morning-lights
+  automation"* and Claude finds the matching automation, asks you to confirm, and
+  removes it. If more than one automation matches it asks which one; if none match
+  it says so — it never removes something you didn't confirm. Works in English,
+  Ukrainian and Polish. No add-on update needed.
+
 ## [1.2.0] - 2026-07-09
 
 ### Added
