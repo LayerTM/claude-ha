@@ -220,55 +220,97 @@ def _write_store(path: str, data: list[Any]) -> None:
     write_utf8_file_atomic(path, contents)
 
 
-async def async_commit_automation(hass: HomeAssistant, config: dict[str, Any]) -> str:
-    """Validate, security-check, persist and reload a drafted automation.
+async def _validate_and_check(
+    hass: HomeAssistant, config: dict[str, Any], config_key: str
+) -> None:
+    """Re-validate a model-authored config and enforce the action allowlist.
 
-    Returns the created automation's alias. Raises :class:`ClaudeError` on ANY
-    validation, policy or IO failure so the caller renders one clean chat error and
-    nothing is written when the draft is rejected.
+    Raises :class:`ClaudeError` on a blueprint draft, a schema failure, or a
+    disallowed/dangerous/templated service. Shared by create and modify.
     """
-    config_key = uuid.uuid4().hex
-
-    # 0. A blueprint-based automation sources its actions from a blueprint, so the
-    #    action allowlist below can't see (or bound) them — refuse it outright.
+    # A blueprint-based automation sources its actions from a blueprint, so the
+    # action allowlist can't see (or bound) them — refuse it outright.
     if "use_blueprint" in config:
         raise ClaudeError(
-            "Blueprint-based automations can't be created this way; not created."
+            "Blueprint-based automations can't be managed this way; not saved."
         )
-
-    # 1. Re-validate with HA's own automation schema (raise-on-error). Trust nothing.
     try:
         validated = await async_validate_config_item(hass, config_key, config)
     except (vol.Invalid, HomeAssistantError) as err:
-        raise ClaudeError(f"The drafted automation isn't valid: {err}") from err
+        raise ClaudeError(f"The automation isn't valid: {err}") from err
     except Exception as err:  # never surface a raw traceback to chat
-        raise ClaudeError(
-            "The drafted automation could not be validated; not created."
-        ) from err
+        raise ClaudeError("The automation could not be validated; not saved.") from err
     if validated is None:
-        raise ClaudeError("The drafted automation could not be validated; not created.")
-
-    # 2. Strict reject-not-filter action allowlist over the validated action tree.
+        raise ClaudeError("The automation could not be validated; not saved.")
     _enforce_action_policy(validated)
 
-    # 3. Persist the raw draft and reload just this automation. Our minted id ALWAYS
-    #    wins: any model-supplied `id` is dropped before the mint is set last, so a
-    #    draft can never target (and silently overwrite) an existing automation.
+
+async def _persist_automation(
+    hass: HomeAssistant, config: dict[str, Any], config_id: str
+) -> str:
+    """Write ``config`` under ``config_id`` (replacing any entry with that id).
+
+    Our ``config_id`` ALWAYS wins: any model-supplied ``id`` is dropped, so a config
+    can never target a different automation than the one intended. Returns the alias.
+    """
     alias = str(config.get("alias") or "automation").strip() or "automation"
-    stored = {key: value for key, value in config.items() if key != CONF_ID}
+    body = {key: value for key, value in config.items() if key != CONF_ID}
     path = hass.config.path(AUTOMATION_CONFIG_PATH)
     try:
         async with _STORE_LOCK:
             current = await hass.async_add_executor_job(_read_store, path)
-            current.append({**stored, CONF_ID: config_key})
+            current = [
+                item
+                for item in current
+                if not (isinstance(item, dict) and item.get(CONF_ID) == config_id)
+            ]
+            current.append({**body, CONF_ID: config_id})
             await hass.async_add_executor_job(_write_store, path, current)
         await hass.services.async_call(
-            AUTOMATION_DOMAIN, SERVICE_RELOAD, {CONF_ID: config_key}, blocking=True
+            AUTOMATION_DOMAIN, SERVICE_RELOAD, {CONF_ID: config_id}, blocking=True
         )
     except (HomeAssistantError, OSError) as err:
         raise ClaudeError(f"Couldn't save the automation: {err}") from err
-
     return alias
+
+
+async def async_commit_automation(hass: HomeAssistant, config: dict[str, Any]) -> str:
+    """Validate, security-check, persist and reload a NEWLY drafted automation.
+
+    A fresh id is minted, so a create can never overwrite an existing automation.
+    Raises :class:`ClaudeError` on any validation/policy/IO failure (nothing written).
+    """
+    config_key = uuid.uuid4().hex
+    await _validate_and_check(hass, config, config_key)
+    return await _persist_automation(hass, config, config_key)
+
+
+async def async_update_automation(
+    hass: HomeAssistant, config: dict[str, Any], target_id: str
+) -> str:
+    """Validate, security-check and write an updated config over ``target_id``.
+
+    Same security bar as create; the id is the caller-resolved target (never a mint
+    or a model-supplied value), so a modify updates exactly the intended automation
+    in place. Raises :class:`ClaudeError` on any failure (nothing written).
+    """
+    await _validate_and_check(hass, config, target_id)
+    return await _persist_automation(hass, config, target_id)
+
+
+async def async_read_automation_config(
+    hass: HomeAssistant, config_id: str
+) -> dict[str, Any] | None:
+    """Return the stored config (minus its id) of the automation with ``config_id``.
+
+    Used to give the model the REAL automation to edit; None if it isn't in the store.
+    """
+    path = hass.config.path(AUTOMATION_CONFIG_PATH)
+    current = await hass.async_add_executor_job(_read_store, path)
+    for item in current:
+        if isinstance(item, dict) and item.get(CONF_ID) == config_id:
+            return {key: value for key, value in item.items() if key != CONF_ID}
+    return None
 
 
 # --- Find + delete existing automations -------------------------------------

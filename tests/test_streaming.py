@@ -307,3 +307,37 @@ async def test_conversation_stream_no_result_errors(
 
     result = await _say(hass, mock_config_entry, "hi")
     assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+async def test_stream_sends_edit_automation_when_supported(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """`edit_automation` rides the read only when the add-on is new enough."""
+    aioclient_mock.post(
+        _URL, text=_ndjson({"type": "done", "text": "ok"}), headers=_NDJSON
+    )
+    client = _client(hass)
+    client.note_version("1.36.0")
+
+    await _collect(
+        client.async_prompt_stream("change it", edit_automation={"alias": "X"})
+    )
+
+    assert aioclient_mock.mock_calls[-1][2]["edit_automation"] == {"alias": "X"}
+
+
+async def test_stream_omits_edit_automation_when_unsupported(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A pre-1.36.0 add-on never sees the edit_automation key (would 400)."""
+    aioclient_mock.post(
+        _URL, text=_ndjson({"type": "done", "text": "ok"}), headers=_NDJSON
+    )
+    client = _client(hass)
+    client.note_version("1.35.0")
+
+    await _collect(
+        client.async_prompt_stream("change it", edit_automation={"alias": "X"})
+    )
+
+    assert "edit_automation" not in aioclient_mock.mock_calls[-1][2]

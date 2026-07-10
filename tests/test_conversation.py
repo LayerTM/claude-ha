@@ -10,6 +10,7 @@ from custom_components.claude_ha.api import ClaudeError, Proposal
 from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
 from custom_components.claude_ha.conversation import (
     _delete_query,
+    _modify_query,
     _render_automation_draft,
     _render_proposal,
     _spoken_confirm,
@@ -679,4 +680,300 @@ async def test_delete_commit_failure_is_a_clean_error(
         hass, mock_config_entry, "delete my morning lights automation"
     )
     result = await _delete_turn(hass, mock_config_entry, "yes", first.conversation_id)
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+def test_modify_query_detects_and_extracts_target() -> None:
+    """Modify detection fires on a modify verb + 'automation'; target is before it."""
+    q = _modify_query("change my morning lights automation to 9am")
+    assert q is not None and "morning" in q and "lights" in q and "9am" not in q
+    assert _modify_query("update the kitchen automation to blue") is not None
+    # not a modify
+    assert _modify_query("what's the weather?") is None  # no modify verb
+    assert _modify_query("change the thermostat") is None  # no "automation"
+    assert _modify_query("create an automation to change the lights") is None  # create
+    assert _modify_query("delete my morning automation") is None  # delete, not modify
+
+
+_UPDATED_DRAFT = {
+    "text": "Moved it to 9am.",
+    "proposal": None,
+    "automation": {
+        "alias": "Morning Lights",
+        "triggers": [{"trigger": "time", "at": "09:00:00"}],
+        "actions": [{"action": "light.turn_on"}],
+    },
+    "tools_used": [],
+    "truncated": False,
+}
+
+
+def _patch_modify(monkeypatch: pytest.MonkeyPatch, updates: list) -> None:
+    async def _read(_hass: HomeAssistant, _cid: str) -> dict:
+        return {"alias": "Morning Lights", "triggers": [], "actions": []}
+
+    async def _update(_hass: HomeAssistant, config: dict, target_id: str) -> str:
+        updates.append((target_id, config))
+        return str(config["alias"])
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_read_automation_config", _read
+    )
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_update_automation", _update
+    )
+
+
+async def test_modify_flow_edits_then_updates(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A modify sends the target config to the model, confirms, then updates it."""
+    _mock_status(aioclient_mock, "1.36.0")  # gate on
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_UPDATED_DRAFT)
+    updates: list = []
+    _patch_modify(monkeypatch, updates)
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+    agent = _agent_id(hass, mock_config_entry)
+
+    first = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=agent,
+    )
+    assert "Update it? (yes/no)" in first.response.speech["plain"]["speech"]
+    posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+    assert posts[-1][2].get("edit_automation") is not None  # real config was sent
+
+    second = await conversation.async_converse(
+        hass, "yes", first.conversation_id, context=Context(), agent_id=agent
+    )
+    assert updates and updates[0][0] == "id-m"  # updated the resolved target in place
+    assert (
+        "Updated automation: Morning Lights"
+        in second.response.speech["plain"]["speech"]
+    )
+
+
+async def test_modify_not_intercepted_on_old_addon(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A pre-1.36.0 add-on makes a modify a normal read (no edit_automation)."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "I can't modify yet.",
+            "proposal": None,
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await setup_integration(hass, mock_config_entry)  # default status = 1.14.0
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    result = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    speech = result.response.speech["plain"]["speech"]
+    assert "Update it?" not in speech
+    assert "I can't modify yet." in speech
+    posts = [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+    assert "edit_automation" not in posts[-1][2]
+
+
+async def test_modify_no_match(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A modify whose target matches nothing says so and never calls the model."""
+    _mock_status(aioclient_mock, "1.36.0")
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "change my nonexistent automation to 9am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    assert "couldn't find" in result.response.speech["plain"]["speech"]
+    assert not [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+
+
+async def test_modify_model_returns_no_config_shows_answer(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the model returns no updated config, its answer is shown; nothing is held."""
+    _mock_status(aioclient_mock, "1.36.0")
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "Not sure what to change.",
+            "proposal": None,
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    _patch_modify(monkeypatch, [])
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    result = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    assert "Not sure what to change." in result.response.speech["plain"]["speech"]
+
+
+async def test_modify_ambiguous_asks_which(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A modify matching several automations asks which and never calls the model."""
+    _mock_status(aioclient_mock, "1.36.0")
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.k", "on", {"id": "k", "friendly_name": "Kitchen Lights"}
+    )
+    hass.states.async_set(
+        "automation.b", "on", {"id": "b", "friendly_name": "Bedroom Lights"}
+    )
+
+    result = await conversation.async_converse(
+        hass,
+        "change the lights automation to blue",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    speech = result.response.speech["plain"]["speech"]
+    assert "which" in speech.lower()
+    assert not [c for c in aioclient_mock.mock_calls if c[0] == "POST"]
+
+
+async def test_modify_unreadable_target_config(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the target's config can't be read, say so; never call the model."""
+    _mock_status(aioclient_mock, "1.36.0")
+
+    async def _none(_hass: HomeAssistant, _cid: str) -> dict | None:
+        return None
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_read_automation_config", _none
+    )
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    result = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    assert "couldn't read" in result.response.speech["plain"]["speech"]
+
+
+async def test_modify_read_error_is_clean(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing edit read is a clean error response, not a crash."""
+    _mock_status(aioclient_mock, "1.36.0")
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", status=503)
+
+    async def _read(_hass: HomeAssistant, _cid: str) -> dict:
+        return {"alias": "Morning Lights", "triggers": [], "actions": []}
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_read_automation_config", _read
+    )
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    result = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+async def test_modify_update_failure_is_clean(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure during the confirmed update is a clean error response."""
+    _mock_status(aioclient_mock, "1.36.0")
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_UPDATED_DRAFT)
+
+    async def _read(_hass: HomeAssistant, _cid: str) -> dict:
+        return {"alias": "Morning Lights", "triggers": [], "actions": []}
+
+    async def _boom(_hass: HomeAssistant, _config: dict, _target: str) -> str:
+        raise ClaudeError("couldn't update")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_read_automation_config", _read
+    )
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_update_automation", _boom
+    )
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+    agent = _agent_id(hass, mock_config_entry)
+
+    first = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=agent,
+    )
+    result = await conversation.async_converse(
+        hass, "yes", first.conversation_id, context=Context(), agent_id=agent
+    )
     assert result.response.response_type is intent.IntentResponseType.ERROR

@@ -51,8 +51,10 @@ class PendingProposal:
     """A proposal awaiting the user's Approve/Dismiss decision.
 
     Carries one of: entity-control ``intents`` (the notification/chat write path);
-    an ``automation`` config awaiting a confirmed in-process commit; or a
-    ``delete_automation_id`` awaiting a confirmed delete (both chat-only paths).
+    an ``automation`` config awaiting a confirmed create/update; or a
+    ``delete_automation_id`` awaiting a confirmed delete (both chat-only paths). When
+    ``automation`` is set with ``update_target_id``, the confirmed write updates that
+    existing automation in place instead of creating a new one.
     """
 
     entry_id: str
@@ -63,6 +65,7 @@ class PendingProposal:
     expires_at: datetime
     automation: dict[str, Any] | None = None
     delete_automation_id: str | None = None
+    update_target_id: str | None = None
 
 
 @callback

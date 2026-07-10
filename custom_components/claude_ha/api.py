@@ -21,6 +21,7 @@ from awesomeversion import AwesomeVersion, AwesomeVersionException
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
+    ADDON_MIN_EDIT_VERSION,
     ADDON_MIN_SURFACE_VERSION,
     API_PROMPT,
     API_STATUS,
@@ -30,6 +31,7 @@ from .const import (
     HEADER_CALLER,
     MODE_READ,
     MODE_WRITE,
+    REQUEST_EDIT_AUTOMATION,
     REQUEST_IMAGE_ENTITY,
     REQUEST_LANGUAGE,
     REQUEST_STREAM,
@@ -190,20 +192,29 @@ class ClaudeClient:
         """The current prompt-read wall-clock (tracks the add-on's budget)."""
         return self._read_timeout
 
-    @property
-    def _supports_surface(self) -> bool:
-        """Whether the connected add-on accepts the ``surface`` field.
+    def _addon_at_least(self, min_version: str) -> bool:
+        """Whether the last-observed add-on version is >= ``min_version``.
 
-        A pre-1.28.0 add-on rejects unknown request keys, so the caller must only
-        send ``surface`` once we've observed a new-enough version via a status
-        poll. Absent/unparseable version -> treat as unsupported (send nothing).
+        Additive request fields are rejected by an add-on that predates them (its
+        body-key allowlist 400s an unknown key), so a field is only put on the wire
+        once a new-enough version is observed. Absent/unparseable version -> False.
         """
         if self._addon_version is None:
             return False
         try:
-            return AwesomeVersion(self._addon_version) >= ADDON_MIN_SURFACE_VERSION
+            return AwesomeVersion(self._addon_version) >= min_version
         except AwesomeVersionException:
             return False
+
+    @property
+    def _supports_surface(self) -> bool:
+        """Whether the connected add-on accepts the ``surface`` field (>= 1.28.0)."""
+        return self._addon_at_least(ADDON_MIN_SURFACE_VERSION)
+
+    @property
+    def supports_edit_automation(self) -> bool:
+        """Whether the connected add-on accepts ``edit_automation`` (>= 1.36.0)."""
+        return self._addon_at_least(ADDON_MIN_EDIT_VERSION)
 
     def note_version(self, version: str | None) -> None:
         """Record the add-on version last reported by ``/api/status``.
@@ -339,6 +350,7 @@ class ClaudeClient:
         image_entity: str | None = None,
         language: str | None = None,
         surface: str | None = None,
+        edit_automation: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamDelta | PromptResult]:
         """Stream a read: yield text deltas, then one final ``PromptResult``.
 
@@ -347,6 +359,8 @@ class ClaudeClient:
         Content-Type — so a single ``PromptResult`` is yielded and no deltas.
         Streaming is read-only (contract §2). The last item is always the
         authoritative ``PromptResult`` (its proposal drives auto/confirm).
+        ``edit_automation`` (the current config of an automation to modify) is only
+        sent to add-ons that accept it (>= 1.36.0).
         """
         payload: dict[str, object] = {
             "prompt": prompt,
@@ -361,6 +375,8 @@ class ClaudeClient:
             payload[REQUEST_LANGUAGE] = language
         if surface is not None and self._supports_surface:
             payload[REQUEST_SURFACE] = surface
+        if edit_automation is not None and self.supports_edit_automation:
+            payload[REQUEST_EDIT_AUTOMATION] = edit_automation
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller

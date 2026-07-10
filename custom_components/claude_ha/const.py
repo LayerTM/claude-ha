@@ -116,6 +116,12 @@ SURFACE_TEXT: Final = "text"
 # First add-on version that accepts REQUEST_SURFACE (see above — the client
 # send-gates the field on this version so older add-ons never see an unknown key).
 ADDON_MIN_SURFACE_VERSION: Final = "1.28.0"
+# Optional current config of the automation the user asked to modify (add-on >=
+# 1.36.0). When present, the add-on tells the model to edit THIS config per the
+# request and return the full updated automation in the `automation` response field.
+# Send-gated on the version below, like REQUEST_SURFACE.
+REQUEST_EDIT_AUTOMATION: Final = "edit_automation"
+ADDON_MIN_EDIT_VERSION: Final = "1.36.0"
 
 # GET /api/status 200-response keys.
 STATUS_READY: Final = "ready"
