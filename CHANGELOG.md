@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-10
+
+### Added
+
+- **Change an existing automation by describing it.** Say *"change my morning-lights
+  automation to 9am"* and Claude edits **that** automation — it's given the real
+  automation's current configuration, so it changes only what you asked and keeps
+  the rest. It shows the updated version, asks you to confirm, and on "yes" updates
+  it in place (same automation, same id — no duplicate). If more than one automation
+  matches it asks which; if none match it says so. The updated config goes through
+  the same safety checks as a newly created one. Needs the Claude add-on ≥ 1.36.0;
+  with an older add-on a change request is answered normally instead.
+
 ## [1.3.0] - 2026-07-10
 
 ### Added

@@ -57,6 +57,25 @@ async def test_surface_gated_on_addon_version(
         assert body["surface"] == "voice"
 
 
+@pytest.mark.parametrize(
+    ("version", "supported"),
+    [
+        (None, False),
+        ("not-a-version", False),
+        ("1.35.9", False),
+        ("1.36.0", True),
+        ("1.40.0", True),
+    ],
+)
+async def test_supports_edit_automation_version_gate(
+    hass: HomeAssistant, version: str | None, supported: bool
+) -> None:
+    """`edit_automation` is only offered to add-ons >= 1.36.0."""
+    client = _client(hass)
+    client.note_version(version)
+    assert client.supports_edit_automation is supported
+
+
 async def test_status_parsing(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

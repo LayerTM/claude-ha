@@ -18,6 +18,8 @@ from custom_components.claude_ha.automation_commit import (
     _enforce_action_policy,
     async_commit_automation,
     async_delete_automation,
+    async_read_automation_config,
+    async_update_automation,
     find_automations,
 )
 from homeassistant.core import HomeAssistant
@@ -419,3 +421,75 @@ async def test_delete_reload_failure_is_clean(
     )
     with pytest.raises(ClaudeError):
         await async_delete_automation(hass, "gone")
+
+
+# --- modify (update-in-place) ----------------------------------------------
+
+
+async def test_update_replaces_target_in_place(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """An update rewrites just the target entry, keeping its id and the others."""
+    reloads: list[dict[str, Any]] = []
+    hass.services.async_register(
+        "automation", "reload", lambda call: reloads.append(dict(call.data))
+    )
+    Path(isolated_config).write_text(
+        "- id: keep\n  alias: Keep\n  triggers: []\n  actions: []\n"
+        "- id: target\n  alias: Old\n  triggers: []\n  actions: []\n",
+        encoding="utf-8",
+    )
+    # A model-supplied id in the new config must be ignored (target id wins).
+    new_config = _valid_config([{"action": "light.turn_on"}])
+    new_config["alias"] = "New Morning"
+    new_config["id"] = "attacker"
+
+    alias = await async_update_automation(hass, new_config, "target")
+
+    assert alias == "New Morning"
+    stored = {entry["id"]: entry for entry in load_yaml(isolated_config)}
+    assert set(stored) == {"keep", "target"}  # attacker id never lands
+    assert stored["target"]["alias"] == "New Morning"
+    assert reloads and reloads[0]["id"] == "target"
+
+
+async def test_update_rejects_dangerous(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """An update runs the same allowlist; a dangerous action is rejected, no write."""
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text(
+        "- id: target\n  alias: Old\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+    with pytest.raises(ClaudeError):
+        await async_update_automation(
+            hass, _valid_config([{"action": "shell_command.run"}]), "target"
+        )
+    # target entry unchanged
+    assert load_yaml(isolated_config)[0]["alias"] == "Old"
+
+
+async def test_read_automation_config_returns_config_without_id(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """Reading a target returns its stored config, minus the id, for editing."""
+    Path(isolated_config).write_text(
+        "- id: target\n  alias: Morning\n  triggers: []\n"
+        "  actions: [{action: light.turn_on}]\n",
+        encoding="utf-8",
+    )
+    config = await async_read_automation_config(hass, "target")
+    assert config is not None
+    assert "id" not in config
+    assert config["alias"] == "Morning"
+    assert config["actions"] == [{"action": "light.turn_on"}]
+
+
+async def test_read_automation_config_missing_is_none(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """Reading an unknown id returns None."""
+    Path(isolated_config).write_text(
+        "- id: other\n  alias: Other\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+    assert await async_read_automation_config(hass, "missing") is None

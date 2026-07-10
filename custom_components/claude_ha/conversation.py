@@ -26,6 +26,8 @@ from .api import ClaudeError, PromptResult, Proposal, StreamDelta
 from .automation_commit import (
     async_commit_automation,
     async_delete_automation,
+    async_read_automation_config,
+    async_update_automation,
     find_automations,
 )
 from .confirm import CHAT_PENDING_TTL, DATA_PENDING_CHAT, PendingProposal
@@ -153,6 +155,57 @@ def _delete_query(text: str) -> str | None:
     return " ".join(target)
 
 
+# Modify-an-automation intent, same shape as delete. Multi-lingual (en/uk/pl). The
+# target is taken from the words BEFORE "automation" ("change my <target> automation
+# to 9am"), so the trailing change text doesn't dilute the match.
+_MODIFY_VERBS = frozenset(
+    {
+        "change",
+        "update",
+        "edit",
+        "adjust",
+        "modify",
+        "rename",
+        "зміни",
+        "змінити",
+        "онови",
+        "оновити",
+        "редагуй",
+        "відредагуй",
+        "zmień",
+        "zmienić",
+        "edytuj",
+        "zaktualizuj",
+    }
+)
+
+
+def _modify_query(text: str) -> str | None:
+    """Return the target reference if this asks to modify an automation, else None.
+
+    A create or delete verb wins (those are handled elsewhere / are not a modify).
+    The target is the descriptor before the word "automation".
+    """
+    lowered = text.lower()
+    words = re.findall(r"[^\W_]+", lowered, flags=re.UNICODE)
+    if not any(word in _MODIFY_VERBS for word in words):
+        return None
+    if any(word in _CREATE_VERBS or word in _DELETE_VERBS for word in words):
+        return None
+    marker_index = next(
+        (
+            index
+            for index, word in enumerate(words)
+            if any(word.startswith(prefix) for prefix in _AUTOMATION_WORDS)
+        ),
+        None,
+    )
+    if marker_index is None:
+        return None
+    target = [word for word in words[:marker_index] if word not in _MODIFY_VERBS]
+    return " ".join(target)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ClaudeConfigEntry,
@@ -224,6 +277,23 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 entry,
                 caller,
                 delete_query,
+            )
+
+        # A3. A "change my <x> automation ..." request: resolve the target locally,
+        # then have the model edit its REAL config (only when the add-on supports it).
+        modify_query = _modify_query(text)
+        if (
+            modify_query is not None
+            and self.coordinator.client.supports_edit_automation
+        ):
+            return await self._handle_modify_request(
+                user_input,
+                chat_log,
+                conv_id,
+                pending_store,
+                entry,
+                caller,
+                modify_query,
             )
 
         # B. Fresh read, streamed live into the chat log. When vision is enabled,
@@ -311,12 +381,14 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         conv_id: str,
         caller: str | None,
         image_entity: str | None,
+        edit_automation: dict[str, Any] | None = None,
     ) -> tuple[PromptResult, bool]:
         """Stream a read into the chat log; return its result and if it streamed.
 
         Text deltas are added live; the final ``PromptResult`` (carrying the
         proposal) is captured out of band. ``streamed`` is False when the add-on
         answered with a plain JSON body (no deltas) so the caller records it.
+        ``edit_automation`` (a target's current config) asks the model to edit it.
         """
         captured: dict[str, PromptResult] = {}
         streamed = False
@@ -331,6 +403,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 image_entity=image_entity,
                 language=user_input.language,
                 surface=_surface(user_input),
+                edit_automation=edit_automation,
             ):
                 if isinstance(chunk, PromptResult):
                     captured["result"] = chunk
@@ -372,19 +445,21 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         text: str,
         streamed: bool,
         alias: str,
+        action: str = "Create",
     ) -> conversation.ConversationResult:
         """Show a drafted automation and ask to confirm — this never writes it.
 
-        Text turns get the exact config as a YAML block plus a yes/no question. Voice
-        turns skip the YAML (noise aloud) for a short spoken confirmation. The commit
-        only happens on the next turn if the user confirms.
+        ``action`` is "Create" for a new automation or "Update" for a modify. Text
+        turns get the exact config as a YAML block plus a yes/no question. Voice turns
+        skip the YAML (noise aloud) for a short spoken confirmation. The write only
+        happens on the next turn if the user confirms.
         """
         answer = "" if streamed else text
         if _surface(user_input) == SURFACE_VOICE:
-            message = _spoken_confirm(answer, f"Create automation {alias}")
+            message = _spoken_confirm(answer, f"{action} automation {alias}")
             return self._reply(user_input, chat_log, message)
         block = _render_automation_draft(answer, automation)
-        return self._reply(user_input, chat_log, f"{block}\n\nCreate it? (yes/no)")
+        return self._reply(user_input, chat_log, f"{block}\n\n{action} it? (yes/no)")
 
     async def _async_commit_automation(
         self,
@@ -399,6 +474,81 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
         return self._reply(user_input, chat_log, f"Created automation: {summary}")
+
+    async def _handle_modify_request(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        conv_id: str,
+        pending_store: dict[str, PendingProposal],
+        entry: ClaudeConfigEntry,
+        caller: str | None,
+        query: str,
+    ) -> conversation.ConversationResult:
+        """Resolve a modify target, have the model edit its config, hold to confirm."""
+        hass = self.coordinator.hass
+        matches = find_automations(hass, query)
+        if not matches:
+            return self._reply(
+                user_input, chat_log, "I couldn't find an automation matching that."
+            )
+        if len(matches) > 1:
+            names = ", ".join(f"'{match.name}'" for match in matches)
+            return self._reply(
+                user_input, chat_log, f"I found more than one — which? {names}"
+            )
+        target = matches[0]
+        current = await async_read_automation_config(hass, target.config_id)
+        if current is None:
+            return self._reply(
+                user_input, chat_log, "I couldn't read that automation's configuration."
+            )
+        try:
+            result, streamed = await self._async_stream_read(
+                user_input,
+                chat_log,
+                user_input.text,
+                conv_id,
+                caller,
+                image_entity=None,
+                edit_automation=current,
+            )
+        except ClaudeError as err:
+            return self._error(user_input, chat_log, err)
+        if result.automation is None:
+            # The model didn't return an updated config (e.g. it declined) — just
+            # show its answer; nothing is held for confirmation.
+            return self._answer_reply(user_input, chat_log, result.text, streamed)
+        updated = result.automation
+        alias = _automation_alias(updated)
+        pending_store[conv_id] = PendingProposal(
+            entry_id=entry.entry_id,
+            prompt=user_input.text,
+            intents=[],
+            caller=caller,
+            summary=alias,
+            expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
+            automation=updated,
+            update_target_id=target.config_id,
+        )
+        return self._automation_confirm_reply(
+            user_input, chat_log, updated, result.text, streamed, alias, action="Update"
+        )
+
+    async def _async_update_automation(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        automation: dict[str, Any],
+        target_id: str,
+        summary: str,
+    ) -> conversation.ConversationResult:
+        """Update a confirmed automation in place; a failure is a clean chat error."""
+        try:
+            await async_update_automation(self.coordinator.hass, automation, target_id)
+        except ClaudeError as err:
+            return self._error(user_input, chat_log, err)
+        return self._reply(user_input, chat_log, f"Updated automation: {summary}")
 
     async def _resolve_pending(
         self,
@@ -419,6 +569,14 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                     user_input, chat_log, pending.delete_automation_id, pending.summary
                 )
             if pending.automation is not None:
+                if pending.update_target_id is not None:
+                    return await self._async_update_automation(
+                        user_input,
+                        chat_log,
+                        pending.automation,
+                        pending.update_target_id,
+                        pending.summary,
+                    )
                 return await self._async_commit_automation(
                     user_input, chat_log, pending.automation, pending.summary
                 )
