@@ -24,7 +24,17 @@ import voluptuous as vol
 from homeassistant.components.automation.config import async_validate_config_item
 from homeassistant.components.automation.const import DOMAIN as AUTOMATION_DOMAIN
 from homeassistant.config import AUTOMATION_CONFIG_PATH
-from homeassistant.const import ATTR_FRIENDLY_NAME, CONF_ID, SERVICE_RELOAD
+from homeassistant.const import (
+    ATTR_AREA_ID,
+    ATTR_DEVICE_ID,
+    ATTR_ENTITY_ID,
+    ATTR_FLOOR_ID,
+    ATTR_FRIENDLY_NAME,
+    ATTR_LABEL_ID,
+    CONF_ID,
+    ENTITY_MATCH_ALL,
+    SERVICE_RELOAD,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -51,11 +61,18 @@ from homeassistant.util.yaml import dump, load_yaml
 
 from .api import ClaudeError
 
-# The GATE (reject-not-filter): a Claude-created automation may only call services in
-# these domains. Any service outside this set rejects the WHOLE commit. Kept to
-# user-facing device / helper / notify domains; deliberately EXCLUDES homeassistant.*
-# (its generic turn_on/off live alongside restart/stop/reload_*) — a drafted
-# automation uses the specific domain service (light.turn_on, cover.close_cover, …).
+# The GATE (reject-not-filter): a Claude-created automation may only ACTUATE the
+# user's own entities in these domains — every service call AND every entity it
+# targets must be in this set. Kept to user-facing device / helper / notify domains;
+# deliberately EXCLUDES homeassistant.* / script.* / group.* (generic/indirect
+# actuation across domains) — a drafted automation uses the specific domain service.
+# Deliberate carve-out: activating the user's OWN pre-defined scene (scene.turn_on /
+# the `scene:` shorthand) is allowed even though the scene's stored states may touch
+# any domain — it is the user's own config, confirm-gated, and its contents can't be
+# bounded at commit (same TOCTOU class as area targeting).
+# SOUNDNESS BOUNDARY: adding a domain here REQUIRES re-auditing that domain's
+# services.yaml for (1) non-entity danger surfaces (url/command/file) and (2) entity
+# references under non-standard data keys (see _ENTITY_DATA_KEYS) — else an escape.
 _ALLOWED_DOMAINS: frozenset[str] = frozenset(
     {
         "light",
@@ -84,25 +101,33 @@ _ALLOWED_DOMAINS: frozenset[str] = frozenset(
     }
 )
 
-# Rejected services even though their domain is otherwise allowed — each carries a
-# danger in its PAYLOAD that a name-only domain gate can't bound:
-#  - notify.file writes an arbitrary file.
-#  - scene.apply / scene.create reproduce arbitrary states on entities in ANY domain
-#    (disarm an alarm, unlock a lock) via an inline `data.entities` map.
-#  - media_player.play_media fetches an arbitrary `media_content_id` URL (SSRF-class
-#    / plays attacker audio on the user's speakers).
-#  - vacuum.send_command relays an attacker-chosen raw command straight to the device.
-# (Activating a user-defined scene via scene.turn_on, or media_player.play/pause/
-#  volume, or vacuum.start, all stay allowed — the danger is the payload service.)
+# Rejected services in an otherwise-allowed domain whose danger is NON-entity — a
+# payload the entity-reach rule can't bound: notify.file (arbitrary file write),
+# media_player.play_media (arbitrary media_content_id URL fetch), vacuum.send_command
+# (raw device command). Cross-domain-via-payload services (scene.apply/create's inline
+# entity map) are NOT here — the entity-reach rule subsumes them (their entities get
+# domain-checked like any other target). An audit of every allowed domain's
+# services.yaml found no other non-entity danger surface.
 _DENIED_SERVICES: frozenset[str] = frozenset(
-    {
-        "notify.file",
-        "scene.apply",
-        "scene.create",
-        "media_player.play_media",
-        "vacuum.send_command",
-    }
+    {"notify.file", "media_player.play_media", "vacuum.send_command"}
 )
+
+# The blocks HA merges into a service call whose contents must be inspected: the
+# target selector, `data`, and the legacy `data_template` (both data keys are merged
+# at runtime). Each must be a literal dict — a whole-block template can't be bounded.
+_TARGET_DATA_KEYS = ("target", "data", "data_template")
+
+# Target-selector keys that expand to entities of ANY domain via the live registries,
+# with membership mutable AFTER commit (TOCTOU) — unbounded, so reject outright.
+_TARGET_SELECTOR_KEYS = (ATTR_DEVICE_ID, ATTR_AREA_ID, ATTR_FLOOR_ID, ATTR_LABEL_ID)
+
+# Data keys (besides target/entity_id) that carry ENTITY references on an allowed-
+# domain service — audited exhaustively across the allow-list's services.yaml:
+#   scene.apply/create `entities` (dict KEYED by entity_id), scene.create
+#   `snapshot_entities` (list), media_player.join `group_members` (list).
+# Re-audit when ALLOWED_DOMAINS changes (see the soundness-boundary note above).
+_ENTITY_DATA_LIST_KEYS = ("snapshot_entities", "group_members")
+_ENTITY_DATA_MAP_KEY = "entities"
 
 # Action TYPES that neither invoke a service nor nest further actions — safe leaves.
 # Anything not here, not a service call, and not a container is REJECTED (so a
@@ -131,32 +156,31 @@ _SERVICE_KEYS = ("action", "service_template", "service")
 _STORE_LOCK = asyncio.Lock()
 
 
-def _collect_services(actions: list[Any], found: set[str]) -> None:
-    """Walk an action list, adding every literal service reachable through it.
+def _walk_actions(actions: list[Any]) -> None:
+    """Walk an action list, enforcing the payload-aware policy at every service call.
 
-    Mirrors Home Assistant's own action grammar so nesting can't hide a call.
-    Raises :class:`ClaudeError` on a templated service name (can't be statically
-    bounded) or an action type that is neither a safe leaf, a service call, nor a
-    known container — reject-by-default.
+    Mirrors Home Assistant's own action grammar so nesting can't hide a call. Raises
+    :class:`ClaudeError` on the first violation, or on an action type that is neither
+    a safe leaf, a service call, nor a known container — reject-by-default.
     """
     for action in actions:
         kind = _script_action_kind(action)
         if kind == SCRIPT_ACTION_CALL_SERVICE:
-            _collect_leaf_service(action, found)
+            _check_call_service(action)
         elif kind == SCRIPT_ACTION_CHOOSE:
             for choice in action.get("choose", []):
-                _collect_services(choice.get("sequence", []), found)
-            _collect_services(action.get("default") or [], found)
+                _walk_actions(choice.get("sequence", []))
+            _walk_actions(action.get("default") or [])
         elif kind == SCRIPT_ACTION_IF:
-            _collect_services(action.get("then", []), found)
-            _collect_services(action.get("else") or [], found)
+            _walk_actions(action.get("then", []))
+            _walk_actions(action.get("else") or [])
         elif kind == SCRIPT_ACTION_REPEAT:
-            _collect_services(action.get("repeat", {}).get("sequence", []), found)
+            _walk_actions(action.get("repeat", {}).get("sequence", []))
         elif kind == SCRIPT_ACTION_PARALLEL:
             for item in action.get("parallel", []):
-                _collect_services(item.get("sequence", []), found)
+                _walk_actions(item.get("sequence", []))
         elif kind == SCRIPT_ACTION_SEQUENCE:
-            _collect_services(action.get("sequence", []), found)
+            _walk_actions(action.get("sequence", []))
         elif kind not in _SAFE_LEAF_ACTIONS:
             raise ClaudeError(
                 f"The drafted automation uses an action type ('{kind}') that isn't "
@@ -174,36 +198,146 @@ def _script_action_kind(action: dict[str, Any]) -> str:
         ) from err
 
 
-def _collect_leaf_service(action: dict[str, Any], found: set[str]) -> None:
-    """Add the literal service of a call-service action; reject a templated one.
+def _is_templated(value: Any) -> bool:
+    """Whether a value is a Jinja template — a Template object OR a ``{{``/``{%`` str.
 
-    A call-service action always carries exactly one service-name key (Home
-    Assistant's schema makes ``action`` / ``service_template`` mutually exclusive
-    and required), so there is always one name to check.
+    Service data is not schema-validated at config time, so a templated data value
+    stays a plain str (never coerced to Template); both forms must be caught.
     """
+    if isinstance(value, Template):
+        return True
+    return isinstance(value, str) and ("{{" in value or "{%" in value)
+
+
+def _check_call_service(action: dict[str, Any]) -> None:
+    """Enforce the payload-aware policy on one call-service action.
+
+    Rejects a templated/denied/out-of-domain service; a device/area/floor/label
+    target (unbounded, TOCTOU); and any entity target that is not a literal
+    ``domain.object_id`` in an allowed domain (templated, ``all``, uuid, or a
+    non-allowed domain). A templated NON-target data value (e.g. a message) is fine,
+    but a whole ``target``/``data``/``data_template`` block that is itself a template
+    (a non-dict) is rejected — its contents can't be statically bounded.
+    """
+    _check_service_name(action)
+    refs: list[Any] = []
+    # Top-level (legacy) selectors/entity_id live directly on the action dict.
+    _reject_broad_selectors(action)
+    if ATTR_ENTITY_ID in action:
+        refs.append(action[ATTR_ENTITY_ID])
+    # Both `data` and the legacy `data_template` are merged into the call at runtime,
+    # as is `target`; inspect all three. A block that isn't a literal dict (e.g. a
+    # whole-block Jinja template coerced to a Template, or a "{{ … }}" string) hides
+    # its entity reach -> reject.
+    for key in _TARGET_DATA_KEYS:
+        block = action.get(key)
+        if block is None:
+            continue
+        if not isinstance(block, dict):
+            raise ClaudeError(
+                f"The drafted automation has a templated '{key}' block, which can't "
+                "be verified as safe; not created."
+            )
+        _reject_broad_selectors(block)
+        if ATTR_ENTITY_ID in block:
+            refs.append(block[ATTR_ENTITY_ID])
+        _collect_scene_entity_refs(block, refs)
+    for value in refs:
+        _check_entity_ref(value)
+
+
+def _reject_broad_selectors(container: dict[str, Any]) -> None:
+    """Reject device/area/floor/label targeting — it can reach any domain, mutably."""
+    if any(key in container for key in _TARGET_SELECTOR_KEYS):
+        raise ClaudeError(
+            "The drafted automation targets a device or area rather than specific "
+            "entities, which can't be bounded to safe domains; not created."
+        )
+
+
+def _collect_scene_entity_refs(block: dict[str, Any], refs: list[Any]) -> None:
+    """Add the entity references a scene/join payload names (their KEYS/list values).
+
+    A scene ``entities`` map that isn't a literal dict (a template) hides its keys ->
+    reject; a templated list value is caught later by :func:`_check_entity_ref`.
+    """
+    state_map = block.get(_ENTITY_DATA_MAP_KEY)
+    if state_map is not None:
+        if not isinstance(state_map, dict):
+            raise ClaudeError(
+                "The drafted automation has a templated 'entities' map, which can't "
+                "be verified as safe; not created."
+            )
+        refs.extend(state_map.keys())  # entity_id KEYS only (states are values)
+    for key in _ENTITY_DATA_LIST_KEYS:
+        if key in block:
+            refs.append(block[key])
+
+
+def _check_service_name(action: dict[str, Any]) -> None:
+    """Require a literal ``domain.service`` in an allowed, non-denied domain."""
     for key in _SERVICE_KEYS:
         if key not in action:
             continue
         name = action[key]
-        if isinstance(name, Template):
+        if _is_templated(name):
             raise ClaudeError(
                 "The drafted automation uses a templated service name, which can't "
                 "be verified as safe; not created."
             )
-        found.add(str(name))
-
-
-def _enforce_action_policy(validated: dict[str, Any]) -> None:
-    """Reject the commit unless every reachable service is allow-listed and literal."""
-    found: set[str] = set()
-    _collect_services(validated.get("actions", []), found)
-    for service in sorted(found):
-        domain, _, name = service.partition(".")
-        if not name or domain not in _ALLOWED_DOMAINS or service in _DENIED_SERVICES:
+        service = str(name)
+        domain, _, obj = service.partition(".")
+        if not obj or domain not in _ALLOWED_DOMAINS or service in _DENIED_SERVICES:
             raise ClaudeError(
                 f"The drafted automation calls '{service}', which isn't allowed for a "
                 "Claude-created automation; not created."
             )
+
+
+def _check_entity_ref(value: Any) -> None:
+    """Every reached entity must be a literal ``domain.object_id`` in an allowed domain.
+
+    Rejects a templated ref, the ``all`` wildcard, a uuid / any non-``domain.object_id``
+    token, or an entity in a non-allowed domain. Handles str, comma-string and list.
+    """
+    if _is_templated(value):
+        raise ClaudeError(
+            "The drafted automation targets a templated entity, which can't be "
+            "verified as safe; not created."
+        )
+    tokens: list[str] = []
+    if isinstance(value, str):
+        tokens = value.split(",")
+    elif isinstance(value, list):
+        for element in value:
+            if _is_templated(element):
+                raise ClaudeError(
+                    "The drafted automation targets a templated entity, which can't "
+                    "be verified as safe; not created."
+                )
+            if not isinstance(element, str):
+                raise ClaudeError(
+                    "The drafted automation has an unrecognized entity target; "
+                    "not created."
+                )
+            tokens.extend(element.split(","))
+    else:
+        raise ClaudeError(
+            "The drafted automation has an unrecognized entity target; not created."
+        )
+    for token in tokens:
+        entity = token.strip()
+        domain, _, obj = entity.partition(".")
+        if entity == ENTITY_MATCH_ALL or not obj or domain not in _ALLOWED_DOMAINS:
+            raise ClaudeError(
+                f"The drafted automation targets '{entity}', which isn't a specific "
+                "entity in an allowed domain; not created."
+            )
+
+
+def _enforce_action_policy(validated: dict[str, Any]) -> None:
+    """Reject the commit unless every action's service AND entity reach are allowed."""
+    _walk_actions(validated.get("actions", []))
 
 
 def _read_store(path: str) -> list[Any]:

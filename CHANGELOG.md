@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-10
+
+### Changed
+
+- **Automations Claude creates or edits are bounded by what they *actuate*, not
+  just the service name.** The safety check now inspects each action's target and
+  data: an automation may only act on your own entities in the safe domains
+  (lights, switches, covers, climate, media players, locks, notifications, helpers,
+  …), no matter how the action is phrased. Reaching outside that set — e.g. a scene
+  that disarms an alarm, or targeting a whole area/device (which could include a
+  lock) — is refused. Targeting must name specific entities (not an area, device,
+  floor, label, template, or "all"). As a result, activating or applying scenes now
+  works whenever the scene only touches safe entities, and the internal list of
+  hard-blocked services shrank because the general rule now covers those cases.
+  Behaviour for everyday automations (turn a light on at sunset, notify at 8am) is
+  unchanged.
+
 ## [1.4.0] - 2026-07-10
 
 ### Added
