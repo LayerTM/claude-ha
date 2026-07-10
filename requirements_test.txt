@@ -10,7 +10,7 @@ home-assistant-intents==2026.6.24
 home-assistant-frontend==20260624.4
 
 # Lint + type-check tooling (kept in lockstep with CI and pre-commit).
-ruff==0.15.20
+ruff==0.15.21
 mypy==2.1.0
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
 types-PyYAML==6.0.12.20250915
