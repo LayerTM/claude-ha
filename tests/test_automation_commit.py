@@ -17,8 +17,11 @@ from custom_components.claude_ha.api import ClaudeError
 from custom_components.claude_ha.automation_commit import (
     _enforce_action_policy,
     async_commit_automation,
+    async_delete_automation,
+    find_automations,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.yaml import load_yaml
 
 
@@ -302,3 +305,117 @@ async def test_commit_reports_write_or_reload_failure(
         await async_commit_automation(
             hass, _valid_config([{"action": "light.turn_on"}])
         )
+
+
+# --- find + delete ----------------------------------------------------------
+
+
+def _set_automation(hass: HomeAssistant, slug: str, name: str, config_id: str) -> None:
+    hass.states.async_set(
+        f"automation.{slug}", "on", {"id": config_id, "friendly_name": name}
+    )
+
+
+async def test_find_matches_by_alias(hass: HomeAssistant) -> None:
+    """A query matches the automation whose name shares its words, best first."""
+    _set_automation(hass, "a", "Morning Lights", "id-a")
+    _set_automation(hass, "b", "Evening Lights", "id-b")
+    matches = find_automations(hass, "morning lights")
+    assert [m.config_id for m in matches] == ["id-a"]
+
+
+async def test_find_returns_all_ambiguous_candidates(hass: HomeAssistant) -> None:
+    """A query matching several automations returns them all (caller disambiguates)."""
+    _set_automation(hass, "k", "Kitchen Lights", "id-k")
+    _set_automation(hass, "b", "Bedroom Lights", "id-b")
+    matches = find_automations(hass, "lights")
+    assert {m.config_id for m in matches} == {"id-k", "id-b"}
+
+
+async def test_find_skips_automations_without_id(hass: HomeAssistant) -> None:
+    """An automation with no config id can't be deleted, so it isn't a candidate."""
+    hass.states.async_set("automation.noid", "on", {"friendly_name": "Orphan Auto"})
+    assert find_automations(hass, "orphan auto") == []
+
+
+async def test_find_empty_query_returns_nothing(hass: HomeAssistant) -> None:
+    """An empty/stopword-only query matches nothing (caller asks which)."""
+    _set_automation(hass, "a", "Morning", "id-a")
+    assert find_automations(hass, "  the  ") == []
+
+
+async def test_find_ignores_name_with_no_words(hass: HomeAssistant) -> None:
+    """An automation whose name has no word tokens scores 0 and isn't a candidate."""
+    _set_automation(hass, "a", "Morning Lights", "id-a")
+    hass.states.async_set(
+        "automation.blank", "on", {"id": "blank", "friendly_name": "!!!"}
+    )
+    matches = find_automations(hass, "morning lights")
+    assert [m.config_id for m in matches] == ["id-a"]
+
+
+async def test_delete_removes_by_id_and_reloads(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """Deleting an id drops just that entry, keeps the rest, and reloads it."""
+    reloads: list[dict[str, Any]] = []
+    hass.services.async_register(
+        "automation", "reload", lambda call: reloads.append(dict(call.data))
+    )
+    Path(isolated_config).write_text(
+        "- id: keep\n  alias: Keep\n  triggers: []\n  actions: []\n"
+        "- id: gone\n  alias: Gone\n  triggers: []\n  actions: []\n",
+        encoding="utf-8",
+    )
+
+    await async_delete_automation(hass, "gone")
+
+    stored = load_yaml(isolated_config)
+    assert [entry["id"] for entry in stored] == ["keep"]
+    assert reloads and reloads[0]["id"] == "gone"
+
+
+async def test_delete_removes_the_entity_registry_entry(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A registered automation entity is unregistered on delete."""
+    registry = er.async_get(hass)
+    registry.async_get_or_create("automation", "automation", "gone")
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text(
+        "- id: gone\n  alias: Gone\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+
+    await async_delete_automation(hass, "gone")
+
+    assert registry.async_get_entity_id("automation", "automation", "gone") is None
+
+
+async def test_delete_unknown_id_errors_and_keeps_file(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """Deleting an id that isn't present is a clean error; the file is untouched."""
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text(
+        "- id: keep\n  alias: Keep\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+    with pytest.raises(ClaudeError):
+        await async_delete_automation(hass, "missing")
+    assert [entry["id"] for entry in load_yaml(isolated_config)] == ["keep"]
+
+
+async def test_delete_reload_failure_is_clean(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A failure during delete surfaces as a clean ClaudeError, never raises."""
+    from homeassistant.exceptions import HomeAssistantError
+
+    def _boom(_call: Any) -> None:
+        raise HomeAssistantError("reload blew up")
+
+    hass.services.async_register("automation", "reload", _boom)
+    Path(isolated_config).write_text(
+        "- id: gone\n  alias: Gone\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+    with pytest.raises(ClaudeError):
+        await async_delete_automation(hass, "gone")

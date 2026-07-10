@@ -9,6 +9,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.claude_ha.api import ClaudeError, Proposal
 from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
 from custom_components.claude_ha.conversation import (
+    _delete_query,
     _render_automation_draft,
     _render_proposal,
     _spoken_confirm,
@@ -520,3 +521,162 @@ def test_render_automation_draft_keeps_prose_and_defaults_alias() -> None:
     out = _render_automation_draft("Here you go.", {"triggers": [], "actions": []})
     assert out.startswith("Here you go.")
     assert "**automation**" in out
+
+
+def test_delete_query_detects_delete_requests() -> None:
+    """The delete intercept fires only on a delete verb + 'automation', not a create."""
+    q = _delete_query("delete my morning lights automation")
+    assert q is not None and "morning" in q and "lights" in q and "delete" not in q
+    assert "coffee" in (_delete_query("remove the automation named coffee") or "")
+    # Ukrainian delete phrasing
+    uk = _delete_query("видали автоматизацію ранкове світло")
+    assert uk is not None and "ранкове" in uk
+    # not a delete
+    assert _delete_query("what's the weather?") is None  # no delete verb
+    assert _delete_query("delete the kitchen light") is None  # no "automation"
+    # a create verb wins even with a delete verb present
+    assert _delete_query("create an automation to delete old logs") is None
+
+
+async def _delete_turn(
+    hass: HomeAssistant, entry: MockConfigEntry, text: str, conv_id: str | None = None
+) -> conversation.ConversationResult:
+    return await conversation.async_converse(
+        hass, text, conv_id, context=Context(), agent_id=_agent_id(hass, entry)
+    )
+
+
+async def test_delete_flow_confirms_then_deletes(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A delete request confirms the matched automation, then deletes it on 'yes'."""
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+    deleted: list[str] = []
+
+    async def _fake_delete(_hass: HomeAssistant, config_id: str) -> None:
+        deleted.append(config_id)
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_delete_automation", _fake_delete
+    )
+
+    first = await _delete_turn(
+        hass, mock_config_entry, "delete my morning lights automation"
+    )
+    assert (
+        "Delete the automation 'Morning Lights'?"
+        in first.response.speech["plain"]["speech"]
+    )
+    second = await _delete_turn(hass, mock_config_entry, "yes", first.conversation_id)
+    assert deleted == ["id-m"]
+    assert (
+        "Deleted automation: Morning Lights"
+        in second.response.speech["plain"]["speech"]
+    )
+
+
+async def test_delete_flow_ambiguous_asks_which(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_status: None
+) -> None:
+    """More than one match asks which one, and stores no pending delete."""
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.k", "on", {"id": "k", "friendly_name": "Kitchen Lights"}
+    )
+    hass.states.async_set(
+        "automation.b", "on", {"id": "b", "friendly_name": "Bedroom Lights"}
+    )
+
+    result = await _delete_turn(hass, mock_config_entry, "delete the lights automation")
+    speech = result.response.speech["plain"]["speech"]
+    assert "which" in speech.lower()
+    assert "Kitchen Lights" in speech and "Bedroom Lights" in speech
+
+
+async def test_delete_flow_no_match(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_status: None
+) -> None:
+    """A delete request that matches nothing says so and does not act."""
+    await setup_integration(hass, mock_config_entry)
+    result = await _delete_turn(
+        hass, mock_config_entry, "delete my nonexistent automation"
+    )
+    assert "couldn't find" in result.response.speech["plain"]["speech"]
+
+
+async def test_delete_flow_decline_cancels(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Declining a delete cancels it and never calls the delete."""
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    async def _fail(_hass: HomeAssistant, _config_id: str) -> None:
+        raise AssertionError("delete must not run on decline")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_delete_automation", _fail
+    )
+
+    first = await _delete_turn(hass, mock_config_entry, "delete my morning automation")
+    assert "Delete the automation" in first.response.speech["plain"]["speech"]
+    second = await _delete_turn(hass, mock_config_entry, "no", first.conversation_id)
+    assert "Cancelled" in second.response.speech["plain"]["speech"]
+
+
+async def test_delete_flow_voice_uses_spoken_confirm(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_status: None
+) -> None:
+    """On voice, the delete confirmation is a short spoken prompt (no markdown)."""
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+    result = await conversation.async_converse(
+        hass,
+        "delete my morning lights automation",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+        satellite_id=VOICE_SATELLITE,
+    )
+    speech = result.response.speech["plain"]["speech"]
+    assert "Delete automation Morning Lights" in speech
+    assert "Say yes to confirm" in speech
+
+
+async def test_delete_commit_failure_is_a_clean_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure during the confirmed delete is a clean error response, not a raise."""
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    async def _boom(_hass: HomeAssistant, _config_id: str) -> None:
+        raise ClaudeError("couldn't delete")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_delete_automation", _boom
+    )
+
+    first = await _delete_turn(
+        hass, mock_config_entry, "delete my morning lights automation"
+    )
+    result = await _delete_turn(hass, mock_config_entry, "yes", first.conversation_id)
+    assert result.response.response_type is intent.IntentResponseType.ERROR

@@ -10,6 +10,7 @@ per-domain 403 is a backstop; Assist entity exposure is the outer ceiling.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 import yaml
@@ -22,7 +23,11 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .api import ClaudeError, PromptResult, Proposal, StreamDelta
-from .automation_commit import async_commit_automation
+from .automation_commit import (
+    async_commit_automation,
+    async_delete_automation,
+    find_automations,
+)
 from .confirm import CHAT_PENDING_TTL, DATA_PENDING_CHAT, PendingProposal
 from .const import (
     CONF_AUTO_EXECUTE,
@@ -86,6 +91,68 @@ def _surface(user_input: conversation.ConversationInput) -> str:
     return SURFACE_VOICE if user_input.satellite_id is not None else SURFACE_TEXT
 
 
+# Delete-an-automation intent. Fires only when a delete verb AND the word
+# "automation" both appear, so a normal chat turn is never intercepted. Multi-lingual
+# (en/uk/pl). Mis-detection is safe: the target still fuzzy-matches (0 -> "none
+# found") and the delete is always confirmed, so nothing is removed without a yes.
+_DELETE_VERBS = frozenset(
+    {
+        "delete",
+        "remove",
+        "видали",
+        "видалити",
+        "видаліть",
+        "прибери",
+        "приберіть",
+        "усунь",
+        "usun",
+        "usunąć",
+        "skasuj",
+        "skasować",
+    }
+)
+_AUTOMATION_WORDS = ("automation", "автоматиз", "automatyzac")
+# Create verbs: when present, "…automation that removes X" is a create request, not
+# a delete — hand it to the model instead of intercepting it.
+_CREATE_VERBS = frozenset(
+    {
+        "create",
+        "add",
+        "make",
+        "setup",
+        "створи",
+        "створити",
+        "додай",
+        "stwórz",
+        "utwórz",
+    }
+)
+
+
+def _delete_query(text: str) -> str | None:
+    """Return the target phrase if this asks to delete an automation, else None.
+
+    The returned phrase has the delete verbs and the word "automation" stripped, so
+    it is just the descriptor to match against existing automations (possibly empty,
+    in which case the caller asks which one).
+    """
+    lowered = text.lower()
+    words = re.findall(r"[^\W_]+", lowered, flags=re.UNICODE)
+    if not any(word in _DELETE_VERBS for word in words):
+        return None
+    if any(word in _CREATE_VERBS for word in words):
+        return None  # "create an automation that removes X" is a create, not a delete
+    if not any(marker in lowered for marker in _AUTOMATION_WORDS):
+        return None
+    target = [
+        word
+        for word in words
+        if word not in _DELETE_VERBS
+        and not any(word.startswith(marker) for marker in _AUTOMATION_WORDS)
+    ]
+    return " ".join(target)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ClaudeConfigEntry,
@@ -139,22 +206,25 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         # A. Resolve a confirmation that is pending for this conversation.
         pending = pending_store.pop(conv_id, None)
         if pending is not None:
-            decision = _decision(text)
-            if decision is True and pending.expires_at >= dt_util.utcnow():
-                if pending.automation is not None:
-                    return await self._async_commit_automation(
-                        user_input, chat_log, pending.automation, pending.summary
-                    )
-                return await self._async_write(
-                    user_input,
-                    chat_log,
-                    pending.prompt,
-                    pending.intents,
-                    pending.summary,
-                )
-            if decision is False:
-                return self._reply(user_input, chat_log, "Cancelled.")
+            resolved = await self._resolve_pending(user_input, chat_log, text, pending)
+            if resolved is not None:
+                return resolved
             # Neither/expired: fall through and treat as a fresh request.
+
+        # A2. A "delete my <x> automation" request is handled locally against the
+        # automation registry — it never goes to the model, and only ever removes
+        # an unambiguous, user-confirmed target.
+        delete_query = _delete_query(text)
+        if delete_query is not None:
+            return self._handle_delete_request(
+                user_input,
+                chat_log,
+                conv_id,
+                pending_store,
+                entry,
+                caller,
+                delete_query,
+            )
 
         # B. Fresh read, streamed live into the chat log. When vision is enabled,
         # attach at most one Assist-exposed camera the message clearly refers to.
@@ -329,6 +399,90 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeError as err:
             return self._error(user_input, chat_log, err)
         return self._reply(user_input, chat_log, f"Created automation: {summary}")
+
+    async def _resolve_pending(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        text: str,
+        pending: PendingProposal,
+    ) -> conversation.ConversationResult | None:
+        """Act on a pending confirmation; return None to treat the turn as fresh.
+
+        "Yes" runs the held action (delete / automation commit / entity write);
+        "no" cancels; anything else (or an expired hold) falls through.
+        """
+        decision = _decision(text)
+        if decision is True and pending.expires_at >= dt_util.utcnow():
+            if pending.delete_automation_id is not None:
+                return await self._async_delete_automation(
+                    user_input, chat_log, pending.delete_automation_id, pending.summary
+                )
+            if pending.automation is not None:
+                return await self._async_commit_automation(
+                    user_input, chat_log, pending.automation, pending.summary
+                )
+            return await self._async_write(
+                user_input,
+                chat_log,
+                pending.prompt,
+                pending.intents,
+                pending.summary,
+            )
+        if decision is False:
+            return self._reply(user_input, chat_log, "Cancelled.")
+        return None
+
+    def _handle_delete_request(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        conv_id: str,
+        pending_store: dict[str, PendingProposal],
+        entry: ClaudeConfigEntry,
+        caller: str | None,
+        query: str,
+    ) -> conversation.ConversationResult:
+        """Resolve a delete request: none -> say so, many -> ask, one -> confirm."""
+        matches = find_automations(self.coordinator.hass, query)
+        if not matches:
+            return self._reply(
+                user_input, chat_log, "I couldn't find an automation matching that."
+            )
+        if len(matches) > 1:
+            names = ", ".join(f"'{match.name}'" for match in matches)
+            return self._reply(
+                user_input, chat_log, f"I found more than one — which? {names}"
+            )
+        match = matches[0]
+        pending_store[conv_id] = PendingProposal(
+            entry_id=entry.entry_id,
+            prompt=user_input.text,
+            intents=[],
+            caller=caller,
+            summary=match.name,
+            expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
+            delete_automation_id=match.config_id,
+        )
+        if _surface(user_input) == SURFACE_VOICE:
+            message = _spoken_confirm("", f"Delete automation {match.name}")
+        else:
+            message = f"Delete the automation '{match.name}'? (yes/no)"
+        return self._reply(user_input, chat_log, message)
+
+    async def _async_delete_automation(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        config_id: str,
+        summary: str,
+    ) -> conversation.ConversationResult:
+        """Delete a confirmed automation; a failure is a clean chat error."""
+        try:
+            await async_delete_automation(self.coordinator.hass, config_id)
+        except ClaudeError as err:
+            return self._error(user_input, chat_log, err)
+        return self._reply(user_input, chat_log, f"Deleted automation: {summary}")
 
     async def _async_write(
         self,
