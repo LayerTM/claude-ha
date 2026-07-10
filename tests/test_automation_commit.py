@@ -56,6 +56,30 @@ BENIGN_TREES: list[list[dict[str, Any]]] = [
     [{"scene": "scene.night"}, {"wait_template": "{{ true }}"}],
     # allowed domains keep their safe services even though one service is denied
     [{"action": "media_player.media_pause"}, {"action": "vacuum.start"}],
+    # payload-aware: scene.apply is fine when every entity it reaches is allowed
+    [{"action": "scene.apply", "data": {"entities": {"light.x": {"state": "on"}}}}],
+    # a templated NON-target data value (a message) is fine — only refs are scanned
+    [
+        {
+            "action": "notify.notify",
+            "data": {"message": "It's {{ states('sensor.t') }} degrees"},
+        }
+    ],
+    # entity_id as a list of allowed entities; comma-string of allowed entities
+    [{"action": "light.turn_on", "target": {"entity_id": ["light.a", "switch.b"]}}],
+    [{"action": "light.turn_on", "target": {"entity_id": "light.a,light.b"}}],
+    # a call with no entity target at all (worst case: broad within an allowed domain)
+    [{"action": "light.turn_off"}],
+    # legacy `data_template` with an allowed entity is fine (inspected, not blocked)
+    [{"action": "light.turn_on", "data_template": {"entity_id": "light.x"}}],
+    # media_player.join group_members of allowed media_players is fine
+    [
+        {
+            "action": "media_player.join",
+            "target": {"entity_id": "media_player.a"},
+            "data": {"group_members": ["media_player.b", "media_player.c"]},
+        }
+    ],
 ]
 
 # Dangerous action trees — each must be REJECTED. Every nesting site is covered, plus
@@ -117,7 +141,21 @@ DANGEROUS_TREES: list[list[dict[str, Any]]] = [
     [
         {
             "action": "scene.create",
-            "data": {"scene_id": "x", "entities": {"lock.front": "unlocked"}},
+            "data": {"scene_id": "x", "entities": {"alarm_control_panel.home": "x"}},
+        }
+    ],
+    # scene.create snapshot_entities reaching a non-allowed domain
+    [
+        {
+            "action": "scene.create",
+            "data": {"snapshot_entities": ["alarm_control_panel.h"]},
+        }
+    ],
+    # media_player.join group_members (audited key) reaching a non-allowed domain
+    [
+        {
+            "action": "media_player.join",
+            "data": {"group_members": ["alarm_control_panel.home"]},
         }
     ],
     # Legacy 'service' key: unreachable post-validation, caught as defense-in-depth.
@@ -125,6 +163,57 @@ DANGEROUS_TREES: list[list[dict[str, Any]]] = [
     # payload-danger services on allowed domains (URL fetch / raw device command)
     [{"action": "media_player.play_media", "data": {"media_content_id": "http://x/a"}}],
     [{"action": "vacuum.send_command", "data": {"command": "raw"}}],
+    # --- payload-aware entity-reach + fail-closed ---
+    # a call reaching an entity OUTSIDE the allowed domains (target / legacy / data)
+    [{"action": "light.turn_on", "target": {"entity_id": "alarm_control_panel.home"}}],
+    [{"action": "light.turn_on", "entity_id": "alarm_control_panel.home"}],
+    [{"action": "light.turn_on", "data": {"entity_id": "alarm_control_panel.home"}}],
+    # scene.apply reaching a non-allowed domain via its inline entities map
+    [
+        {
+            "action": "scene.apply",
+            "data": {"entities": {"alarm_control_panel.home": {"state": "disarmed"}}},
+        }
+    ],
+    # fail-closed: device / area / floor / label targeting (unbounded, TOCTOU)
+    [{"action": "light.turn_on", "target": {"device_id": "abc"}}],
+    [{"action": "light.turn_on", "target": {"area_id": "living_room"}}],
+    [{"action": "light.turn_on", "target": {"floor_id": "ground"}}],
+    [{"action": "light.turn_on", "target": {"label_id": "night"}}],
+    # fail-closed: the "all" wildcard, a template in the entity ref, a uuid, a bad elem
+    [{"action": "light.turn_off", "target": {"entity_id": "all"}}],
+    [{"action": "light.turn_on", "target": {"entity_id": "{{ 'lock.front' }}"}}],
+    [{"action": "light.turn_on", "data": {"entity_id": "{{ 'lock.front' }}"}}],
+    [{"action": "light.turn_on", "target": {"entity_id": "0a1b2c3d4e5f"}}],
+    [
+        {
+            "action": "light.turn_on",
+            "target": {"entity_id": ["light.a", "climate.z", "z"]},
+        }
+    ],
+    # non-literal entity references: templated list element, non-str element, non-list
+    [{"action": "light.turn_on", "target": {"entity_id": ["{{ 'x' }}"]}}],
+    [{"action": "light.turn_on", "target": {"entity_id": ["light.a", 123]}}],
+    [{"action": "light.turn_on", "target": {"entity_id": 123}}],
+    # legacy `data_template` is merged at runtime like `data` — must be inspected too
+    [
+        {
+            "action": "scene.apply",
+            "data_template": {"entities": {"alarm_control_panel.home": {"state": "x"}}},
+        }
+    ],
+    [{"action": "scene.create", "data_template": {"snapshot_entities": ["camera.x"]}}],
+    [
+        {
+            "action": "light.turn_on",
+            "data_template": {"entity_id": "alarm_control_panel.h"},
+        }
+    ],
+    [{"action": "light.turn_on", "data_template": {"area_id": "living_room"}}],
+    # a whole target/data/entities BLOCK that is a template (non-dict) can't be bounded
+    [{"action": "scene.apply", "data": "{{ x }}"}],
+    [{"action": "scene.turn_on", "target": "{{ x }}"}],
+    [{"action": "scene.apply", "data": {"entities": "{{ x }}"}}],
 ]
 
 
@@ -252,6 +341,23 @@ async def test_commit_rejects_dangerous_service_end_to_end(
         await async_commit_automation(
             hass, _valid_config([{"action": "shell_command.run"}])
         )
+    assert not Path(isolated_config).is_file()
+
+
+async def test_commit_rejects_whole_data_template_escape(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A whole-`data` Jinja template can't smuggle an entity map past the gate.
+
+    End-to-end through the real validator: `async_validate_config_item` coerces the
+    whole-value template to a Template object; the gate rejects the non-dict block, so
+    the alarm-disarming automation is never written.
+    """
+    hass.services.async_register("automation", "reload", lambda call: None)
+    disarm = "{'entities': {'alarm_control_panel.home': {'state': 'disarmed'}}}"
+    escape = {"action": "scene.apply", "data": f"{{{{ {disarm} }}}}"}
+    with pytest.raises(ClaudeError):
+        await async_commit_automation(hass, _valid_config([escape]))
     assert not Path(isolated_config).is_file()
 
 
