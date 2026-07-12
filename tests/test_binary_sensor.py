@@ -84,6 +84,41 @@ async def test_alerts_binary_sensor_off(
     assert state.attributes["items"] == []
 
 
+async def test_alerts_binary_sensor_on_state_driven_by_items_not_count(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """On/off follows the item list, not the server ``active`` count.
+
+    A contrived payload where the count disagrees with the list (the contract
+    guarantees this never happens) locks the belt-and-suspenders choice: a lone
+    item with ``active: 0`` still reads on, while ``active_count`` echoes the
+    server value verbatim. A regression to ``bool(active)`` would flip this off.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json=_alerts_status(
+            active=0,
+            critical=0,
+            items=[
+                {
+                    "key": "leak:binary_sensor.kitchen",
+                    "critical": True,
+                    "line": "WATER LEAK detected: Kitchen",
+                }
+            ],
+        ),
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_alerts_binary_sensor(hass, mock_config_entry))
+    assert state is not None
+    assert state.state == STATE_ON  # the item drives it, despite active == 0
+    assert state.attributes["active_count"] == 0  # server value echoed verbatim
+
+
 async def test_alerts_binary_sensor_unavailable_without_field(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
