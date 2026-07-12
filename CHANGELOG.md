@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-12
+
+### Added
+
+- **An "Active alerts" binary sensor.** When the Claude Code add-on's proactive
+  alerts are enabled, the integration now exposes a `problem` binary sensor that is
+  **on** whenever any alert is active (a water leak, a device or your internet
+  gateway offline, low battery, high CO2, …) and **off** when all is clear, so your
+  own automations and dashboards can react to it — not just the push notification.
+  Its attributes carry the active count, how many are critical, and the full list of
+  current alerts. The sensor stays unavailable on add-on versions that don't report
+  alerts and while proactive alerts are turned off, so nothing changes until the
+  feature is in use.
+
 ## [1.5.0] - 2026-07-10
 
 ### Changed

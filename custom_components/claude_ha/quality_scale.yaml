@@ -61,7 +61,7 @@ rules:
   entity-device-class: done
   entity-disabled-by-default:
     status: exempt
-    comment: The integration exposes a single diagnostic sensor plus the agent.
+    comment: Every entity is low-volume and broadly useful, so none is disabled by default.
   entity-translations: done
   exception-translations: done
   icon-translations: done

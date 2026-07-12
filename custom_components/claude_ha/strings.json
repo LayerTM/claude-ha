@@ -87,6 +87,11 @@
       "prompt_api_cost": {
         "name": "Prompt API cost"
       }
+    },
+    "binary_sensor": {
+      "alerts_active": {
+        "name": "Active alerts"
+      }
     }
   },
   "selector": {

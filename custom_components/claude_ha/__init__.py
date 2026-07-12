@@ -43,7 +43,12 @@ from .health import (
 )
 from .services import async_setup_services
 
-PLATFORMS = (Platform.BUTTON, Platform.CONVERSATION, Platform.SENSOR)
+PLATFORMS = (
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.CONVERSATION,
+    Platform.SENSOR,
+)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 

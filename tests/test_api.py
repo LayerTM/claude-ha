@@ -149,6 +149,83 @@ async def test_status_timeout_and_budget_absent_are_none(
     assert status.budget is None
 
 
+async def test_status_parses_alerts(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An alerts object (add-on >= 1.39.0) parses into Alerts with its items."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "alerts": {
+                "active": 2,
+                "critical": 1,
+                "items": [
+                    {
+                        "key": "offline:device_tracker.ucg_fiber",
+                        "critical": True,
+                        "line": "Offline: UCG Fiber",
+                    },
+                    {
+                        "key": "co2:sensor.bedroom_co2",
+                        "critical": False,
+                        "line": "High CO2: Bedroom CO2 (1850 ppm)",
+                    },
+                ],
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.alerts is not None
+    assert status.alerts.active == 2
+    assert status.alerts.critical == 1
+    assert len(status.alerts.items) == 2
+    assert status.alerts.items[0].key == "offline:device_tracker.ucg_fiber"
+    assert status.alerts.items[0].critical is True
+    assert status.alerts.items[0].line == "Offline: UCG Fiber"
+    assert status.alerts.items[1].critical is False
+
+
+@pytest.mark.parametrize("alerts", [None, "not-a-dict", 42])
+async def test_status_alerts_absent_or_null_is_none(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, alerts: object
+) -> None:
+    """A missing field, an explicit null, or a non-dict all yield alerts=None.
+
+    An older add-on omits the key; a v1.39.0 add-on with proactive alerts off (or
+    not yet ticked) reports ``null`` — both must leave the sensor unavailable.
+    """
+    body: dict[str, object] = {"ready": True}
+    if alerts is not None:
+        body["alerts"] = alerts
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=body)
+    status = await _client(hass).async_get_status()
+    assert status.alerts is None
+
+
+async def test_status_alerts_skips_malformed_items(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Non-dict items are skipped and missing item keys default, never raising."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "alerts": {
+                "active": 1,
+                "critical": 0,
+                "items": ["garbage", {"key": "battery:sensor.x"}],
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.alerts is not None
+    assert len(status.alerts.items) == 1  # the "garbage" string was skipped
+    assert status.alerts.items[0].key == "battery:sensor.x"
+    assert status.alerts.items[0].critical is False  # missing → default
+    assert status.alerts.items[0].line == ""  # missing → default
+
+
 async def test_note_prompt_timeout_tracks_addon_budget(hass: HomeAssistant) -> None:
     """The read timeout stays a margin above the add-on budget, never below floor."""
     client = _client(hass)

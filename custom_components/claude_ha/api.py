@@ -42,6 +42,7 @@ from .const import (
     RESP_TEXT,
     RESP_TOOLS_USED,
     RESP_TRUNCATED,
+    STATUS_ALERTS,
     STATUS_BUDGET,
     STATUS_CHAT_HEALTH,
     STATUS_CLAUDE_VERSION,
@@ -148,6 +149,33 @@ class Budget:
 
 
 @dataclass(slots=True)
+class AlertItem:
+    """One active proactive-alert anomaly from ``/api/status`` (add-on >= 1.39.0).
+
+    ``line`` is the user's own home-entity string (e.g. "Offline: UCG Fiber"); it is
+    home data the user already sees in HA, NOT chat content.
+    """
+
+    key: str
+    critical: bool
+    line: str
+
+
+@dataclass(slots=True)
+class Alerts:
+    """Active proactive-alert set from ``/api/status`` (add-on >= 1.39.0).
+
+    ``None`` (rather than an instance) both when an older add-on omits the field and
+    when the add-on reports ``null`` (proactive_alerts off or not yet ticked); either
+    way the alerts binary sensor is unavailable.
+    """
+
+    active: int
+    critical: int
+    items: list[AlertItem]
+
+
+@dataclass(slots=True)
 class StatusResult:
     """Parsed 200 response of ``GET /api/status``."""
 
@@ -160,6 +188,7 @@ class StatusResult:
     chat_health: ChatHealth | None = None
     prompt_timeout_ms: int | None = None
     budget: Budget | None = None
+    alerts: Alerts | None = None
 
 
 @dataclass(slots=True)
@@ -268,6 +297,24 @@ class ClaudeClient:
             if isinstance(raw_budget, dict)
             else None
         )
+        raw_alerts = data.get(STATUS_ALERTS)
+        alerts = (
+            Alerts(
+                active=int(raw_alerts.get("active", 0)),
+                critical=int(raw_alerts.get("critical", 0)),
+                items=[
+                    AlertItem(
+                        key=str(item.get("key", "")),
+                        critical=bool(item.get("critical", False)),
+                        line=str(item.get("line", "")),
+                    )
+                    for item in raw_alerts.get("items", [])
+                    if isinstance(item, dict)
+                ],
+            )
+            if isinstance(raw_alerts, dict)
+            else None
+        )
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
@@ -278,6 +325,7 @@ class ClaudeClient:
             chat_health=chat_health,
             prompt_timeout_ms=prompt_timeout_ms,
             budget=budget,
+            alerts=alerts,
         )
 
     async def async_get_usage(self) -> UsageResult:
