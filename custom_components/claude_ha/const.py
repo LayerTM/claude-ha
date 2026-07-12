@@ -141,6 +141,11 @@ STATUS_CHAT_HEALTH: Final = "chat_health"
 STATUS_PROMPT_TIMEOUT_MS: Final = "prompt_timeout_ms"
 # Daily spend cap (add-on >= 1.21.0): {limit, spent} in USD; limit 0 means unlimited.
 STATUS_BUDGET: Final = "budget"
+# Active proactive-alert set (add-on >= 1.39.0): {active, critical, items} where each
+# item is {key, critical, line}, or null when proactive_alerts has never run. Absent
+# on older add-ons (the alerts binary sensor is then unavailable). items/line carry
+# the user's OWN home entity names and readings — home data, not chat content.
+STATUS_ALERTS: Final = "alerts"
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
