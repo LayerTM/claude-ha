@@ -1,7 +1,7 @@
 # Pinned to the current Home Assistant release that
 # pytest-homeassistant-custom-component tracks (HA 2026.7.0 on Python 3.14).
 # Bump these together when a newer HA lands.
-pytest-homeassistant-custom-component==0.13.345
+pytest-homeassistant-custom-component==0.13.346
 
 # Runtime requirements of the `conversation` and `frontend` dependencies, needed
 # to import/set them up under the test harness.
