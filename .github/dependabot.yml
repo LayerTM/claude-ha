@@ -1,3 +1,10 @@
+# Dependabot configuration.
+#
+# Groups intentionally omit `update-types`: with patterns:["*"], adding an
+# update-types filter silently suppresses major-version PRs upstream
+# (dependabot/dependabot-core#14202). Majors therefore group in with minor/patch,
+# and the dependabot-auto-merge workflow's fail-closed guard holds any group PR
+# containing a major for manual review; minor/patch-only groups auto-merge.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -21,4 +28,3 @@ updates:
     groups:
       python-dependencies:
         patterns: ["*"]
-        update-types: ["minor", "patch"]

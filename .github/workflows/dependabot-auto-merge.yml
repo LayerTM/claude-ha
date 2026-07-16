@@ -1,7 +1,8 @@
 name: Dependabot auto-merge
 
-# Automatically merges Dependabot pull requests for non-major updates once all
-# required status checks pass. Major version bumps are left for manual review.
+# Automatically merges Dependabot pull requests for minor and patch updates once
+# all required status checks pass. Anything else -- major version bumps or updates
+# whose type cannot be determined -- is left for manual review (fail-closed).
 
 on: pull_request_target
 
@@ -16,10 +17,13 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
-      - name: Enable auto-merge for non-major updates
-        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
+      # Allowlist (fail-closed): only merge when the update type is explicitly
+      # minor or patch. An empty/undetermined update-type does NOT match, so an
+      # ambiguous update is held for review instead of merged.
+      - name: Enable auto-merge for minor and patch updates
+        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch' }}
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
