@@ -13,4 +13,4 @@ home-assistant-frontend==20260624.4
 ruff==0.15.20
 mypy==2.1.0
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
-types-PyYAML==6.0.12.20250915
+types-PyYAML==6.0.12.20260518
