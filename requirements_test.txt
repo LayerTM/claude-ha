@@ -7,7 +7,7 @@ pytest-homeassistant-custom-component==0.13.345
 # to import/set them up under the test harness.
 hassil==3.8.1
 home-assistant-intents==2026.6.24
-home-assistant-frontend==20260624.4
+home-assistant-frontend==20260624.5
 
 # Lint + type-check tooling (kept in lockstep with CI and pre-commit).
 ruff==0.15.21
