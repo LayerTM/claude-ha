@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -17,7 +21,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install ruff
-        run: pip install "ruff==0.15.20"
+        run: pip install "ruff==0.15.21"
       - name: Ruff (lint)
         run: ruff check custom_components tests scripts
       - name: Ruff (format)
