@@ -31,6 +31,8 @@ from .const import (
     HEADER_CALLER,
     MODE_READ,
     MODE_WRITE,
+    PROPOSAL_INTENTS,
+    PROPOSAL_SUMMARY,
     REQUEST_EDIT_AUTOMATION,
     REQUEST_IMAGE_ENTITY,
     REQUEST_LANGUAGE,
@@ -487,8 +489,8 @@ def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
     proposal: Proposal | None = None
     if isinstance(proposal_raw, dict):
         proposal = Proposal(
-            summary=str(proposal_raw.get("summary", "")),
-            intents=list(proposal_raw.get("intents", []) or []),
+            summary=str(proposal_raw.get(PROPOSAL_SUMMARY, "")),
+            intents=list(proposal_raw.get(PROPOSAL_INTENTS, []) or []),
         )
     automation_raw = data.get(RESP_AUTOMATION)
     automation = automation_raw if isinstance(automation_raw, dict) else None

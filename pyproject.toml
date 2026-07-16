@@ -1,6 +1,8 @@
 [project]
 name = "claude-ha"
-version = "0.1.0"
+# Mirrors custom_components/claude_ha/manifest.json (the single source of truth);
+# bump both together at release. Not published to PyPI (no build-system).
+version = "1.6.0"
 description = "Home Assistant integration exposing Claude via the Claude Code add-on."
 readme = "README.md"
 license = { text = "MIT" }
