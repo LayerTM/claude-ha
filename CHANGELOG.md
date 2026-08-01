@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-08-01
+
+### Changed
+
+- **Installing no longer needs a custom repository.** The integration is listed in
+  the HACS **default** store, so the documented install path is now the *Open in
+  HACS* button (or a search for `claude-ha` — searching *Claude* alone turns up
+  several similarly-named integrations). A freshly listed repository takes a few
+  hours to reach every HACS install; until it does, the button still works, and
+  adding `LayerTM/claude-ha` as a custom repository remains documented as a last
+  resort. Existing installs are unaffected. The README also now states the Home
+  Assistant OS / Supervised requirement up front, and spells out that the
+  companion add-on still has to be added to the add-on store by repository.
+  No functional change.
+
 ## [1.6.0] - 2026-07-12
 
 ### Added
@@ -396,7 +411,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/LayerTM/claude-ha/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/LayerTM/claude-ha/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/LayerTM/claude-ha/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/LayerTM/claude-ha/compare/v1.3.0...v1.4.0

@@ -6,11 +6,12 @@
 
 **Chat with Claude from Home Assistant Assist, and call it from your automations** —
 powered by the companion Claude Code add-on running on your own hardware.
+Requires **Home Assistant OS or Supervised**.
 
 <!-- release & platform -->
 [![release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&display_name=tag&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
 [![release date](https://img.shields.io/github/release-date/LayerTM/claude-ha?color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Python](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -84,20 +85,34 @@ there is nothing to type in.
 ## Requirements
 
 - Home Assistant OS or Supervised (the integration manages a Supervisor add-on).
-- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA) available in
-  your add-on store (add its repository first).
+- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA). Home Assistant
+  doesn't ship it, so add its repository URL —
+  `https://github.com/LayerTM/ClaudeInHA` — to your add-on store once, then
+  install the add-on from there.
 
 ## Installation
 
 ### HACS
 
+This integration is listed in the **HACS default store**. A freshly listed
+repository takes a few hours to reach every HACS install, so the button below is
+the reliable route in the meantime — if your HACS doesn't know the repository
+yet, it offers to add it.
+
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=LayerTM&repository=claude-ha&category=integration)
 
-1. In HACS, add this repository as a **custom repository** (category *Integration*).
-2. Install **Claude**, then restart Home Assistant.
+1. Click **Open in HACS** above and install **Claude**. (Accept the prompt if
+   HACS asks to add the repository first.) You can also search HACS for
+   `claude-ha` — search for *Claude* alone and you'll get several
+   similarly-named integrations, while `claude-ha` matches only this one.
+2. Restart Home Assistant.
 3. Install the Claude Code add-on. Once it starts, Home Assistant offers to set
    up the **Claude** integration automatically — accept it. No configuration
    needed.
+
+Neither route working? Add `LayerTM/claude-ha` as a **custom repository**
+(category *Integration*). If HACS replies that the repository already exists in
+the store, then it is already listed — search for `claude-ha` instead.
 
 ### Manual
 
