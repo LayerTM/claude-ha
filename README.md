@@ -85,9 +85,10 @@ there is nothing to type in.
 ## Requirements
 
 - Home Assistant OS or Supervised (the integration manages a Supervisor add-on).
-- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA). It is not one
-  of Home Assistant's built-in repositories, so add `LayerTM/ClaudeInHA` to your
-  add-on store once, then install it from there.
+- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA). Home Assistant
+  doesn't ship it, so add its repository URL —
+  `https://github.com/LayerTM/ClaudeInHA` — to your add-on store once, then
+  install the add-on from there.
 
 ## Installation
 
