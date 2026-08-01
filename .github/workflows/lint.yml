@@ -20,8 +20,39 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+      # requirements_test.txt is the single source of truth for the ruff version
+      # (Dependabot updates it). Assert the pre-commit hook agrees before using
+      # it, so the three can never silently drift apart again.
+      - name: Check the ruff pin is in lockstep
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          req = pathlib.Path("requirements_test.txt").read_text()
+          pre = pathlib.Path(".pre-commit-config.yaml").read_text()
+
+          in_req = re.search(r"^ruff==(\S+)$", req, re.M)
+          in_pre = re.search(r"ruff-pre-commit\s*\n\s*rev:\s*v(\S+)", pre)
+
+          if in_req is None or in_pre is None:
+              sys.exit(
+                  "could not read the ruff pin from requirements_test.txt "
+                  f"({in_req and in_req.group(1)}) or .pre-commit-config.yaml "
+                  f"({in_pre and in_pre.group(1)}) -- has the format changed?"
+              )
+          if in_req.group(1) != in_pre.group(1):
+              sys.exit(
+                  f"ruff pin drift: requirements_test.txt={in_req.group(1)}, "
+                  f".pre-commit-config.yaml=v{in_pre.group(1)}"
+              )
+
+          print(f"ruff pin in lockstep: {in_req.group(1)}")
+          PY
+
       - name: Install ruff
-        run: pip install "ruff==0.15.21"
+        run: pip install "$(grep -E '^ruff==' requirements_test.txt)"
       - name: Ruff (lint)
         run: ruff check custom_components tests scripts
       - name: Ruff (format)

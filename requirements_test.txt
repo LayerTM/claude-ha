@@ -9,7 +9,9 @@ hassil==3.10.0
 home-assistant-intents==2026.6.24
 home-assistant-frontend==20260624.6
 
-# Lint + type-check tooling (kept in lockstep with CI and pre-commit).
+# Lint + type-check tooling. This file is the single source of truth for the
+# ruff version: CI installs it from here and fails if .pre-commit-config.yaml
+# disagrees (see .github/workflows/lint.yml).
 ruff==0.16.0
 mypy==2.3.0
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
