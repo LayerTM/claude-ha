@@ -85,28 +85,33 @@ there is nothing to type in.
 ## Requirements
 
 - Home Assistant OS or Supervised (the integration manages a Supervisor add-on).
-- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA) available in
-  your add-on store. Unlike this integration, the add-on is not in a default
-  store — add its repository to the add-on store once.
+- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA). It is not one
+  of Home Assistant's built-in repositories, so add `LayerTM/ClaudeInHA` to your
+  add-on store once, then install it from there.
 
 ## Installation
 
 ### HACS
 
-This integration is in the **HACS default store** — no custom repository needed.
+This integration is listed in the **HACS default store**. A freshly listed
+repository takes a few hours to reach every HACS install, so the button below is
+the reliable route in the meantime — if your HACS doesn't know the repository
+yet, it offers to add it.
 
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=LayerTM&repository=claude-ha&category=integration)
 
-1. In HACS, search for **Claude** (repository `LayerTM/claude-ha`) and install
-   it — or use the button above to open it directly.
+1. Click **Open in HACS** above and install **Claude**. (Accept the prompt if
+   HACS asks to add the repository first.) You can also search HACS for
+   `claude-ha` — search for *Claude* alone and you'll get several
+   similarly-named integrations, while `claude-ha` matches only this one.
 2. Restart Home Assistant.
 3. Install the Claude Code add-on. Once it starts, Home Assistant offers to set
    up the **Claude** integration automatically — accept it. No configuration
    needed.
 
-If your HACS doesn't list it yet, add `LayerTM/claude-ha` as a **custom
-repository** (category *Integration*) and install as usual — everything after
-that is identical.
+Neither route working? Add `LayerTM/claude-ha` as a **custom repository**
+(category *Integration*). If HACS replies that the repository already exists in
+the store, then it is already listed — search for `claude-ha` instead.
 
 ### Manual
 
