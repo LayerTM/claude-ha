@@ -1,18 +1,18 @@
 # Pinned to the current Home Assistant release that
 # pytest-homeassistant-custom-component tracks (HA 2026.7.0 on Python 3.14).
 # Bump these together when a newer HA lands.
-pytest-homeassistant-custom-component==0.13.348
+pytest-homeassistant-custom-component==0.13.352
 
 # Runtime requirements of the `conversation` and `frontend` dependencies, needed
 # to import/set them up under the test harness.
-hassil==3.10.0
-home-assistant-intents==2026.6.24
-home-assistant-frontend==20260624.6
+hassil==3.11.0
+home-assistant-intents==2026.7.30
+home-assistant-frontend==20260729.4
 
 # Lint + type-check tooling. This file is the single source of truth for the
 # ruff version: CI installs it from here and fails if .pre-commit-config.yaml
 # disagrees (see .github/workflows/lint.yml).
-ruff==0.16.0
+ruff==0.16.1
 mypy==2.3.0
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
 types-PyYAML==6.0.12.20260724
