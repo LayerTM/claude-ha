@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -13,8 +14,10 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    CHAT_HEALTH_DEGRADED_RATE,
     STATUS_CLAUDE_VERSION,
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
@@ -42,6 +45,11 @@ STATE_CHAT_DEGRADED = "degraded"
 
 # Fraction of the daily budget at which the soft "near the cap" flag trips.
 _NEAR_CAP_FRACTION = 0.9
+
+
+def _as_utc(epoch_ms: int | None) -> datetime | None:
+    """Render a contract epoch-ms timestamp as a UTC datetime attribute."""
+    return None if epoch_ms is None else dt_util.utc_from_timestamp(epoch_ms / 1000)
 
 
 async def async_setup_entry(
@@ -110,6 +118,11 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
     A glanceable diagnostic — never a repair — surfacing the add-on's rolling
     chat-health summary. ``degraded`` counts reads that failed even after a retry;
     ``recovered`` counts reads a retry rescued (a success, so it stays "ok").
+
+    Two facts decide the state, and neither is "a failure exists": the failure
+    RATE across the window, and how long ago the last failure was. The add-on
+    trims that window by count, never by age, so a single blip used to pin the
+    sensor to "degraded" until fifty further chats pushed it out.
     """
 
     _attr_has_entity_name = True
@@ -133,23 +146,42 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
 
     @property
     def native_value(self) -> str | None:
-        """Degraded when a recent read failed even after retry, else OK."""
+        """Degraded when failures are both frequent enough and recent enough.
+
+        Frequent enough is ``failure_rate >= CHAT_HEALTH_DEGRADED_RATE``; recent
+        enough is a last failure the add-on stamped inside the staleness horizon.
+        An add-on that stamps nothing (< 1.49.0) is judged on the rate alone, so a
+        missing timestamp never clears a warning by itself.
+        """
         health = self.coordinator.data.chat_health
         if health is None:
             return None
-        return STATE_CHAT_DEGRADED if health.degraded > 0 else STATE_CHAT_OK
+        if health.failure_rate < CHAT_HEALTH_DEGRADED_RATE:
+            return STATE_CHAT_OK
+        if health.is_failure_stale(dt_util.utcnow()):
+            return STATE_CHAT_OK
+        return STATE_CHAT_DEGRADED
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the rolling counts and the last failure reason token."""
+        """Expose the counts, the rate the state turns on, and the window's clock.
+
+        The timestamps are ``None`` on an add-on older than 1.49.0, and on history
+        it wrote before it started stamping.
+        """
         health = self.coordinator.data.chat_health
         if health is None:
             return {}
         return {
             "recent": health.recent,
+            "recent_ok": health.recent - health.degraded,
             "degraded": health.degraded,
             "recovered": health.recovered,
+            "failure_rate": round(health.failure_rate, 3),
             "last_reason": health.last_reason,
+            "last_failure": _as_utc(health.last_failure_ts),
+            "window_from": _as_utc(health.window_from_ts),
+            "window_to": _as_utc(health.window_to_ts),
         }
 
 

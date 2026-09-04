@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import MagicMock
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -17,6 +18,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from .conftest import TEST_BASE_URL, USAGE_PAYLOAD, setup_integration
 
@@ -129,9 +131,14 @@ async def test_chat_health_sensor_ok(
     assert state is not None
     assert state.state == "ok"
     assert state.attributes["recent"] == 8
+    assert state.attributes["recent_ok"] == 8
     assert state.attributes["degraded"] == 0
     assert state.attributes["recovered"] == 2
+    assert state.attributes["failure_rate"] == 0.0
     assert state.attributes.get("last_reason") is None
+    assert state.attributes["last_failure"] is None
+    assert state.attributes["window_from"] is None
+    assert state.attributes["window_to"] is None
 
 
 async def test_chat_health_sensor_degraded(
@@ -139,7 +146,11 @@ async def test_chat_health_sensor_degraded(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A recent degraded read flips the indicator to degraded with the reason token."""
+    """A failure rate over the threshold reads degraded, with the reason token.
+
+    No stamps here, so this is also the fail-closed path: an add-on older than
+    1.49.0 is judged on the rate alone and keeps warning.
+    """
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={
@@ -159,7 +170,104 @@ async def test_chat_health_sensor_degraded(
     assert state is not None
     assert state.state == "degraded"
     assert state.attributes["degraded"] == 2
+    assert state.attributes["recent_ok"] == 6
+    assert state.attributes["failure_rate"] == 0.25
     assert state.attributes["last_reason"] == "model-error"
+
+
+def _ms_ago(hours: float) -> int:
+    """Epoch ms that many hours before now, on the clock the sensor reads."""
+    return int((dt_util.utcnow() - timedelta(hours=hours)).timestamp() * 1000)
+
+
+async def test_chat_health_sensor_ok_on_isolated_old_failure(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """One failure in 38 reads, 19 h old, is noise — the bug this fix exists for."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 38,
+                "degraded": 1,
+                "recovered": 1,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(19),
+                "window_from_ts": _ms_ago(72),
+                "window_to_ts": _ms_ago(0.1),
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "ok"
+    assert state.attributes["recent_ok"] == 37
+    assert state.attributes["failure_rate"] == 0.026
+    # The context survives even though the state is ok.
+    assert state.attributes["last_reason"] == "model-error"
+    assert state.attributes["last_failure"] is not None
+    assert state.attributes["window_from"] is not None
+
+
+async def test_chat_health_sensor_ok_when_every_failure_is_stale(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A window that is all failures still reads ok once they age out."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 4,
+                "degraded": 4,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(8),
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "ok"
+    assert state.attributes["failure_rate"] == 1.0
+
+
+async def test_chat_health_sensor_degraded_when_failure_is_fresh(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """The same window with a minutes-old failure is a live outage, not noise."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 4,
+                "degraded": 4,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.05),
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "degraded"
 
 
 def _budget_status(**budget: float) -> dict[str, object]:

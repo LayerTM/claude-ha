@@ -135,6 +135,9 @@ STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 # Rolling chat-reliability summary (add-on >= 1.20.0): {recent, degraded, recovered,
 # last_reason}. last_reason is a reason TOKEN from the runner's enum, never prompt
 # content. Absent on older add-ons (the chat-health sensor is then unavailable).
+# Add-on >= 1.49.0 stamps each entry and adds {last_failure_ts, window_from_ts,
+# window_to_ts} in epoch MILLISECONDS, where null means UNKNOWN (history written by
+# an older add-on is kept, unstamped) — never "now" and never 0.
 STATUS_CHAT_HEALTH: Final = "chat_health"
 # The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
 # its wall-clock just above this so the add-on's graceful timeout answer always lands.
@@ -146,6 +149,21 @@ STATUS_BUDGET: Final = "budget"
 # on older add-ons (the alerts binary sensor is then unavailable). items/line carry
 # the user's OWN home entity names and readings — home data, not chat content.
 STATUS_ALERTS: Final = "alerts"
+
+# --- Chat-health thresholds -------------------------------------------------
+# The add-on trims its chat-health window by COUNT (cap 50), never by age, and
+# says so deliberately: it reports what happened and when, and leaves "what counts
+# as healthy" to the consumer — these two constants are that judgement.
+#
+# Share of the window that must have failed (after a retry) before the sensor reads
+# degraded. The old rule — any failure at all — pinned the sensor to degraded until
+# 50 further chats pushed the blip out, which on a quiet install is days.
+CHAT_HEALTH_DEGRADED_RATE: Final = 0.2
+# How old the last recorded failure must be before it stops counting against health,
+# whatever the rate. Needs `last_failure_ts` (add-on >= 1.49.0); an unstamped window
+# falls back to the rate alone, so a MISSING stamp can never clear a warning by
+# itself.
+CHAT_HEALTH_STALE_FAILURE_S: Final = 6 * 60 * 60
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run

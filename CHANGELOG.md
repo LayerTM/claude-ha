@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-04
+
+### Fixed
+
+- **Chat health no longer cries wolf over one old failure.** The sensor used to
+  read `degraded` if the add-on's rolling window held *any* failed chat, and that
+  window is trimmed by count (the last 50 chats), never by age — so on a quiet
+  install a single blip could keep the sensor red for days. It now reads
+  `degraded` only when failures are both frequent enough (at least a fifth of the
+  window) and recent enough (the last one under 6 hours old). One failure 19 hours
+  ago with 37 clean chats since now reads `ok`, with the detail still in the
+  attributes. ([#26](https://github.com/LayerTM/claude-ha/issues/26))
+
+### Added
+
+- **Chat health shows its working.** New attributes: `recent_ok`, `failure_rate`,
+  and — from add-on 1.49.0 — `last_failure`, `window_from` and `window_to`, so you
+  can see *when* the trouble was, not just that there was some. On an older add-on
+  the timestamps are null and the sensor judges on the rate alone; a missing
+  timestamp never clears a warning on its own.
+
 ## [1.6.1] - 2026-08-01
 
 ### Changed
@@ -411,7 +432,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/LayerTM/claude-ha/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/LayerTM/claude-ha/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/LayerTM/claude-ha/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/LayerTM/claude-ha/compare/v1.4.0...v1.5.0

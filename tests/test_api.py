@@ -7,6 +7,7 @@ import pytest
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.api import (
+    ChatHealth,
     ClaudeAuthError,
     ClaudeClient,
     ClaudeConnectionError,
@@ -17,6 +18,7 @@ from custom_components.claude_ha.api import (
 from custom_components.claude_ha.const import HEADER_CALLER, MODE_WRITE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .conftest import STATUS_PAYLOAD, TEST_BASE_URL, TEST_TOKEN
 
@@ -109,6 +111,69 @@ async def test_status_parses_chat_health(
     assert status.chat_health.degraded == 1
     assert status.chat_health.recovered == 2
     assert status.chat_health.last_reason == "no-result"
+    assert status.chat_health.last_failure_ts is None
+    assert status.chat_health.window_from_ts is None
+    assert status.chat_health.window_to_ts is None
+
+
+async def test_status_parses_chat_health_timestamps(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The 1.49.0 stamps parse; a null one stays unknown rather than becoming 0."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 38,
+                "degraded": 1,
+                "recovered": 1,
+                "last_reason": "model-error",
+                "last_failure_ts": 1757000000000,
+                "window_from_ts": None,
+                "window_to_ts": 1757100000000,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.last_failure_ts == 1757000000000
+    assert status.chat_health.window_from_ts is None
+    assert status.chat_health.window_to_ts == 1757100000000
+
+
+@pytest.mark.parametrize("raw", [0, -1, "1757000000000", True])
+async def test_status_chat_health_rejects_non_timestamps(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, raw: object
+) -> None:
+    """Anything that isn't a positive number reads as unknown, not as 1970.
+
+    A 0 taken at face value would date the failure to 1970, make it stale, and
+    silently clear the warning — the one direction this must never fail in.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 4,
+                "degraded": 4,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": raw,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.last_failure_ts is None
+    assert status.chat_health.is_failure_stale(dt_util.utcnow()) is False
+
+
+def test_chat_health_failure_rate_empty_window() -> None:
+    """An empty window divides by nothing and reads as no failures."""
+    health = ChatHealth(recent=0, degraded=0, recovered=0, last_reason=None)
+    assert health.failure_rate == 0.0
 
 
 async def test_status_chat_health_absent_is_none(

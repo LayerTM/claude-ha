@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass, field
+from datetime import datetime
 from http import HTTPStatus
 import json
 from typing import Any, NoReturn
@@ -26,6 +27,7 @@ from .const import (
     API_PROMPT,
     API_STATUS,
     API_USAGE,
+    CHAT_HEALTH_STALE_FAILURE_S,
     CONTENT_TYPE_NDJSON,
     DOMAIN,
     HEADER_CALLER,
@@ -134,12 +136,39 @@ class StreamDelta:
 
 @dataclass(slots=True)
 class ChatHealth:
-    """Rolling chat-reliability summary from ``/api/status`` (add-on >= 1.20.0)."""
+    """Rolling chat-reliability summary from ``/api/status`` (add-on >= 1.20.0).
+
+    The timestamps are epoch milliseconds and arrive with add-on 1.49.0; ``None``
+    means UNKNOWN, either because the add-on is older or because the entry was
+    written before it started stamping. The add-on trims this window by count
+    (cap 50), never by age — deciding what counts as healthy is deliberately left
+    to this side.
+    """
 
     recent: int
     degraded: int
     recovered: int
     last_reason: str | None
+    last_failure_ts: int | None = None
+    window_from_ts: int | None = None
+    window_to_ts: int | None = None
+
+    @property
+    def failure_rate(self) -> float:
+        """Share of the window that failed even after a retry; 0.0 on an empty one."""
+        return self.degraded / self.recent if self.recent > 0 else 0.0
+
+    def is_failure_stale(self, now: datetime) -> bool:
+        """Whether the last recorded failure is too old to count against health.
+
+        An unknown timestamp is NOT stale: an add-on older than 1.49.0 stamps
+        nothing, and a missing stamp must never clear a warning on its own.
+        """
+        if self.last_failure_ts is None:
+            return False
+        return (
+            now.timestamp() - self.last_failure_ts / 1000 > CHAT_HEALTH_STALE_FAILURE_S
+        )
 
 
 @dataclass(slots=True)
@@ -282,6 +311,9 @@ class ClaudeClient:
                 degraded=int(raw_health.get("degraded", 0)),
                 recovered=int(raw_health.get("recovered", 0)),
                 last_reason=raw_health.get("last_reason"),
+                last_failure_ts=_epoch_ms(raw_health.get("last_failure_ts")),
+                window_from_ts=_epoch_ms(raw_health.get("window_from_ts")),
+                window_to_ts=_epoch_ms(raw_health.get("window_to_ts")),
             )
             if isinstance(raw_health, dict)
             else None
@@ -481,6 +513,19 @@ class ClaudeClient:
             raise ClaudeConnectionError("Timed out talking to the add-on") from err
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
+
+
+def _epoch_ms(raw: Any) -> int | None:
+    """Coerce a contract timestamp to epoch ms, or ``None`` when it says nothing.
+
+    The contract spells ``null`` as UNKNOWN — never "now", never 0 — so anything
+    that isn't a positive number reads as unknown. That direction is deliberate:
+    an unknown timestamp leaves the failure counting against health, while a 0
+    taken at face value would date it to 1970 and silently clear the warning.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return int(raw) if raw > 0 else None
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
