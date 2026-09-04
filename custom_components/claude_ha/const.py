@@ -182,10 +182,29 @@ CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
 # early: a rate over a count-trimmed window cannot see a fresh outage until it has
 # diluted the window, which in a full 50-chat window is five failures deep.
 #
-# Three, because each of these already survived the add-on's own retry, and because
-# a run is blind to how often a flaky install fails and sensitive to whether it is
-# failing NOW — an install failing every second chat still almost never produces
-# three in a row, so this cannot make a flapping window flicker.
+# Three is a judgement, and what follows is the measurement it rests on rather
+# than the intuition it used to. The only regime where this clause decides
+# anything is BELOW the rate threshold — above it the rate has already fired and
+# the run merely gets there sooner. So the false-alarm question is: how often does
+# a merely-flaky install produce a trailing run of three by chance?
+#
+# Simulated, 200k windows of 50 at each rate:
+#
+#   fail rate   P(trailing run >= 2)   P(trailing run >= 3)
+#   0.50                     24.93%                 12.49%   <- rate already fires
+#   0.10                      1.01%                  0.11%   <- at the threshold
+#   0.05                      0.24%                  0.01%   <- run is the only signal
+#   0.02                      0.04%                  0.00%
+#
+# Two would also be defensible; it costs roughly 20x the false alarms in that
+# regime, which is 0.24% against 0.01%. One is not: a single isolated failure is
+# the complaint this whole rule exists to stop shouting about.
+#
+# The earlier justification here claimed an install failing every second chat
+# "almost never" produces three in a row. That is false for a random process —
+# 12.49% above — and true only of a DETERMINISTIC alternating pattern, whose
+# trailing run is 1 at every period and phase. The conclusion survived; the reason
+# given for it did not.
 CHAT_HEALTH_OUTAGE_RUN: Final = 3
 # How old the last recorded failure must be before it stops counting against health,
 # whatever the rate. Needs `last_failure_ts` (add-on >= 1.49.0); an unstamped window

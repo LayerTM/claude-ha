@@ -223,6 +223,16 @@ class ChatHealth:
         ``None`` on an add-on older than 1.49.0, which raises nothing early — the
         same fail-closed direction as every other missing field, since absence
         neither clears a warning nor invents one.
+
+        This is counted by entry ORDER, so it works on history an older add-on
+        wrote without timestamps — which is its whole value right after an update,
+        when no stamp exists yet and the staleness rescue is unavailable in
+        principle. It also means a run can be raised on entries whose age is
+        unknown, and an unknown age is deliberately not stale, so that state has
+        no time-based exit: it clears when a chat next succeeds, not on a timer.
+        Kept that way on purpose. The alternative — treating an unknown age as
+        aged-out — would fail open on exactly the case this clause exists to
+        catch, and the exit costs one successful chat.
         """
         return (
             self.consecutive_failed is not None
