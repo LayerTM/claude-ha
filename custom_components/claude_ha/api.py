@@ -15,7 +15,7 @@ from datetime import datetime
 from http import HTTPStatus
 import json
 import math
-from typing import Any, NoReturn
+from typing import Any, Final, NoReturn
 
 from aiohttp import ClientError, ClientSession
 from awesomeversion import AwesomeVersion, AwesomeVersionException
@@ -578,6 +578,13 @@ class ClaudeClient:
             raise ClaudeConnectionError(str(err)) from err
 
 
+# Largest integer Home Assistant's JSON encoder will carry in a state attribute;
+# the next value up raises `TypeError: Integer exceeds 64-bit range` in the
+# recorder and on the websocket, after the state has already been set. Measured
+# against `homeassistant.helpers.json.json_bytes`, not assumed.
+_MAX_JSON_INT: Final = 2**64 - 1
+
+
 def _parse_chat_health(raw: Any) -> ChatHealth | None:
     """Build a ``ChatHealth`` from the status block, or ``None`` if it says nothing.
 
@@ -654,11 +661,19 @@ def _non_negative_int(raw: Any) -> int | None:
     The sign is tested BEFORE truncation, unlike ``_epoch_ms``: ``int(-0.5)`` is
     ``0``, and 0 is a claim here — "the newest run failed" — not an absence.
 
-    Validity is again decided by doing the arithmetic the caller will do. A count
-    can be a perfectly readable integer and still be unusable: stdlib ``json``
-    parses a 400-digit literal into an exact ``int``, which survives every type
-    check here and then raises ``OverflowError`` inside ``failure_rate`` — at
-    attribute-render time, well away from the parser.
+    Validity is again decided by what the value has to survive downstream, and a
+    count has two such steps rather than one. It is divided, in ``failure_rate``:
+    stdlib ``json`` parses a 400-digit literal into an exact ``int``, which
+    survives every type check here and then raises ``OverflowError`` there. And it
+    is PUBLISHED, as a state attribute: Home Assistant's JSON encoder carries
+    integers up to ``2**64 - 1`` and refuses the next one, which fails later still
+    — in the recorder and on the websocket, after the state has already been set.
+
+    Both bounds come from the consumers rather than from a number someone picked,
+    which is the only reason either can be defended. Neither is reachable for a
+    window the add-on caps at 50 runs; they are here because every earlier version
+    of this guard predicted which values would survive a later step, and each
+    prediction missed a family.
     """
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
@@ -667,7 +682,8 @@ def _non_negative_int(raw: Any) -> int | None:
             return None
     except OverflowError:
         return None
-    return int(raw)
+    value = int(raw)
+    return value if value <= _MAX_JSON_INT else None
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:

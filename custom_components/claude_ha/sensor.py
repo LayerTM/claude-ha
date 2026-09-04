@@ -142,7 +142,13 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
 
     @property
     def available(self) -> bool:
-        """Unavailable on add-ons that don't report chat health (< 1.20.0)."""
+        """Unavailable when the add-on reports no readable chat health.
+
+        Two causes, and the second is the one worth knowing while debugging: an
+        add-on older than 1.20.0 doesn't send the block at all, and a block whose
+        counts can't be read is dropped rather than defaulted, because a count
+        defaulted to zero would read as "no failures".
+        """
         data = self.coordinator.data
         return super().available and data is not None and data.chat_health is not None
 

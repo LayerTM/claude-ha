@@ -7,6 +7,7 @@ import pytest
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.api import (
+    _MAX_JSON_INT,
     ChatHealth,
     ClaudeAuthError,
     ClaudeClient,
@@ -24,6 +25,7 @@ from custom_components.claude_ha.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.json import json_bytes
 from homeassistant.util import dt as dt_util
 
 from .conftest import STATUS_PAYLOAD, TEST_BASE_URL, TEST_TOKEN
@@ -270,6 +272,22 @@ async def test_status_chat_health_unreadable_counts_yield_no_block(
     status = await _client(hass).async_get_status()
     assert status.ready is True
     assert status.chat_health is None
+
+
+def test_count_ceiling_matches_what_home_assistant_can_publish() -> None:
+    """The parser's ceiling is the encoder's, asserted against the encoder itself.
+
+    A count above it sets the state fine and then fails in the recorder and on the
+    websocket, after the fact. Tying the constant to `json_bytes` here means the
+    two cannot drift apart: if Home Assistant's limit ever moves, this fails
+    rather than the sensor.
+    """
+    assert json_bytes({"v": _MAX_JSON_INT})
+    with pytest.raises(TypeError):
+        json_bytes({"v": _MAX_JSON_INT + 1})
+
+    assert _non_negative_int(_MAX_JSON_INT) == _MAX_JSON_INT
+    assert _non_negative_int(_MAX_JSON_INT + 1) is None
 
 
 def test_chat_health_staleness_boundary_is_strict() -> None:
