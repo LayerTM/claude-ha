@@ -171,47 +171,42 @@ class ChatHealth:
 
     @property
     def has_recovered(self) -> bool:
-        """Whether the window has a clean run that outlasts the trouble before it.
+        """Whether the clean run since the last failure outlasts the failures.
 
-        This is the evidence-shaped answer to "is this still happening", and it
-        rescues the case no rate can: a short window where one old failure keeps
-        the rate high however many clean runs follow it. Two things must hold, and
-        each names a different fact.
+        The evidence-shaped answer to "is this still happening", and the one that
+        rescues what no rate can: a window still carrying the failure count of an
+        outage that has visibly ended. Two clauses, each a different fact.
 
-        **Every success came after the last failure.** Written as ``==`` rather
-        than ``>=`` on purpose. ``consecutive_ok`` cannot exceed the success count
-        while the add-on counts correctly, so the two agree on every valid input —
-        but ``>=`` is the LENIENT direction, and it lets a count that is too high
-        clear a window it never earned. Equality also disposes of a nonsensical
-        ``degraded > recent``, where the success count goes negative and any
-        positive count would sit above it.
+        **The clean run is longer than the failures behind it.** Strictly longer.
+        Without it, an almost-entirely-failed window is cleared by the single
+        success it happens to contain — 49 failures and one success — and a rescue
+        that overrules the clauses able to raise a warning has to rest on more than
+        one observation. It is a floor that scales with the window rather than a
+        number someone picked, and it also disposes of the empty window and of the
+        all-failed window for free, since neither has any clean run at all.
 
-        **The clean run is longer than the failures behind it.** Without this, an
-        almost-entirely-failed window is cleared by the single success it happens
-        to contain: 49 failures and one success satisfies "every success came
-        after the last failure" for the trivial reason that there is only one. A
-        rescue that overrules the sole clause able to raise a warning has to rest
-        on more than one observation, and this is the floor that scales with the
-        window instead of being picked. It also subsumes the zero case — an
-        all-failed window has no successes and none since, and ``0 == 0`` alone
-        would clear the loudest case there is.
+        **The count does not exceed the successes that exist.** ``consecutive_ok``
+        cannot be larger than ``recent - degraded`` while the add-on counts
+        correctly, so on valid input this clause never fires; it is here for
+        invalid input, where it refuses a count that is too high, and a nonsensical
+        ``degraded > recent`` whose success count goes negative.
 
-        Strictly longer, not merely as long. Measured over every window up to 50,
-        ``>`` and ``>=`` disagree on 26 inputs and all of them sit at a failure
-        rate of exactly 0.5, so the choice only ever decides whether a window that
-        is half failures may clear itself. The disputed case that looks worst — a
-        first chat that fails and a second that succeeds — resolves on the user's
-        very next successful chat, not on the six-hour timer, so the strict form
-        costs one chat of patience and buys refusing to call a coin-flip
-        recovered. It also leaves an empty window reporting False for free, where
-        the lenient form needs a guard to avoid claiming recovery from no evidence
-        at all.
+        This second clause used to be written as ``==``, and the add-on's owner
+        measured on a live install what that cost: equality demands that EVERY
+        success in the window came after the last failure, which is only true of a
+        monotone window — in practice, a nearly-new install. On the case this
+        rescue exists for, an outage that ended after ten failures with fifteen
+        clean chats since, equality reported not-recovered and the sensor stayed
+        red until the six-hour timer, which is the complaint this whole rule was
+        written to fix, in a new shape. Relaxing it to the bound it was always
+        meant to be changes no hostile case: fourteen accumulated over review,
+        including every miscount family, read identically.
         """
         if self.consecutive_ok is None:
             return False
         return (
-            self.consecutive_ok == self.recent - self.degraded
-            and self.consecutive_ok > self.degraded
+            self.consecutive_ok > self.degraded
+            and self.consecutive_ok <= self.recent - self.degraded
         )
 
     @property

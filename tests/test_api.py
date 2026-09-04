@@ -351,9 +351,16 @@ def test_chat_health_failure_rate_empty_window() -> None:
         (3, 1, 2, True),
         (10, 2, 8, True),
         (5, 0, 5, True),
-        # A success sits BEFORE the last failure, so the window still flaps.
+        # The clean run merely matches the failure count: not yet convincing,
+        # and the shape a window failing every fourth chat keeps producing.
         (12, 3, 3, False),
-        (10, 2, 5, False),
+        # A success before the last failure is normal for any window that is not
+        # brand new. Demanding otherwise is what kept a finished outage red.
+        (10, 2, 5, True),
+        # The outage ended and the clean run has outgrown it.
+        (50, 10, 15, True),
+        # The same outage three chats after it ended — not yet.
+        (50, 10, 3, False),
         # The whole window failed: 0 successes, 0 since — never recovery, even
         # though `0 == 0` holds.
         (4, 4, 0, False),
@@ -383,7 +390,11 @@ def test_chat_health_failure_rate_empty_window() -> None:
 def test_chat_health_has_recovered(
     recent: int, degraded: int, consecutive_ok: int | None, expected: bool
 ) -> None:
-    """Recovery is a clean run that both follows every failure and outlasts them."""
+    """Recovery is a clean run that outlasts the failures, bounded by the successes.
+
+    The bound only ever fires on input the add-on could not have produced; the
+    floor is what does the work.
+    """
     health = ChatHealth(
         recent=recent,
         degraded=degraded,
