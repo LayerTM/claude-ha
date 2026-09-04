@@ -11,14 +11,17 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass, field
+from datetime import datetime
 from http import HTTPStatus
 import json
-from typing import Any, NoReturn
+import math
+from typing import Any, Final, NoReturn
 
 from aiohttp import ClientError, ClientSession
 from awesomeversion import AwesomeVersion, AwesomeVersionException
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ADDON_MIN_EDIT_VERSION,
@@ -26,6 +29,8 @@ from .const import (
     API_PROMPT,
     API_STATUS,
     API_USAGE,
+    CHAT_HEALTH_OUTAGE_RUN,
+    CHAT_HEALTH_STALE_FAILURE_S,
     CONTENT_TYPE_NDJSON,
     DOMAIN,
     HEADER_CALLER,
@@ -134,12 +139,126 @@ class StreamDelta:
 
 @dataclass(slots=True)
 class ChatHealth:
-    """Rolling chat-reliability summary from ``/api/status`` (add-on >= 1.20.0)."""
+    """Rolling chat-reliability summary from ``/api/status`` (add-on >= 1.20.0).
+
+    The timestamps are epoch milliseconds and arrive with add-on 1.49.0; ``None``
+    means UNKNOWN, either because the add-on is older or because the entry was
+    written before it started stamping. ``consecutive_ok`` arrives in the same
+    version but is counted by entry order rather than by clock, so it is a plain
+    number even on unstamped history — ``None`` here only ever means "older add-on".
+
+    The add-on trims this window by count (cap 50), never by age — deciding what
+    counts as healthy is deliberately left to this side.
+
+    ``degraded`` and ``recovered`` are disjoint subsets of ``recent`` (a recovered
+    read is a success), so ``recent - degraded`` is the window's success count.
+    """
 
     recent: int
     degraded: int
     recovered: int
     last_reason: str | None
+    last_failure_ts: int | None = None
+    window_from_ts: int | None = None
+    window_to_ts: int | None = None
+    consecutive_ok: int | None = None
+    consecutive_failed: int | None = None
+
+    @property
+    def failure_rate(self) -> float:
+        """Share of the window that failed even after a retry; 0.0 on an empty one."""
+        return self.degraded / self.recent if self.recent > 0 else 0.0
+
+    @property
+    def has_recovered(self) -> bool:
+        """Whether the clean run since the last failure outlasts the failures.
+
+        The evidence-shaped answer to "is this still happening", and the one that
+        rescues what no rate can: a window still carrying the failure count of an
+        outage that has visibly ended. Two clauses, each a different fact.
+
+        **The clean run is longer than the failures behind it.** Strictly longer.
+        Without it, an almost-entirely-failed window is cleared by the single
+        success it happens to contain — 49 failures and one success — and a rescue
+        that overrules the clauses able to raise a warning has to rest on more than
+        one observation. It is a floor that scales with the window rather than a
+        number someone picked, and it also disposes of the empty window and of the
+        all-failed window for free, since neither has any clean run at all.
+
+        **The count does not exceed the successes that exist.** ``consecutive_ok``
+        cannot be larger than ``recent - degraded`` while the add-on counts
+        correctly, so on valid input this clause never fires; it is here for
+        invalid input, where it refuses a count that is too high, and a nonsensical
+        ``degraded > recent`` whose success count goes negative. Unreachable on
+        valid input is not dead code, and this is the only clause standing between
+        a miscounting add-on and a cleared warning — ``4/4/5``, ``4/4/99`` and
+        ``10/2/99`` all read as recovered without it.
+
+        This second clause used to be written as ``==``, and the add-on's owner
+        measured on a live install what that cost: equality demands that EVERY
+        success in the window came after the last failure, which is only true of a
+        monotone window — in practice, a nearly-new install. On the case this
+        rescue exists for, an outage that ended after ten failures with fifteen
+        clean chats since, equality reported not-recovered and the sensor stayed
+        red until the six-hour timer, which is the complaint this whole rule was
+        written to fix, in a new shape. Relaxing it to the bound it was always
+        meant to be changes no hostile case: fourteen accumulated over review,
+        including every miscount family, read identically.
+        """
+        if self.consecutive_ok is None:
+            return False
+        return (
+            self.consecutive_ok > self.degraded
+            and self.consecutive_ok <= self.recent - self.degraded
+        )
+
+    @property
+    def is_outage_run(self) -> bool:
+        """Whether the newest runs are an unbroken run of failures, not a blip.
+
+        The only signal here that can RAISE the state on its own. Everything else
+        is a rate over a count-trimmed window, which by construction cannot see a
+        fresh outage until it has diluted that window — five failures deep in a
+        full one. A run of failures is blind to how often the install fails and
+        sensitive to whether it is failing right now, which is the opposite blind
+        spot, so the two together cover each other.
+
+        ``None`` on an add-on older than 1.49.0, which raises nothing early — the
+        same fail-closed direction as every other missing field, since absence
+        neither clears a warning nor invents one.
+
+        This is counted by entry ORDER, so it works on history an older add-on
+        wrote without timestamps — which is its whole value right after an update,
+        when no stamp exists yet and the staleness rescue is unavailable in
+        principle. It also means a run can be raised on entries whose age is
+        unknown, and an unknown age is deliberately not stale, so that state has
+        no time-based exit: it clears when a chat next succeeds, not on a timer.
+        Kept that way on purpose. The alternative — treating an unknown age as
+        aged-out — would fail open on exactly the case this clause exists to
+        catch, and the exit costs one successful chat.
+
+        Note the deliberate asymmetry, because it looks like a bug from outside:
+        three failures to raise, one success to release. A sensor answering "is
+        chat failing NOW" should be quick to warn and quick to forgive, so the
+        state can legitimately move on consecutive chats. Every such transition
+        follows a real chat outcome; none is a spurious toggle.
+        """
+        return (
+            self.consecutive_failed is not None
+            and self.consecutive_failed >= CHAT_HEALTH_OUTAGE_RUN
+        )
+
+    def is_failure_stale(self, now: datetime) -> bool:
+        """Whether the last recorded failure is too old to count against health.
+
+        An unknown timestamp is NOT stale: an add-on older than 1.49.0 stamps
+        nothing, and a missing stamp must never clear a warning on its own.
+        """
+        if self.last_failure_ts is None:
+            return False
+        return (
+            now.timestamp() - self.last_failure_ts / 1000 > CHAT_HEALTH_STALE_FAILURE_S
+        )
 
 
 @dataclass(slots=True)
@@ -275,17 +394,7 @@ class ClaudeClient:
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
         ha_mcp = data.get(STATUS_HA_MCP)
         connected = data.get(STATUS_HA_MCP_CONNECTED)
-        raw_health = data.get(STATUS_CHAT_HEALTH)
-        chat_health = (
-            ChatHealth(
-                recent=int(raw_health.get("recent", 0)),
-                degraded=int(raw_health.get("degraded", 0)),
-                recovered=int(raw_health.get("recovered", 0)),
-                last_reason=raw_health.get("last_reason"),
-            )
-            if isinstance(raw_health, dict)
-            else None
-        )
+        chat_health = _parse_chat_health(data.get(STATUS_CHAT_HEALTH))
         raw_timeout = data.get(STATUS_PROMPT_TIMEOUT_MS)
         prompt_timeout_ms = (
             int(raw_timeout) if isinstance(raw_timeout, (int, float)) else None
@@ -481,6 +590,114 @@ class ClaudeClient:
             raise ClaudeConnectionError("Timed out talking to the add-on") from err
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
+
+
+# Largest integer Home Assistant's JSON encoder will carry in a state attribute;
+# the next value up raises `TypeError: Integer exceeds 64-bit range` in the
+# recorder and on the websocket, after the state has already been set. Measured
+# against `homeassistant.helpers.json.json_bytes`, not assumed.
+_MAX_JSON_INT: Final = 2**64 - 1
+
+
+def _parse_chat_health(raw: Any) -> ChatHealth | None:
+    """Build a ``ChatHealth`` from the status block, or ``None`` if it says nothing.
+
+    The three counts decide the sensor's state, so a block whose counts cannot be
+    read is worth less than no block at all: ``None`` leaves the sensor
+    unavailable, which is honest, where defaulting them to zero would read as "no
+    failures" — the one answer that must never be invented. Malformed values are
+    also how the poll used to die: ``int(None)`` and ``int("abc")`` raise
+    ``TypeError``/``ValueError``, neither a ``ClaudeError``, so the coordinator
+    could not catch them and every status entity went unavailable each minute.
+    """
+    if not isinstance(raw, dict):
+        return None
+    recent = _non_negative_int(raw.get("recent", 0))
+    degraded = _non_negative_int(raw.get("degraded", 0))
+    recovered = _non_negative_int(raw.get("recovered", 0))
+    if recent is None or degraded is None or recovered is None:
+        return None
+    return ChatHealth(
+        recent=recent,
+        degraded=degraded,
+        recovered=recovered,
+        last_reason=raw.get("last_reason"),
+        last_failure_ts=_epoch_ms(raw.get("last_failure_ts")),
+        window_from_ts=_epoch_ms(raw.get("window_from_ts")),
+        window_to_ts=_epoch_ms(raw.get("window_to_ts")),
+        consecutive_ok=_non_negative_int(raw.get("consecutive_ok")),
+        consecutive_failed=_non_negative_int(raw.get("consecutive_failed")),
+    )
+
+
+def _epoch_ms(raw: Any) -> int | None:
+    """Coerce a contract timestamp to epoch ms, or ``None`` when it says nothing.
+
+    The contract spells ``null`` as UNKNOWN — never "now", never 0 — so anything
+    that isn't a positive whole millisecond reads as unknown. That direction is
+    deliberate: an unknown timestamp leaves the failure counting against health,
+    while a 0 taken at face value would date it to 1970 and silently clear the
+    warning.
+
+    The test is applied to the TRUNCATED value, not the raw one. Testing the raw
+    value first let anything in ``(0, 1)`` pass ``> 0`` and then truncate to
+    exactly the 0 being guarded against — the one direction this must never fail
+    in.
+
+    Validity is decided by performing the conversion the caller needs, rather than
+    by predicting which values survive it. stdlib ``json`` — which aiohttp decodes
+    with — accepts both ``Infinity`` and an arbitrarily long integer literal, and
+    each of those crashes a different step: ``int(inf)`` raises ``OverflowError``,
+    and so does ``math.isfinite`` on an int too large to become a float, which is
+    how the guard that closed the first case reintroduced it. Neither is a
+    ``ClaudeError``, so either would escape the coordinator and take every status
+    entity unavailable once a minute.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    try:
+        value = int(raw)
+        if value <= 0:
+            return None
+        dt_util.utc_from_timestamp(value / 1000)
+    except OverflowError, OSError, ValueError:
+        return None
+    return value
+
+
+def _non_negative_int(raw: Any) -> int | None:
+    """Coerce a contract count to an int, or ``None`` when it says nothing.
+
+    Absent means an add-on older than 1.49.0. Anything else that isn't a
+    non-negative number is read as unknown, which withholds the recovery rescue
+    rather than granting it on a value nobody can explain.
+
+    The sign is tested BEFORE truncation, unlike ``_epoch_ms``: ``int(-0.5)`` is
+    ``0``, and 0 is a claim here — "the newest run failed" — not an absence.
+
+    Validity is again decided by what the value has to survive downstream, and a
+    count has two such steps rather than one. It is divided, in ``failure_rate``:
+    stdlib ``json`` parses a 400-digit literal into an exact ``int``, which
+    survives every type check here and then raises ``OverflowError`` there. And it
+    is PUBLISHED, as a state attribute: Home Assistant's JSON encoder carries
+    integers up to ``2**64 - 1`` and refuses the next one, which fails later still
+    — in the recorder and on the websocket, after the state has already been set.
+
+    Both bounds come from the consumers rather than from a number someone picked,
+    which is the only reason either can be defended. Neither is reachable for a
+    window the add-on caps at 50 runs; they are here because every earlier version
+    of this guard predicted which values would survive a later step, and each
+    prediction missed a family.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    try:
+        if not math.isfinite(float(raw)) or raw < 0:
+            return None
+    except OverflowError:
+        return None
+    value = int(raw)
+    return value if value <= _MAX_JSON_INT else None
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:

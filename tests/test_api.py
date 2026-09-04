@@ -7,16 +7,26 @@ import pytest
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.api import (
+    _MAX_JSON_INT,
+    ChatHealth,
     ClaudeAuthError,
     ClaudeClient,
     ClaudeConnectionError,
     ClaudeError,
     ClaudeRateLimitError,
     ClaudeRequestError,
+    _epoch_ms,
+    _non_negative_int,
 )
-from custom_components.claude_ha.const import HEADER_CALLER, MODE_WRITE
+from custom_components.claude_ha.const import (
+    CHAT_HEALTH_STALE_FAILURE_S,
+    HEADER_CALLER,
+    MODE_WRITE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.json import json_bytes
+from homeassistant.util import dt as dt_util
 
 from .conftest import STATUS_PAYLOAD, TEST_BASE_URL, TEST_TOKEN
 
@@ -109,6 +119,317 @@ async def test_status_parses_chat_health(
     assert status.chat_health.degraded == 1
     assert status.chat_health.recovered == 2
     assert status.chat_health.last_reason == "no-result"
+    assert status.chat_health.last_failure_ts is None
+    assert status.chat_health.window_from_ts is None
+    assert status.chat_health.window_to_ts is None
+
+
+async def test_status_parses_chat_health_timestamps(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The 1.49.0 stamps parse; a null one stays unknown rather than becoming 0."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 38,
+                "degraded": 1,
+                "recovered": 1,
+                "last_reason": "model-error",
+                "last_failure_ts": 1757000000000,
+                "window_from_ts": None,
+                "window_to_ts": 1757100000000,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.last_failure_ts == 1757000000000
+    assert status.chat_health.window_from_ts is None
+    assert status.chat_health.window_to_ts == 1757100000000
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        0,
+        -1,
+        "1757000000000",
+        True,
+        # The (0, 1) family: these pass a raw `> 0` test and then truncate to
+        # exactly the 0 being guarded against, dating the failure to 1970 and
+        # clearing the warning. The guard must run on the truncated value.
+        0.5,
+        0.999,
+        1e-9,
+    ],
+)
+async def test_status_chat_health_rejects_non_timestamps(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, raw: object
+) -> None:
+    """Anything that isn't a positive number reads as unknown, not as 1970.
+
+    A 0 taken at face value would date the failure to 1970, make it stale, and
+    silently clear the warning — the one direction this must never fail in.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 4,
+                "degraded": 4,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": raw,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.last_failure_ts is None
+    assert status.chat_health.is_failure_stale(dt_util.utcnow()) is False
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        # An int too large to become a float. `math.isfinite` coerces, so the
+        # guard that closed the Infinity case reintroduced the same crash here.
+        int("9" * 400),
+        # In range as a number, out of range as a date.
+        10**18,
+    ],
+)
+def test_parsers_survive_unusable_numbers(raw: float) -> None:
+    """A non-finite number reads as unknown instead of raising out of the parser.
+
+    ``int(inf)`` raises ``OverflowError``, which is not a ``ClaudeError``, so it
+    would escape the coordinator's handler and take every status entity
+    unavailable on each poll. Reachable because aiohttp decodes with stdlib
+    ``json``, which accepts ``Infinity`` and ``NaN``.
+
+    Tested against the parser directly, not over the wire: the aiohttp test double
+    decodes with HA's orjson-backed loader, which REJECTS those tokens, so a
+    wire-level test here would be measuring the mock rather than the code.
+    """
+    assert _epoch_ms(raw) is None
+    if raw != 10**18:
+        # 10**18 is out of range as a DATE but is a usable count; every other
+        # value here is unusable as either.
+        assert _non_negative_int(raw) is None
+
+
+@pytest.mark.parametrize("field", ["recent", "degraded", "recovered"])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,  # the key present but null
+        "abc",
+        float("inf"),
+        -1,
+    ],
+)
+async def test_status_chat_health_unreadable_counts_yield_no_block(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    bad: object,
+    field: str,
+) -> None:
+    """A count that cannot be read drops the block instead of inventing a zero.
+
+    Two failure modes at once. `int(None)` and `int("abc")` raise `TypeError` /
+    `ValueError`, neither a `ClaudeError`, so they escaped the coordinator and
+    took every status entity unavailable once a minute. And defaulting the count
+    to 0 would have read as "no failures" — the one answer that must never be
+    invented. `None` leaves the sensor unavailable, which is honest.
+
+    An over-64-bit integer belongs to the same family but cannot be sent through
+    this mock — HA's JSON encoder refuses it, while stdlib `json` (what aiohttp
+    decodes with in production) parses it happily. It is covered against the
+    parser directly instead; see `test_parsers_survive_unusable_numbers`.
+
+    Every count is exercised, not just one: with only `degraded` malformed,
+    dropping either of the other two guards survived the whole suite — and for
+    `recent` that mutant re-enters this very failure mode, because `failure_rate`
+    then divides by `None`.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                **{"recent": 8, "degraded": 1, "recovered": 0},
+                field: bad,
+                "last_reason": "model-error",
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.ready is True
+    assert status.chat_health is None
+
+
+def test_count_ceiling_matches_what_home_assistant_can_publish() -> None:
+    """The parser's ceiling is the encoder's, asserted against the encoder itself.
+
+    A count above it sets the state fine and then fails in the recorder and on the
+    websocket, after the fact. Tying the constant to `json_bytes` here means the
+    two cannot drift apart: if Home Assistant's limit ever moves, this fails
+    rather than the sensor.
+    """
+    assert json_bytes({"v": _MAX_JSON_INT})
+    with pytest.raises(TypeError):
+        json_bytes({"v": _MAX_JSON_INT + 1})
+
+    assert _non_negative_int(_MAX_JSON_INT) == _MAX_JSON_INT
+    assert _non_negative_int(_MAX_JSON_INT + 1) is None
+
+
+def test_chat_health_staleness_boundary_is_strict() -> None:
+    """A failure exactly at the horizon is not yet stale; a hair past it is.
+
+    The last unpinned comparison in the path — `>` survived as `>=` before this.
+    """
+    # A round synthetic clock, so the boundary is exact rather than a float that
+    # truncation nudges to one side of it.
+    now = dt_util.utc_from_timestamp(1_800_000_000)
+    at_horizon = (1_800_000_000 - CHAT_HEALTH_STALE_FAILURE_S) * 1000
+
+    def stale(last_failure_ts: int) -> bool:
+        return ChatHealth(
+            recent=4,
+            degraded=4,
+            recovered=0,
+            last_reason=None,
+            last_failure_ts=last_failure_ts,
+        ).is_failure_stale(now)
+
+    assert stale(at_horizon) is False
+    assert stale(at_horizon - 1000) is True
+
+
+@pytest.mark.parametrize(
+    ("consecutive_failed", "expected"),
+    [
+        (None, False),  # add-on older than 1.49.0 raises nothing early
+        (0, False),
+        (2, False),
+        (3, True),
+        (50, True),
+    ],
+)
+def test_chat_health_is_outage_run(
+    consecutive_failed: int | None, expected: bool
+) -> None:
+    """A run of failures is an outage; anything shorter is still a coincidence."""
+    health = ChatHealth(
+        recent=50,
+        degraded=3,
+        recovered=0,
+        last_reason=None,
+        consecutive_failed=consecutive_failed,
+    )
+    assert health.is_outage_run is expected
+
+
+def test_chat_health_failure_rate_empty_window() -> None:
+    """An empty window divides by nothing and reads as no failures."""
+    health = ChatHealth(recent=0, degraded=0, recovered=0, last_reason=None)
+    assert health.failure_rate == 0.0
+    assert health.has_recovered is False
+
+
+@pytest.mark.parametrize(
+    ("recent", "degraded", "consecutive_ok", "expected"),
+    [
+        # Every success came after the last failure, and outnumbers the trouble.
+        (3, 1, 2, True),
+        (10, 2, 8, True),
+        (5, 0, 5, True),
+        # The clean run merely matches the failure count: not yet convincing,
+        # and the shape a window failing every fourth chat keeps producing.
+        (12, 3, 3, False),
+        # A success before the last failure is normal for any window that is not
+        # brand new. Demanding otherwise is what kept a finished outage red.
+        (10, 2, 5, True),
+        # The outage ended and the clean run has outgrown it.
+        (50, 10, 15, True),
+        # The same outage three chats after it ended — not yet.
+        (50, 10, 3, False),
+        # The whole window failed: 0 successes, 0 since — never recovery, even
+        # though `0 == 0` holds.
+        (4, 4, 0, False),
+        # Newest run failed.
+        (10, 2, 0, False),
+        # A single lucky success does not clear a window that is 98% failed. It
+        # satisfies "every success came after the last failure" only because there
+        # is one success to place.
+        (50, 49, 1, False),
+        (50, 40, 10, False),
+        # The floor is strict: a clean run merely EQUAL to the failure count is a
+        # tie, and a tie does not overrule the only clause that raises a warning.
+        (4, 2, 2, False),
+        (6, 2, 4, True),
+        # A count HIGHER than the success total is the add-on miscounting. `>=`
+        # would grant recovery on every one of these; `==` refuses.
+        (4, 4, 1, False),
+        (4, 4, 5, False),
+        (10, 2, 99, False),
+        # Nonsense in the other direction: the success count goes negative, and
+        # any positive count sits above it.
+        (3, 5, 1, False),
+        # An add-on older than 1.49.0 reports nothing and gets no rescue.
+        (3, 1, None, False),
+    ],
+)
+def test_chat_health_has_recovered(
+    recent: int, degraded: int, consecutive_ok: int | None, expected: bool
+) -> None:
+    """Recovery is a clean run that outlasts the failures, bounded by the successes.
+
+    The bound only ever fires on input the add-on could not have produced; the
+    floor is what does the work.
+    """
+    health = ChatHealth(
+        recent=recent,
+        degraded=degraded,
+        recovered=0,
+        last_reason=None,
+        consecutive_ok=consecutive_ok,
+    )
+    assert health.has_recovered is expected
+
+
+@pytest.mark.parametrize("raw", [-1, -0.5, "2", 1.5, True, None])
+async def test_status_chat_health_consecutive_ok_coercion(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, raw: object
+) -> None:
+    """Only a non-negative number counts; anything else withholds the rescue.
+
+    ``1.5`` is the one value that survives, as ``1`` — a float is still a number,
+    and truncating down is the conservative direction.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 3,
+                "degraded": 1,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "consecutive_ok": raw,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.consecutive_ok == (1 if raw == 1.5 else None)
 
 
 async def test_status_chat_health_absent_is_none(
