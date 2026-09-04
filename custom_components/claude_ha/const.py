@@ -137,7 +137,10 @@ STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 # content. Absent on older add-ons (the chat-health sensor is then unavailable).
 # Add-on >= 1.49.0 stamps each entry and adds {last_failure_ts, window_from_ts,
 # window_to_ts} in epoch MILLISECONDS, where null means UNKNOWN (history written by
-# an older add-on is kept, unstamped) — never "now" and never 0.
+# an older add-on is kept, unstamped) — never "now" and never 0. The same version
+# adds consecutive_ok: successful runs recorded AFTER the last failure, counted by
+# entry order rather than by clock, so it is a plain number even on unstamped
+# history — never null, and simply absent on an older add-on.
 STATUS_CHAT_HEALTH: Final = "chat_health"
 # The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
 # its wall-clock just above this so the add-on's graceful timeout answer always lands.

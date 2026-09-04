@@ -119,10 +119,12 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
     chat-health summary. ``degraded`` counts reads that failed even after a retry;
     ``recovered`` counts reads a retry rescued (a success, so it stays "ok").
 
-    Two facts decide the state, and neither is "a failure exists": the failure
-    RATE across the window, and how long ago the last failure was. The add-on
-    trims that window by count, never by age, so a single blip used to pin the
-    sensor to "degraded" until fifty further chats pushed it out.
+    The state asks one question — are the failures still current? — and reads
+    whichever evidence the add-on offers: the failure RATE across the window, a
+    clean run of successes since the last failure, and how long ago that failure
+    was. Never "a failure exists": the add-on trims its window by count, never by
+    age, so a single blip used to pin the sensor to "degraded" until fifty further
+    chats pushed it out.
     """
 
     _attr_has_entity_name = True
@@ -146,17 +148,22 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
 
     @property
     def native_value(self) -> str | None:
-        """Degraded when failures are both frequent enough and recent enough.
+        """Degraded until something says the failures are behind us.
 
-        Frequent enough is ``failure_rate >= CHAT_HEALTH_DEGRADED_RATE``; recent
-        enough is a last failure the add-on stamped inside the staleness horizon.
-        An add-on that stamps nothing (< 1.49.0) is judged on the rate alone, so a
-        missing timestamp never clears a warning by itself.
+        A rare failure is noise (``failure_rate`` under the threshold); a window
+        that has been clean since its last failure has demonstrably recovered; a
+        failure older than the staleness horizon has aged out. Each rescue rests
+        on a different field, so an add-on that reports fewer of them still gets a
+        sound answer from the rest — and an add-on older than 1.49.0, which
+        reports neither the count nor the stamps, is judged on the rate alone.
+        Absence never clears a warning by itself.
         """
         health = self.coordinator.data.chat_health
         if health is None:
             return None
         if health.failure_rate < CHAT_HEALTH_DEGRADED_RATE:
+            return STATE_CHAT_OK
+        if health.has_recovered:
             return STATE_CHAT_OK
         if health.is_failure_stale(dt_util.utcnow()):
             return STATE_CHAT_OK
@@ -178,6 +185,7 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
             "degraded": health.degraded,
             "recovered": health.recovered,
             "failure_rate": round(health.failure_rate, 3),
+            "consecutive_ok": health.consecutive_ok,
             "last_reason": health.last_reason,
             "last_failure": _as_utc(health.last_failure_ts),
             "window_from": _as_utc(health.window_from_ts),

@@ -174,6 +174,66 @@ def test_chat_health_failure_rate_empty_window() -> None:
     """An empty window divides by nothing and reads as no failures."""
     health = ChatHealth(recent=0, degraded=0, recovered=0, last_reason=None)
     assert health.failure_rate == 0.0
+    assert health.has_recovered is False
+
+
+@pytest.mark.parametrize(
+    ("recent", "degraded", "consecutive_ok", "expected"),
+    [
+        # Every success came after the last failure — the failures are behind us.
+        (3, 1, 2, True),
+        (10, 2, 8, True),
+        # A success sits BEFORE the last failure, so the window still flaps.
+        (12, 3, 3, False),
+        (10, 2, 5, False),
+        # The whole window failed: 0 successes, 0 since — never recovery, even
+        # though `0 >= 0` holds.
+        (4, 4, 0, False),
+        # Newest run failed.
+        (10, 2, 0, False),
+        # An add-on older than 1.49.0 reports nothing and gets no rescue.
+        (3, 1, None, False),
+    ],
+)
+def test_chat_health_has_recovered(
+    recent: int, degraded: int, consecutive_ok: int | None, expected: bool
+) -> None:
+    """Recovery is every success falling after the last failure — never a count."""
+    health = ChatHealth(
+        recent=recent,
+        degraded=degraded,
+        recovered=0,
+        last_reason=None,
+        consecutive_ok=consecutive_ok,
+    )
+    assert health.has_recovered is expected
+
+
+@pytest.mark.parametrize("raw", [-1, "2", 1.5, True, None])
+async def test_status_chat_health_consecutive_ok_coercion(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, raw: object
+) -> None:
+    """Only a non-negative number counts; anything else withholds the rescue.
+
+    ``1.5`` is the one value that survives, as ``1`` — a float is still a number,
+    and truncating down is the conservative direction.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 3,
+                "degraded": 1,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "consecutive_ok": raw,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.chat_health is not None
+    assert status.chat_health.consecutive_ok == (1 if raw == 1.5 else None)
 
 
 async def test_status_chat_health_absent_is_none(

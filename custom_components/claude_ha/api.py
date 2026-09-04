@@ -140,9 +140,15 @@ class ChatHealth:
 
     The timestamps are epoch milliseconds and arrive with add-on 1.49.0; ``None``
     means UNKNOWN, either because the add-on is older or because the entry was
-    written before it started stamping. The add-on trims this window by count
-    (cap 50), never by age — deciding what counts as healthy is deliberately left
-    to this side.
+    written before it started stamping. ``consecutive_ok`` arrives in the same
+    version but is counted by entry order rather than by clock, so it is a plain
+    number even on unstamped history — ``None`` here only ever means "older add-on".
+
+    The add-on trims this window by count (cap 50), never by age — deciding what
+    counts as healthy is deliberately left to this side.
+
+    ``degraded`` and ``recovered`` are disjoint subsets of ``recent`` (a recovered
+    read is a success), so ``recent - degraded`` is the window's success count.
     """
 
     recent: int
@@ -152,11 +158,31 @@ class ChatHealth:
     last_failure_ts: int | None = None
     window_from_ts: int | None = None
     window_to_ts: int | None = None
+    consecutive_ok: int | None = None
 
     @property
     def failure_rate(self) -> float:
         """Share of the window that failed even after a retry; 0.0 on an empty one."""
         return self.degraded / self.recent if self.recent > 0 else 0.0
+
+    @property
+    def has_recovered(self) -> bool:
+        """Whether every success in the window came after the last failure.
+
+        That is the evidence-shaped answer to "is this still happening": the
+        failures sit at the old end and nothing has failed since. It rescues the
+        case no rate can — a short window where one old failure keeps the rate
+        high however many clean runs follow it.
+
+        ``consecutive_ok`` can never exceed the success count, so this is an
+        equality in practice; ``>=`` keeps a miscounting add-on from reading as
+        recovered by accident. Zero is never recovery: an all-failed window has no
+        successes either, and ``0 >= 0`` would otherwise clear the loudest case
+        there is.
+        """
+        if self.consecutive_ok is None or self.consecutive_ok <= 0:
+            return False
+        return self.consecutive_ok >= self.recent - self.degraded
 
     def is_failure_stale(self, now: datetime) -> bool:
         """Whether the last recorded failure is too old to count against health.
@@ -314,6 +340,7 @@ class ClaudeClient:
                 last_failure_ts=_epoch_ms(raw_health.get("last_failure_ts")),
                 window_from_ts=_epoch_ms(raw_health.get("window_from_ts")),
                 window_to_ts=_epoch_ms(raw_health.get("window_to_ts")),
+                consecutive_ok=_non_negative_int(raw_health.get("consecutive_ok")),
             )
             if isinstance(raw_health, dict)
             else None
@@ -526,6 +553,18 @@ def _epoch_ms(raw: Any) -> int | None:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
     return int(raw) if raw > 0 else None
+
+
+def _non_negative_int(raw: Any) -> int | None:
+    """Coerce a contract count to an int, or ``None`` when it says nothing.
+
+    Absent means an add-on older than 1.49.0. Anything else that isn't a
+    non-negative number is read as unknown, which withholds the recovery rescue
+    rather than granting it on a value nobody can explain.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return int(raw) if raw >= 0 else None
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:

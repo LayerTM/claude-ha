@@ -14,18 +14,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   read `degraded` if the add-on's rolling window held *any* failed chat, and that
   window is trimmed by count (the last 50 chats), never by age — so on a quiet
   install a single blip could keep the sensor red for days. It now reads
-  `degraded` only when failures are both frequent enough (at least a fifth of the
-  window) and recent enough (the last one under 6 hours old). One failure 19 hours
-  ago with 37 clean chats since now reads `ok`, with the detail still in the
-  attributes. ([#26](https://github.com/LayerTM/claude-ha/issues/26))
+  `degraded` only when at least a fifth of the window failed, *and* something has
+  failed since the last clean run, *and* that failure is under 6 hours old. One
+  failure 19 hours ago with 37 clean chats since now reads `ok`, with the detail
+  still in the attributes. ([#26](https://github.com/LayerTM/claude-ha/issues/26))
 
 ### Added
 
 - **Chat health shows its working.** New attributes: `recent_ok`, `failure_rate`,
-  and — from add-on 1.49.0 — `last_failure`, `window_from` and `window_to`, so you
-  can see *when* the trouble was, not just that there was some. On an older add-on
-  the timestamps are null and the sensor judges on the rate alone; a missing
-  timestamp never clears a warning on its own.
+  and — from add-on 1.49.0 — `consecutive_ok` (clean chats since the last failure)
+  plus `last_failure`, `window_from` and `window_to`, so you can see *when* the
+  trouble was, not just that there was some. On an older add-on those are null and
+  the sensor judges on the rate alone; a missing field never clears a warning on
+  its own.
 
 ## [1.6.1] - 2026-08-01
 

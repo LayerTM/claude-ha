@@ -172,6 +172,7 @@ async def test_chat_health_sensor_degraded(
     assert state.attributes["degraded"] == 2
     assert state.attributes["recent_ok"] == 6
     assert state.attributes["failure_rate"] == 0.25
+    assert state.attributes["consecutive_ok"] is None
     assert state.attributes["last_reason"] == "model-error"
 
 
@@ -259,6 +260,100 @@ async def test_chat_health_sensor_degraded_when_failure_is_fresh(
                 "recovered": 0,
                 "last_reason": "model-error",
                 "last_failure_ts": _ms_ago(0.05),
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "degraded"
+
+
+async def test_chat_health_sensor_ok_on_demonstrated_recovery(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A short window the rate can't rescue is rescued by clean runs since.
+
+    1 failure in 3 is a 0.33 rate and the failure is minutes old, so neither the
+    rate nor the clock clears it — but both successes came after it.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 3,
+                "degraded": 1,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.05),
+                "consecutive_ok": 2,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "ok"
+    assert state.attributes["consecutive_ok"] == 2
+
+
+async def test_chat_health_sensor_degraded_when_whole_window_failed(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An all-failed window has zero successes and zero since — not recovery.
+
+    The loudest case there is, and the one a naive ``consecutive_ok >= successes``
+    would clear: both sides are 0.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 4,
+                "degraded": 4,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.05),
+                "consecutive_ok": 0,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "degraded"
+    assert state.attributes["consecutive_ok"] == 0
+
+
+async def test_chat_health_sensor_degraded_while_the_window_still_flaps(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Three clean runs don't clear a window that keeps failing every fourth read."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 12,
+                "degraded": 3,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.05),
+                "consecutive_ok": 3,
             },
         },
     )

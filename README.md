@@ -230,14 +230,16 @@ data:
   configured and reachable, a `health` summary and the count of entities exposed
   to Assist as attributes.
 - **Chat health** (`sensor.claude_code_chat_health`) — a rolling summary of recent
-  chat outcomes (`ok` / `degraded`). It reads `degraded` when failures are both
-  frequent enough (at least a fifth of the recent window) *and* recent enough (the
-  last one under 6 hours old), so a single old blip doesn't nag for days. The
-  attributes show the working: recent/ok/degraded/recovered counts, the
-  `failure_rate` the state turns on, the last degrade reason (a token, never prompt
-  content) and the window's timestamps. Needs add-on ≥ 1.20.0; unavailable
-  otherwise. The timestamps need add-on ≥ 1.49.0 and are null without it — an
-  add-on that reports no times is judged on the rate alone, so a missing timestamp
+  chat outcomes (`ok` / `degraded`). It asks whether failures are still happening,
+  not whether any ever did: it reads `degraded` only when at least a fifth of the
+  recent window failed, *and* something has failed since the last clean run, *and*
+  that failure is under 6 hours old. So a single old blip no longer nags for days.
+  The attributes show the working: recent/ok/degraded/recovered counts, the
+  `failure_rate` the state turns on, `consecutive_ok` (clean chats since the last
+  failure), the last degrade reason (a token, never prompt content) and the
+  window's timestamps. Needs add-on ≥ 1.20.0; unavailable otherwise.
+  `consecutive_ok` and the timestamps need add-on ≥ 1.49.0 and are null without it
+  — an add-on that reports neither is judged on the rate alone, so a missing field
   never quiets a warning by itself.
 - **Daily budget spend** (`sensor.claude_code_daily_budget_spend`) — today's spend
   in USD against the add-on's daily budget, with `limit` / `remaining` /
