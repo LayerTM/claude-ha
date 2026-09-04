@@ -24,3 +24,6 @@ build/
 
 # local-only working directory — never tracked
 .maestri/
+
+# local-only review correspondence — never tracked
+.team-comm/
