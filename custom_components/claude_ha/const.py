@@ -188,17 +188,19 @@ CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
 # the run merely gets there sooner. So the false-alarm question is: how often does
 # a merely-flaky install produce a trailing run of three by chance?
 #
-# Simulated, 200k windows of 50 at each rate:
+# Simulated, 200k windows of 50 at each rate. The last two rows rest on a few
+# dozen events in 200k trials, so read them as orders of magnitude, not as
+# figures — only the top row is precise at this sample size:
 #
 #   fail rate   P(trailing run >= 2)   P(trailing run >= 3)
-#   0.50                     24.93%                 12.49%   <- rate already fires
-#   0.10                      1.01%                  0.11%   <- at the threshold
-#   0.05                      0.24%                  0.01%   <- run is the only signal
-#   0.02                      0.04%                  0.00%
+#   0.50                    ~24.9%                 ~12.5%    <- rate already fires
+#   0.10                     ~1%                    ~0.1%    <- at the threshold
+#   0.05                     ~0.2%                  ~0.02%   <- run is the only signal
+#   0.02                     ~0.04%                 <0.01%
 #
-# Two would also be defensible; it costs roughly 20x the false alarms in that
-# regime, which is 0.24% against 0.01%. One is not: a single isolated failure is
-# the complaint this whole rule exists to stop shouting about.
+# Two would also be defensible; it costs roughly an order of magnitude more false
+# alarms in that regime. One is not: a single isolated failure is the complaint
+# this whole rule exists to stop shouting about.
 #
 # The earlier justification here claimed an install failing every second chat
 # "almost never" produces three in a row. That is false for a random process —
