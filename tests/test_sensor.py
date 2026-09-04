@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
@@ -179,6 +180,84 @@ async def test_chat_health_sensor_degraded(
 def _ms_ago(hours: float) -> int:
     """Epoch ms that many hours before now, on the clock the sensor reads."""
     return int((dt_util.utcnow() - timedelta(hours=hours)).timestamp() * 1000)
+
+
+async def test_chat_health_sensor_renders_the_timestamps_it_was_given(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Each stamp lands on its own attribute, at the right scale.
+
+    Asserting only null-ness let three mutants live behind 100% line coverage: a
+    milliseconds/seconds mix-up, the window ends swapped, and `last_failure` wired
+    to the wrong field.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 10,
+                "degraded": 0,
+                "recovered": 0,
+                "last_reason": None,
+                "last_failure_ts": 1757000000000,
+                "window_from_ts": 1756900000000,
+                "window_to_ts": 1757100000000,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.attributes["last_failure"] == datetime(
+        2025, 9, 4, 15, 33, 20, tzinfo=UTC
+    )
+    assert state.attributes["window_from"] == datetime(
+        2025, 9, 3, 11, 46, 40, tzinfo=UTC
+    )
+    assert state.attributes["window_to"] == datetime(2025, 9, 5, 19, 20, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("recent", "degraded", "expected"),
+    [
+        (10, 1, "degraded"),  # exactly at the threshold — the boundary is inclusive
+        (20, 1, "ok"),  # one under it
+    ],
+)
+async def test_chat_health_sensor_rate_boundary(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    recent: int,
+    degraded: int,
+    expected: str,
+) -> None:
+    """The threshold comparison is `>=`, pinned on both sides of the boundary."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": recent,
+                "degraded": degraded,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.05),
+                "consecutive_ok": 0,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == expected
 
 
 async def test_chat_health_sensor_ok_on_isolated_old_failure(

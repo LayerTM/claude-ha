@@ -14,6 +14,8 @@ from custom_components.claude_ha.api import (
     ClaudeError,
     ClaudeRateLimitError,
     ClaudeRequestError,
+    _epoch_ms,
+    _non_negative_int,
 )
 from custom_components.claude_ha.const import HEADER_CALLER, MODE_WRITE
 from homeassistant.core import HomeAssistant
@@ -142,7 +144,21 @@ async def test_status_parses_chat_health_timestamps(
     assert status.chat_health.window_to_ts == 1757100000000
 
 
-@pytest.mark.parametrize("raw", [0, -1, "1757000000000", True])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        0,
+        -1,
+        "1757000000000",
+        True,
+        # The (0, 1) family: these pass a raw `> 0` test and then truncate to
+        # exactly the 0 being guarded against, dating the failure to 1970 and
+        # clearing the warning. The guard must run on the truncated value.
+        0.5,
+        0.999,
+        1e-9,
+    ],
+)
 async def test_status_chat_health_rejects_non_timestamps(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, raw: object
 ) -> None:
@@ -168,6 +184,23 @@ async def test_status_chat_health_rejects_non_timestamps(
     assert status.chat_health is not None
     assert status.chat_health.last_failure_ts is None
     assert status.chat_health.is_failure_stale(dt_util.utcnow()) is False
+
+
+@pytest.mark.parametrize("raw", [float("inf"), float("-inf"), float("nan")])
+def test_parsers_survive_non_finite_numbers(raw: float) -> None:
+    """A non-finite number reads as unknown instead of raising out of the parser.
+
+    ``int(inf)`` raises ``OverflowError``, which is not a ``ClaudeError``, so it
+    would escape the coordinator's handler and take every status entity
+    unavailable on each poll. Reachable because aiohttp decodes with stdlib
+    ``json``, which accepts ``Infinity`` and ``NaN``.
+
+    Tested against the parser directly, not over the wire: the aiohttp test double
+    decodes with HA's orjson-backed loader, which REJECTS those tokens, so a
+    wire-level test here would be measuring the mock rather than the code.
+    """
+    assert _epoch_ms(raw) is None
+    assert _non_negative_int(raw) is None
 
 
 def test_chat_health_failure_rate_empty_window() -> None:

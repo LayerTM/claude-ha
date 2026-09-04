@@ -157,6 +157,14 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
         sound answer from the rest — and an add-on older than 1.49.0, which
         reports neither the count nor the stamps, is judged on the rate alone.
         Absence never clears a warning by itself.
+
+        Note the asymmetry: the rate is the only clause that can RAISE a warning,
+        and the other two can only clear one. Frequency is what says a problem is
+        real; recency alone says only that it is current, and one fresh failure
+        after a retry is exactly the blip this sensor stopped shouting about. The
+        cost is that a brand-new outage has to dilute the window before the rate
+        sees it — bounded by window size, and the reason the threshold is set for
+        sensitivity.
         """
         health = self.coordinator.data.chat_health
         if health is None:

@@ -159,9 +159,23 @@ STATUS_ALERTS: Final = "alerts"
 # as healthy" to the consumer — these two constants are that judgement.
 #
 # Share of the window that must have failed (after a retry) before the sensor reads
-# degraded. The old rule — any failure at all — pinned the sensor to degraded until
-# 50 further chats pushed the blip out, which on a quiet install is days.
-CHAT_HEALTH_DEGRADED_RATE: Final = 0.2
+# degraded — read as "more than one chat in ten is still failing". The old rule —
+# any failure at all — pinned the sensor to degraded until 50 further chats pushed
+# the blip out, which on a quiet install is days.
+#
+# The rate is the NECESSARY condition; recovery and staleness below can only ever
+# clear a warning, never raise one. That asymmetry is the design — frequency says a
+# problem is real, recency only says it is current — but it puts the whole weight
+# of raising the alarm on this one number, so it is calibrated for sensitivity
+# rather than for patience: an old isolated failure is now caught by the two
+# rescues, and no longer needs a lenient threshold to stay quiet. At 0.2 a steady
+# one-in-six failure rate read "ok" forever, and a total outage needed ten
+# consecutive failures to show up in a full 50-chat window; at 0.1 those become
+# degraded and five.
+#
+# Onset is still bounded by the window: the add-on reports no count of CONSECUTIVE
+# failures, so a fresh outage has to dilute the window before the rate notices it.
+CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
 # How old the last recorded failure must be before it stops counting against health,
 # whatever the rate. Needs `last_failure_ts` (add-on >= 1.49.0); an unstamped window
 # falls back to the rate alone, so a MISSING stamp can never clear a warning by

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from http import HTTPStatus
 import json
+import math
 from typing import Any, NoReturn
 
 from aiohttp import ClientError, ClientSession
@@ -546,13 +547,24 @@ def _epoch_ms(raw: Any) -> int | None:
     """Coerce a contract timestamp to epoch ms, or ``None`` when it says nothing.
 
     The contract spells ``null`` as UNKNOWN — never "now", never 0 — so anything
-    that isn't a positive number reads as unknown. That direction is deliberate:
-    an unknown timestamp leaves the failure counting against health, while a 0
-    taken at face value would date it to 1970 and silently clear the warning.
+    that isn't a positive whole millisecond reads as unknown. That direction is
+    deliberate: an unknown timestamp leaves the failure counting against health,
+    while a 0 taken at face value would date it to 1970 and silently clear the
+    warning.
+
+    The test is applied to the TRUNCATED value, not the raw one. Testing the raw
+    value first let anything in ``(0, 1)`` pass ``> 0`` and then truncate to
+    exactly the 0 being guarded against — the one direction this must never fail
+    in. ``Infinity`` is excluded before ``int()`` sees it, because that raises
+    ``OverflowError`` rather than returning, and stdlib ``json`` (which aiohttp
+    decodes with) accepts ``Infinity`` on the wire.
     """
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
-    return int(raw) if raw > 0 else None
+    if not math.isfinite(raw):
+        return None
+    value = int(raw)
+    return value if value > 0 else None
 
 
 def _non_negative_int(raw: Any) -> int | None:
@@ -564,7 +576,10 @@ def _non_negative_int(raw: Any) -> int | None:
     """
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
-    return int(raw) if raw >= 0 else None
+    if not math.isfinite(raw):
+        return None
+    value = int(raw)
+    return value if value >= 0 else None
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
