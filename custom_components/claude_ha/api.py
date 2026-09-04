@@ -189,7 +189,10 @@ class ChatHealth:
         cannot be larger than ``recent - degraded`` while the add-on counts
         correctly, so on valid input this clause never fires; it is here for
         invalid input, where it refuses a count that is too high, and a nonsensical
-        ``degraded > recent`` whose success count goes negative.
+        ``degraded > recent`` whose success count goes negative. Unreachable on
+        valid input is not dead code, and this is the only clause standing between
+        a miscounting add-on and a cleared warning — ``4/4/5``, ``4/4/99`` and
+        ``10/2/99`` all read as recovered without it.
 
         This second clause used to be written as ``==``, and the add-on's owner
         measured on a live install what that cost: equality demands that EVERY
@@ -233,6 +236,12 @@ class ChatHealth:
         Kept that way on purpose. The alternative — treating an unknown age as
         aged-out — would fail open on exactly the case this clause exists to
         catch, and the exit costs one successful chat.
+
+        Note the deliberate asymmetry, because it looks like a bug from outside:
+        three failures to raise, one success to release. A sensor answering "is
+        chat failing NOW" should be quick to warn and quick to forgive, so the
+        state can legitimately move on consecutive chats. Every such transition
+        follows a real chat outcome; none is a spurious toggle.
         """
         return (
             self.consecutive_failed is not None
