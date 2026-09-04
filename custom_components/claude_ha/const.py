@@ -159,7 +159,8 @@ STATUS_ALERTS: Final = "alerts"
 # as healthy" to the consumer — these two constants are that judgement.
 #
 # Share of the window that must have failed (after a retry) before the sensor reads
-# degraded — read as "more than one chat in ten is still failing". The old rule —
+# degraded — read as "one chat in ten or more is still failing"; the comparison is
+# `>=`, so exactly one in ten raises it. The old rule —
 # any failure at all — pinned the sensor to degraded until 50 further chats pushed
 # the blip out, which on a quiet install is days.
 #

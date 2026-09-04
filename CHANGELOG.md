@@ -14,9 +14,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   read `degraded` if the add-on's rolling window held *any* failed chat, and that
   window is trimmed by count (the last 50 chats), never by age — so on a quiet
   install a single blip could keep the sensor red for days. It now reads
-  `degraded` when more than one chat in ten is failing, and clears again once a
-  run of clean chats has followed the last failure or that failure is over 6 hours
-  old. One failure 19 hours ago with 37 clean chats since now reads `ok`, with the
+  `degraded` when one chat in ten or more is failing, and clears again once the
+  clean chats since the last failure outnumber the failures behind them, or that
+  failure is over 6 hours old. One failure 19 hours ago with 37 clean chats since now reads `ok`, with the
   detail still in the attributes — while a fault that keeps recurring stays
   visible instead of being averaged away.
   ([#26](https://github.com/LayerTM/claude-ha/issues/26))

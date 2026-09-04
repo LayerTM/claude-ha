@@ -186,8 +186,20 @@ async def test_status_chat_health_rejects_non_timestamps(
     assert status.chat_health.is_failure_stale(dt_util.utcnow()) is False
 
 
-@pytest.mark.parametrize("raw", [float("inf"), float("-inf"), float("nan")])
-def test_parsers_survive_non_finite_numbers(raw: float) -> None:
+@pytest.mark.parametrize(
+    "raw",
+    [
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        # An int too large to become a float. `math.isfinite` coerces, so the
+        # guard that closed the Infinity case reintroduced the same crash here.
+        int("9" * 400),
+        # In range as a number, out of range as a date.
+        10**18,
+    ],
+)
+def test_parsers_survive_unusable_numbers(raw: float) -> None:
     """A non-finite number reads as unknown instead of raising out of the parser.
 
     ``int(inf)`` raises ``OverflowError``, which is not a ``ClaudeError``, so it
@@ -200,7 +212,52 @@ def test_parsers_survive_non_finite_numbers(raw: float) -> None:
     wire-level test here would be measuring the mock rather than the code.
     """
     assert _epoch_ms(raw) is None
-    assert _non_negative_int(raw) is None
+    if raw != 10**18:
+        # 10**18 is out of range as a DATE but is a usable count; every other
+        # value here is unusable as either.
+        assert _non_negative_int(raw) is None
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,  # the key present but null
+        "abc",
+        float("inf"),
+        -1,
+    ],
+)
+async def test_status_chat_health_unreadable_counts_yield_no_block(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, bad: object
+) -> None:
+    """A count that cannot be read drops the block instead of inventing a zero.
+
+    Two failure modes at once. `int(None)` and `int("abc")` raise `TypeError` /
+    `ValueError`, neither a `ClaudeError`, so they escaped the coordinator and
+    took every status entity unavailable once a minute. And defaulting the count
+    to 0 would have read as "no failures" — the one answer that must never be
+    invented. `None` leaves the sensor unavailable, which is honest.
+
+    An over-64-bit integer belongs to the same family but cannot be sent through
+    this mock — HA's JSON encoder refuses it, while stdlib `json` (what aiohttp
+    decodes with in production) parses it happily. It is covered against the
+    parser directly instead; see `test_parsers_survive_unusable_numbers`.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 8,
+                "degraded": bad,
+                "recovered": 0,
+                "last_reason": "model-error",
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.ready is True
+    assert status.chat_health is None
 
 
 def test_chat_health_failure_rate_empty_window() -> None:

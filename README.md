@@ -231,10 +231,11 @@ data:
   to Assist as attributes.
 - **Chat health** (`sensor.claude_code_chat_health`) — a rolling summary of recent
   chat outcomes (`ok` / `degraded`). It asks whether failures are still happening,
-  not whether any ever did. More than one chat in ten failing is what raises it;
-  a run of clean chats since the last failure, or a last failure over 6 hours old,
-  is what clears it again. So a single old blip no longer nags for days, while a
-  problem that keeps happening stays visible.
+  not whether any ever did. One chat in ten or more failing is what raises it;
+  it clears again once the clean chats since the last failure outnumber the
+  failures behind them, or that failure is over 6 hours old. So a single old blip
+  no longer nags for days, while a problem that keeps happening stays visible —
+  one chat getting through mid-outage isn't enough to call it recovered.
   The attributes show the working: recent/ok/degraded/recovered counts, the
   `failure_rate` the state turns on, `consecutive_ok` (clean chats since the last
   failure), the last degrade reason (a token, never prompt content) and the
