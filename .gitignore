@@ -27,3 +27,8 @@ build/
 
 # local-only review correspondence — never tracked
 .team-comm/
+
+# byproduct of installing requirements_test.txt with `uv pip`. Dependencies are
+# pinned in requirements_test.txt, which is what CI installs from, so a lock file
+# here would be a second source of truth that nothing reads.
+uv.lock
