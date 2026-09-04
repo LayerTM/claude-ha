@@ -14,21 +14,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   read `degraded` if the add-on's rolling window held *any* failed chat, and that
   window is trimmed by count (the last 50 chats), never by age — so on a quiet
   install a single blip could keep the sensor red for days. It now reads
-  `degraded` when one chat in ten or more is failing, and clears again once the
-  clean chats since the last failure outnumber the failures behind them, or that
-  failure is over 6 hours old. One failure 19 hours ago with 37 clean chats since now reads `ok`, with the
+  `degraded` on three failed chats in a row, or when one chat in ten or more is
+  failing; and clears again once the clean chats since the last failure outnumber
+  the failures behind them, or that failure is over 6 hours old. One failure 19 hours ago with 37 clean chats since now reads `ok`, with the
   detail still in the attributes — while a fault that keeps recurring stays
   visible instead of being averaged away.
   ([#26](https://github.com/LayerTM/claude-ha/issues/26))
 
 ### Added
 
+- **A live outage shows up immediately.** Three failed chats in a row now reads
+  `degraded` on its own, without waiting for the failure rate to climb. A rate
+  measured over the last 50 chats can't see a fresh outage until it has diluted
+  that window — on a quiet install, potentially days.
 - **Chat health shows its working.** New attributes: `recent_ok`, `failure_rate`,
-  and — from add-on 1.49.0 — `consecutive_ok` (clean chats since the last failure)
-  plus `last_failure`, `window_from` and `window_to`, so you can see *when* the
-  trouble was, not just that there was some. On an older add-on those are null and
-  the sensor judges on the rate alone; a missing field never clears a warning on
-  its own.
+  and — from add-on 1.49.0 — `consecutive_ok` / `consecutive_failed` (chats since
+  the last failure, and since the last success) plus `last_failure`,
+  `window_from` and `window_to`, so you can see *when* the trouble was, not just
+  that there was some. On an older add-on those are null and the sensor judges on
+  the rate alone; a missing field neither clears a warning nor invents one.
 
 ## [1.6.1] - 2026-08-01
 

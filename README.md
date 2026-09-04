@@ -231,18 +231,20 @@ data:
   to Assist as attributes.
 - **Chat health** (`sensor.claude_code_chat_health`) — a rolling summary of recent
   chat outcomes (`ok` / `degraded`). It asks whether failures are still happening,
-  not whether any ever did. One chat in ten or more failing is what raises it;
-  it clears again once the clean chats since the last failure outnumber the
-  failures behind them, or that failure is over 6 hours old. So a single old blip
-  no longer nags for days, while a problem that keeps happening stays visible —
-  one chat getting through mid-outage isn't enough to call it recovered.
+  not whether any ever did. Three failed chats in a row raises it straight away —
+  that's an outage, whatever the longer-run numbers say — and so does one chat in
+  ten or more failing. It clears again once the clean chats since the last failure
+  outnumber the failures behind them, or that failure is over 6 hours old. So a
+  single old blip no longer nags for days, while a problem that is happening right
+  now shows up before it has had time to move an average, and one chat getting
+  through mid-outage isn't enough to call it recovered.
   The attributes show the working: recent/ok/degraded/recovered counts, the
-  `failure_rate` the state turns on, `consecutive_ok` (clean chats since the last
-  failure), the last degrade reason (a token, never prompt content) and the
-  window's timestamps. Needs add-on ≥ 1.20.0; unavailable otherwise.
-  `consecutive_ok` and the timestamps need add-on ≥ 1.49.0 and are null without it
-  — an add-on that reports neither is judged on the rate alone, so a missing field
-  never quiets a warning by itself.
+  `failure_rate` the state turns on, `consecutive_ok` and `consecutive_failed`
+  (chats since the last failure, and since the last success), the last degrade
+  reason (a token, never prompt content) and the window's timestamps. Needs add-on
+  ≥ 1.20.0; unavailable otherwise. The run counters and the timestamps need add-on
+  ≥ 1.49.0 and are null without it — an add-on that reports none of them is judged
+  on the rate alone, so a missing field neither quiets a warning nor invents one.
 - **Daily budget spend** (`sensor.claude_code_daily_budget_spend`) — today's spend
   in USD against the add-on's daily budget, with `limit` / `remaining` /
   `fraction_used` / a soft `near_cap` flag as attributes (a limit of 0 = unlimited

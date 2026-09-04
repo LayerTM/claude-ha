@@ -140,7 +140,9 @@ STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 # an older add-on is kept, unstamped) — never "now" and never 0. The same version
 # adds consecutive_ok: successful runs recorded AFTER the last failure, counted by
 # entry order rather than by clock, so it is a plain number even on unstamped
-# history — never null, and simply absent on an older add-on.
+# history — never null, and simply absent on an older add-on. consecutive_failed is
+# its mirror (failures since the last success); the two are never both non-zero,
+# because the newest run is either a success or it isn't.
 STATUS_CHAT_HEALTH: Final = "chat_health"
 # The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
 # its wall-clock just above this so the add-on's graceful timeout answer always lands.
@@ -174,9 +176,17 @@ STATUS_ALERTS: Final = "alerts"
 # consecutive failures to show up in a full 50-chat window; at 0.1 those become
 # degraded and five.
 #
-# Onset is still bounded by the window: the add-on reports no count of CONSECUTIVE
-# failures, so a fresh outage has to dilute the window before the rate notices it.
 CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
+# Failures in a row that mean an outage rather than a coincidence, whatever the
+# rate says (add-on >= 1.49.0). This is the ONE signal that raises the state
+# early: a rate over a count-trimmed window cannot see a fresh outage until it has
+# diluted the window, which in a full 50-chat window is five failures deep.
+#
+# Three, because each of these already survived the add-on's own retry, and because
+# a run is blind to how often a flaky install fails and sensitive to whether it is
+# failing NOW — an install failing every second chat still almost never produces
+# three in a row, so this cannot make a flapping window flicker.
+CHAT_HEALTH_OUTAGE_RUN: Final = 3
 # How old the last recorded failure must be before it stops counting against health,
 # whatever the rate. Needs `last_failure_ts` (add-on >= 1.49.0); an unstamped window
 # falls back to the rate alone, so a MISSING stamp can never clear a warning by

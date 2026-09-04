@@ -29,6 +29,7 @@ from .const import (
     API_PROMPT,
     API_STATUS,
     API_USAGE,
+    CHAT_HEALTH_OUTAGE_RUN,
     CHAT_HEALTH_STALE_FAILURE_S,
     CONTENT_TYPE_NDJSON,
     DOMAIN,
@@ -161,6 +162,7 @@ class ChatHealth:
     window_from_ts: int | None = None
     window_to_ts: int | None = None
     consecutive_ok: int | None = None
+    consecutive_failed: int | None = None
 
     @property
     def failure_rate(self) -> float:
@@ -193,12 +195,43 @@ class ChatHealth:
         window instead of being picked. It also subsumes the zero case — an
         all-failed window has no successes and none since, and ``0 == 0`` alone
         would clear the loudest case there is.
+
+        Strictly longer, not merely as long. Measured over every window up to 50,
+        ``>`` and ``>=`` disagree on 26 inputs and all of them sit at a failure
+        rate of exactly 0.5, so the choice only ever decides whether a window that
+        is half failures may clear itself. The disputed case that looks worst — a
+        first chat that fails and a second that succeeds — resolves on the user's
+        very next successful chat, not on the six-hour timer, so the strict form
+        costs one chat of patience and buys refusing to call a coin-flip
+        recovered. It also leaves an empty window reporting False for free, where
+        the lenient form needs a guard to avoid claiming recovery from no evidence
+        at all.
         """
         if self.consecutive_ok is None:
             return False
         return (
             self.consecutive_ok == self.recent - self.degraded
             and self.consecutive_ok > self.degraded
+        )
+
+    @property
+    def is_outage_run(self) -> bool:
+        """Whether the newest runs are an unbroken run of failures, not a blip.
+
+        The only signal here that can RAISE the state on its own. Everything else
+        is a rate over a count-trimmed window, which by construction cannot see a
+        fresh outage until it has diluted that window — five failures deep in a
+        full one. A run of failures is blind to how often the install fails and
+        sensitive to whether it is failing right now, which is the opposite blind
+        spot, so the two together cover each other.
+
+        ``None`` on an add-on older than 1.49.0, which raises nothing early — the
+        same fail-closed direction as every other missing field, since absence
+        neither clears a warning nor invents one.
+        """
+        return (
+            self.consecutive_failed is not None
+            and self.consecutive_failed >= CHAT_HEALTH_OUTAGE_RUN
         )
 
     def is_failure_stale(self, now: datetime) -> bool:
@@ -572,6 +605,7 @@ def _parse_chat_health(raw: Any) -> ChatHealth | None:
         window_from_ts=_epoch_ms(raw.get("window_from_ts")),
         window_to_ts=_epoch_ms(raw.get("window_to_ts")),
         consecutive_ok=_non_negative_int(raw.get("consecutive_ok")),
+        consecutive_failed=_non_negative_int(raw.get("consecutive_failed")),
     )
 
 

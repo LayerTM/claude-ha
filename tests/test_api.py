@@ -17,7 +17,11 @@ from custom_components.claude_ha.api import (
     _epoch_ms,
     _non_negative_int,
 )
-from custom_components.claude_ha.const import HEADER_CALLER, MODE_WRITE
+from custom_components.claude_ha.const import (
+    CHAT_HEALTH_STALE_FAILURE_S,
+    HEADER_CALLER,
+    MODE_WRITE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
@@ -218,6 +222,7 @@ def test_parsers_survive_unusable_numbers(raw: float) -> None:
         assert _non_negative_int(raw) is None
 
 
+@pytest.mark.parametrize("field", ["recent", "degraded", "recovered"])
 @pytest.mark.parametrize(
     "bad",
     [
@@ -228,7 +233,10 @@ def test_parsers_survive_unusable_numbers(raw: float) -> None:
     ],
 )
 async def test_status_chat_health_unreadable_counts_yield_no_block(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, bad: object
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    bad: object,
+    field: str,
 ) -> None:
     """A count that cannot be read drops the block instead of inventing a zero.
 
@@ -242,15 +250,19 @@ async def test_status_chat_health_unreadable_counts_yield_no_block(
     this mock — HA's JSON encoder refuses it, while stdlib `json` (what aiohttp
     decodes with in production) parses it happily. It is covered against the
     parser directly instead; see `test_parsers_survive_unusable_numbers`.
+
+    Every count is exercised, not just one: with only `degraded` malformed,
+    dropping either of the other two guards survived the whole suite — and for
+    `recent` that mutant re-enters this very failure mode, because `failure_rate`
+    then divides by `None`.
     """
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={
             "ready": True,
             "chat_health": {
-                "recent": 8,
-                "degraded": bad,
-                "recovered": 0,
+                **{"recent": 8, "degraded": 1, "recovered": 0},
+                field: bad,
                 "last_reason": "model-error",
             },
         },
@@ -258,6 +270,53 @@ async def test_status_chat_health_unreadable_counts_yield_no_block(
     status = await _client(hass).async_get_status()
     assert status.ready is True
     assert status.chat_health is None
+
+
+def test_chat_health_staleness_boundary_is_strict() -> None:
+    """A failure exactly at the horizon is not yet stale; a hair past it is.
+
+    The last unpinned comparison in the path — `>` survived as `>=` before this.
+    """
+    # A round synthetic clock, so the boundary is exact rather than a float that
+    # truncation nudges to one side of it.
+    now = dt_util.utc_from_timestamp(1_800_000_000)
+    at_horizon = (1_800_000_000 - CHAT_HEALTH_STALE_FAILURE_S) * 1000
+
+    def stale(last_failure_ts: int) -> bool:
+        return ChatHealth(
+            recent=4,
+            degraded=4,
+            recovered=0,
+            last_reason=None,
+            last_failure_ts=last_failure_ts,
+        ).is_failure_stale(now)
+
+    assert stale(at_horizon) is False
+    assert stale(at_horizon - 1000) is True
+
+
+@pytest.mark.parametrize(
+    ("consecutive_failed", "expected"),
+    [
+        (None, False),  # add-on older than 1.49.0 raises nothing early
+        (0, False),
+        (2, False),
+        (3, True),
+        (50, True),
+    ],
+)
+def test_chat_health_is_outage_run(
+    consecutive_failed: int | None, expected: bool
+) -> None:
+    """A run of failures is an outage; anything shorter is still a coincidence."""
+    health = ChatHealth(
+        recent=50,
+        degraded=3,
+        recovered=0,
+        last_reason=None,
+        consecutive_failed=consecutive_failed,
+    )
+    assert health.is_outage_run is expected
 
 
 def test_chat_health_failure_rate_empty_window() -> None:

@@ -416,6 +416,75 @@ async def test_chat_health_sensor_degraded_when_whole_window_failed(
     assert state.attributes["consecutive_ok"] == 0
 
 
+async def test_chat_health_sensor_degraded_on_a_fresh_outage_run(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Three failures in a row surface now, long before the rate can move.
+
+    A 50-chat window that was clean until minutes ago sits at a 0.06 failure
+    rate — under the threshold, and it stays under until the fifth failure. The
+    run is what makes a fresh outage visible.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 50,
+                "degraded": 3,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.02),
+                "consecutive_ok": 0,
+                "consecutive_failed": 3,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "degraded"
+    assert state.attributes["failure_rate"] == 0.06
+    assert state.attributes["consecutive_failed"] == 3
+
+
+async def test_chat_health_sensor_outage_run_ages_out(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An old run of failures with nothing since does not shout forever.
+
+    Same window as above, failure eight hours old. The run says the newest chats
+    failed; it does not say they failed recently, so staleness still applies.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 50,
+                "degraded": 3,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(8),
+                "consecutive_ok": 0,
+                "consecutive_failed": 3,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "ok"
+
+
 async def test_chat_health_sensor_degraded_when_one_success_lands_mid_outage(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
