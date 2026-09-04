@@ -168,22 +168,37 @@ class ChatHealth:
 
     @property
     def has_recovered(self) -> bool:
-        """Whether every success in the window came after the last failure.
+        """Whether the window has a clean run that outlasts the trouble before it.
 
-        That is the evidence-shaped answer to "is this still happening": the
-        failures sit at the old end and nothing has failed since. It rescues the
-        case no rate can — a short window where one old failure keeps the rate
-        high however many clean runs follow it.
+        This is the evidence-shaped answer to "is this still happening", and it
+        rescues the case no rate can: a short window where one old failure keeps
+        the rate high however many clean runs follow it. Two things must hold, and
+        each names a different fact.
 
-        ``consecutive_ok`` can never exceed the success count, so this is an
-        equality in practice; ``>=`` keeps a miscounting add-on from reading as
-        recovered by accident. Zero is never recovery: an all-failed window has no
-        successes either, and ``0 >= 0`` would otherwise clear the loudest case
-        there is.
+        **Every success came after the last failure.** Written as ``==`` rather
+        than ``>=`` on purpose. ``consecutive_ok`` cannot exceed the success count
+        while the add-on counts correctly, so the two agree on every valid input —
+        but ``>=`` is the LENIENT direction, and it lets a count that is too high
+        clear a window it never earned. Equality also disposes of a nonsensical
+        ``degraded > recent``, where the success count goes negative and any
+        positive count would sit above it.
+
+        **The clean run is longer than the failures behind it.** Without this, an
+        almost-entirely-failed window is cleared by the single success it happens
+        to contain: 49 failures and one success satisfies "every success came
+        after the last failure" for the trivial reason that there is only one. A
+        rescue that overrules the sole clause able to raise a warning has to rest
+        on more than one observation, and this is the floor that scales with the
+        window instead of being picked. It also subsumes the zero case — an
+        all-failed window has no successes and none since, and ``0 == 0`` alone
+        would clear the loudest case there is.
         """
-        if self.consecutive_ok is None or self.consecutive_ok <= 0:
+        if self.consecutive_ok is None:
             return False
-        return self.consecutive_ok >= self.recent - self.degraded
+        return (
+            self.consecutive_ok == self.recent - self.degraded
+            and self.consecutive_ok > self.degraded
+        )
 
     def is_failure_stale(self, now: datetime) -> bool:
         """Whether the last recorded failure is too old to count against health.
@@ -573,13 +588,15 @@ def _non_negative_int(raw: Any) -> int | None:
     Absent means an add-on older than 1.49.0. Anything else that isn't a
     non-negative number is read as unknown, which withholds the recovery rescue
     rather than granting it on a value nobody can explain.
+
+    The sign is tested BEFORE truncation, unlike ``_epoch_ms``: ``int(-0.5)`` is
+    ``0``, and 0 is a claim here — "the newest run failed" — not an absence.
     """
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
-    if not math.isfinite(raw):
+    if not math.isfinite(raw) or raw < 0:
         return None
-    value = int(raw)
-    return value if value >= 0 else None
+    return int(raw)
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:

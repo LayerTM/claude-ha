@@ -213,17 +213,35 @@ def test_chat_health_failure_rate_empty_window() -> None:
 @pytest.mark.parametrize(
     ("recent", "degraded", "consecutive_ok", "expected"),
     [
-        # Every success came after the last failure — the failures are behind us.
+        # Every success came after the last failure, and outnumbers the trouble.
         (3, 1, 2, True),
         (10, 2, 8, True),
+        (5, 0, 5, True),
         # A success sits BEFORE the last failure, so the window still flaps.
         (12, 3, 3, False),
         (10, 2, 5, False),
         # The whole window failed: 0 successes, 0 since — never recovery, even
-        # though `0 >= 0` holds.
+        # though `0 == 0` holds.
         (4, 4, 0, False),
         # Newest run failed.
         (10, 2, 0, False),
+        # A single lucky success does not clear a window that is 98% failed. It
+        # satisfies "every success came after the last failure" only because there
+        # is one success to place.
+        (50, 49, 1, False),
+        (50, 40, 10, False),
+        # The floor is strict: a clean run merely EQUAL to the failure count is a
+        # tie, and a tie does not overrule the only clause that raises a warning.
+        (4, 2, 2, False),
+        (6, 2, 4, True),
+        # A count HIGHER than the success total is the add-on miscounting. `>=`
+        # would grant recovery on every one of these; `==` refuses.
+        (4, 4, 1, False),
+        (4, 4, 5, False),
+        (10, 2, 99, False),
+        # Nonsense in the other direction: the success count goes negative, and
+        # any positive count sits above it.
+        (3, 5, 1, False),
         # An add-on older than 1.49.0 reports nothing and gets no rescue.
         (3, 1, None, False),
     ],
@@ -231,7 +249,7 @@ def test_chat_health_failure_rate_empty_window() -> None:
 def test_chat_health_has_recovered(
     recent: int, degraded: int, consecutive_ok: int | None, expected: bool
 ) -> None:
-    """Recovery is every success falling after the last failure — never a count."""
+    """Recovery is a clean run that both follows every failure and outlasts them."""
     health = ChatHealth(
         recent=recent,
         degraded=degraded,
@@ -242,7 +260,7 @@ def test_chat_health_has_recovered(
     assert health.has_recovered is expected
 
 
-@pytest.mark.parametrize("raw", [-1, "2", 1.5, True, None])
+@pytest.mark.parametrize("raw", [-1, -0.5, "2", 1.5, True, None])
 async def test_status_chat_health_consecutive_ok_coercion(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, raw: object
 ) -> None:

@@ -416,6 +416,40 @@ async def test_chat_health_sensor_degraded_when_whole_window_failed(
     assert state.attributes["consecutive_ok"] == 0
 
 
+async def test_chat_health_sensor_degraded_when_one_success_lands_mid_outage(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """One chat getting through does not clear a 98%-failed window.
+
+    A common outage shape — a retry lands, or one short prompt gets through — and
+    it satisfies "every success came after the last failure" for the trivial
+    reason that there is exactly one success to place.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 50,
+                "degraded": 49,
+                "recovered": 0,
+                "last_reason": "model-error",
+                "last_failure_ts": _ms_ago(0.08),
+                "consecutive_ok": 1,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "degraded"
+    assert state.attributes["failure_rate"] == 0.98
+
+
 async def test_chat_health_sensor_degraded_while_the_window_still_flaps(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
