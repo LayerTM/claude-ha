@@ -135,6 +135,14 @@ STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
 # Rolling chat-reliability summary (add-on >= 1.20.0): {recent, degraded, recovered,
 # last_reason}. last_reason is a reason TOKEN from the runner's enum, never prompt
 # content. Absent on older add-ons (the chat-health sensor is then unavailable).
+# Add-on >= 1.49.0 stamps each entry and adds {last_failure_ts, window_from_ts,
+# window_to_ts} in epoch MILLISECONDS, where null means UNKNOWN (history written by
+# an older add-on is kept, unstamped) — never "now" and never 0. The same version
+# adds consecutive_ok: successful runs recorded AFTER the last failure, counted by
+# entry order rather than by clock, so it is a plain number even on unstamped
+# history — never null, and simply absent on an older add-on. consecutive_failed is
+# its mirror (failures since the last success); the two are never both non-zero,
+# because the newest run is either a success or it isn't.
 STATUS_CHAT_HEALTH: Final = "chat_health"
 # The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
 # its wall-clock just above this so the add-on's graceful timeout answer always lands.
@@ -146,6 +154,65 @@ STATUS_BUDGET: Final = "budget"
 # on older add-ons (the alerts binary sensor is then unavailable). items/line carry
 # the user's OWN home entity names and readings — home data, not chat content.
 STATUS_ALERTS: Final = "alerts"
+
+# --- Chat-health thresholds -------------------------------------------------
+# The add-on trims its chat-health window by COUNT (cap 50), never by age, and
+# says so deliberately: it reports what happened and when, and leaves "what counts
+# as healthy" to the consumer — these two constants are that judgement.
+#
+# Share of the window that must have failed (after a retry) before the sensor reads
+# degraded — read as "one chat in ten or more is still failing"; the comparison is
+# `>=`, so exactly one in ten raises it. The old rule —
+# any failure at all — pinned the sensor to degraded until 50 further chats pushed
+# the blip out, which on a quiet install is days.
+#
+# The rate is the NECESSARY condition; recovery and staleness below can only ever
+# clear a warning, never raise one. That asymmetry is the design — frequency says a
+# problem is real, recency only says it is current — but it puts the whole weight
+# of raising the alarm on this one number, so it is calibrated for sensitivity
+# rather than for patience: an old isolated failure is now caught by the two
+# rescues, and no longer needs a lenient threshold to stay quiet. At 0.2 a steady
+# one-in-six failure rate read "ok" forever, and a total outage needed ten
+# consecutive failures to show up in a full 50-chat window; at 0.1 those become
+# degraded and five.
+#
+CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
+# Failures in a row that mean an outage rather than a coincidence, whatever the
+# rate says (add-on >= 1.49.0). This is the ONE signal that raises the state
+# early: a rate over a count-trimmed window cannot see a fresh outage until it has
+# diluted the window, which in a full 50-chat window is five failures deep.
+#
+# Three is a judgement, and what follows is the measurement it rests on rather
+# than the intuition it used to. The only regime where this clause decides
+# anything is BELOW the rate threshold — above it the rate has already fired and
+# the run merely gets there sooner. So the false-alarm question is: how often does
+# a merely-flaky install produce a trailing run of three by chance?
+#
+# Simulated, 200k windows of 50 at each rate. The last two rows rest on a few
+# dozen events in 200k trials, so read them as orders of magnitude, not as
+# figures — only the top row is precise at this sample size:
+#
+#   fail rate   P(trailing run >= 2)   P(trailing run >= 3)
+#   0.50                    ~24.9%                 ~12.5%    <- rate already fires
+#   0.10                     ~1%                    ~0.1%    <- at the threshold
+#   0.05                     ~0.2%                  ~0.02%   <- run is the only signal
+#   0.02                     ~0.04%                 <0.01%
+#
+# Two would also be defensible; it costs roughly an order of magnitude more false
+# alarms in that regime. One is not: a single isolated failure is the complaint
+# this whole rule exists to stop shouting about.
+#
+# The earlier justification here claimed an install failing every second chat
+# "almost never" produces three in a row. That is false for a random process —
+# 12.49% above — and true only of a DETERMINISTIC alternating pattern, whose
+# trailing run is 1 at every period and phase. The conclusion survived; the reason
+# given for it did not.
+CHAT_HEALTH_OUTAGE_RUN: Final = 3
+# How old the last recorded failure must be before it stops counting against health,
+# whatever the rate. Needs `last_failure_ts` (add-on >= 1.49.0); an unstamped window
+# falls back to the rate alone, so a MISSING stamp can never clear a warning by
+# itself.
+CHAT_HEALTH_STALE_FAILURE_S: Final = 6 * 60 * 60
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
