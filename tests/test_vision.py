@@ -98,6 +98,34 @@ async def test_device_area_fallback(
     assert vision.resolve_camera(hass, "look in the hallway") == entry.entity_id
 
 
+async def test_nameless_device_contributes_no_label(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, expose_all: None
+) -> None:
+    """A device with no name adds no label, so it can't match an empty string.
+
+    Whether a device ends up nameless depends on Home Assistant: since 2026.9 the
+    registry defaults a new device's name to the config entry title, so the empty
+    name has to be asked for explicitly rather than arrived at by omission.
+    """
+    mock_config_entry.add_to_hass(hass)
+    area = ar.async_get(hass).async_create("Cellar")
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=mock_config_entry.entry_id,
+        identifiers={(DOMAIN, "nameless-device")},
+    )
+    registry.async_update_device(device.id, name=None, area_id=area.id)
+    assert registry.async_get(device.id).name is None
+    entry = er.async_get(hass).async_get_or_create(
+        "camera", "test", "cellar", device_id=device.id
+    )
+    hass.states.async_set(entry.entity_id, "idle")
+    hass.states.async_set("camera.other", "idle")
+
+    assert "" not in vision._camera_names(hass, entry.entity_id)
+    assert vision.resolve_camera(hass, "look in the cellar") == entry.entity_id
+
+
 async def test_async_prompt_sends_image_entity(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

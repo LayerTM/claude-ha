@@ -4,7 +4,10 @@
 pytest-homeassistant-custom-component==0.13.348
 
 # Runtime requirements of the `conversation` and `frontend` dependencies, needed
-# to import/set them up under the test harness.
+# to import/set them up under the test harness. Dependabot keeps these versions
+# current; adding or dropping a line is a manual change, made when Home Assistant
+# changes what those components require (gazetteer-matcher arrives with 2026.9).
+gazetteer-matcher==1.1.0
 hassil==3.10.0
 home-assistant-intents==2026.6.24
 home-assistant-frontend==20260624.6
