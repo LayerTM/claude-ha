@@ -11,7 +11,7 @@ Requires **Home Assistant OS or Supervised**.
 <!-- release & platform -->
 [![release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&display_name=tag&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
 [![release date](https://img.shields.io/github/release-date/LayerTM/claude-ha?color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Python](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
