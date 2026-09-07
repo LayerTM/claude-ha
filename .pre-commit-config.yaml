@@ -17,13 +17,19 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
-    hooks:
+      # ruff — runs the environment's installed ruff for the same reason as mypy
+      # above, which also keeps requirements_test.txt the only place the ruff
+      # version is written down.
       - id: ruff
-        args: [--fix]
+        name: ruff (lint)
+        entry: ruff check --fix
+        language: system
+        types_or: [python, pyi]
       - id: ruff-format
+        name: ruff (format)
+        entry: ruff format
+        language: system
+        types_or: [python, pyi]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
