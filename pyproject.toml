@@ -79,6 +79,15 @@ warn_unreachable = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 [[tool.mypy.overrides]]
+# Home Assistant's `http` package re-exports its public API from private
+# submodules without an `__all__`, so strict mode does not see the names as
+# exported. `StaticPathConfig` moved from the package body to `http.server` in
+# HA 2026.8; importing it from the private submodule instead would break every
+# installation on the minimum supported HA, where that module does not exist.
+module = "homeassistant.components.http"
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
