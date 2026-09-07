@@ -254,9 +254,9 @@ async def test_status_chat_health_unreadable_counts_yield_no_block(
     parser directly instead; see `test_parsers_survive_unusable_numbers`.
 
     Every count is exercised, not just one: with only `degraded` malformed,
-    dropping either of the other two guards survived the whole suite — and for
-    `recent` that mutant re-enters this very failure mode, because `failure_rate`
-    then divides by `None`.
+    dropping either of the other two guards still passes the whole suite — and
+    dropping the one on `recent` re-enters this very failure mode, because
+    `failure_rate` then divides by `None`.
     """
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",

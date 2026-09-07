@@ -19,7 +19,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the failures behind them, or that failure is over 6 hours old. One failure 19 hours ago with 37 clean chats since now reads `ok`, with the
   detail still in the attributes — while a fault that keeps recurring stays
   visible instead of being averaged away.
-  ([#26](https://github.com/LayerTM/claude-ha/issues/26))
 
 ### Added
 

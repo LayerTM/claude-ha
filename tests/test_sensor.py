@@ -189,9 +189,9 @@ async def test_chat_health_sensor_renders_the_timestamps_it_was_given(
 ) -> None:
     """Each stamp lands on its own attribute, at the right scale.
 
-    Asserting only null-ness let three mutants live behind 100% line coverage: a
-    milliseconds/seconds mix-up, the window ends swapped, and `last_failure` wired
-    to the wrong field.
+    Asserting only null-ness would pass three real defects behind 100% line
+    coverage: a milliseconds/seconds mix-up, the window ends swapped, and
+    `last_failure` wired to the wrong field.
     """
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
