@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-09-08
+
 ### Fixed
 
 - **Creating or deleting an automation can no longer damage `automations.yaml`.**
@@ -456,7 +458,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/LayerTM/claude-ha/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/LayerTM/claude-ha/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/LayerTM/claude-ha/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/LayerTM/claude-ha/compare/v1.5.0...v1.6.0
