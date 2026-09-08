@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Creating or deleting an automation can no longer damage `automations.yaml`.**
+  Two cases, both of which used to end with the file in a worse state than the
+  chat said it was in. If the file held something other than a list of
+  automations — hand-edited into a mapping, or left half-written by another
+  tool — it was read as *empty*, and the next automation Claude saved replaced
+  the whole file with that one entry, reporting success. It is now refused by
+  name, and nothing is written. And if the reload that follows a save failed,
+  the chat said the automation had not been saved while the edited file stayed
+  on disk, ready to take effect at the next restart; the file is now put back
+  byte for byte — line endings included — and a delete that fails to reload
+  likewise leaves both the file and the automation's entity untouched. If
+  something else wrote the file in the meantime (Home Assistant's own automation
+  editor, or a person with an editor open), the rollback stands down and says so
+  rather than overwriting that; and if it cannot put the file back at all, it
+  says that too instead of claiming nothing happened.
+
 ## [1.7.0] - 2026-09-04
 
 ### Fixed

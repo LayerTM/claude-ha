@@ -762,6 +762,39 @@ async def test_modify_flow_edits_then_updates(
     )
 
 
+async def test_modify_reports_an_unreadable_store(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A store that can't be read says so, instead of "no such automation"."""
+    _mock_status(aioclient_mock, "1.36.0")  # gate on
+
+    async def _unreadable(_hass: HomeAssistant, _cid: str) -> dict:
+        raise ClaudeError("automations.yaml holds dict rather than a list")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_read_automation_config",
+        _unreadable,
+    )
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    result = await conversation.async_converse(
+        hass,
+        "change my morning lights automation to 9am",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+
+    assert result.response.error_code is intent.IntentResponseErrorCode.UNKNOWN
+    assert "rather than a list" in result.response.speech["plain"]["speech"]
+
+
 async def test_modify_not_intercepted_on_old_addon(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
