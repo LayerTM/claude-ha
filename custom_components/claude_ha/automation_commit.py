@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import os
+import pathlib
 import re
 from typing import Any
 import uuid
@@ -340,18 +341,70 @@ def _enforce_action_policy(validated: dict[str, Any]) -> None:
     _walk_actions(validated.get("actions", []))
 
 
-def _read_store(path: str) -> list[Any]:
-    """Load the current automations.yaml list (missing/empty/other -> [])."""
+def _load_store(path: str) -> tuple[str | None, list[Any]]:
+    """Return the store's exact text and the automations it holds.
+
+    The text is the snapshot a failed reload is rolled back to; ``None`` means
+    there is no file yet, so rolling back means removing the one we create.
+
+    A missing or empty file is an empty store. Anything else that is not a LIST
+    is a file this code did not write and cannot rewrite without discarding what
+    it holds: refuse it. Reading it as an empty store — which is what a silent
+    fallback does — turns the next save into a wholesale replacement of the
+    user's file, with no error anywhere.
+    """
     if not os.path.isfile(path):
-        return []
+        return None, []
+    snapshot = pathlib.Path(path).read_text(encoding="utf-8")
     data = load_yaml(path)
-    return data if isinstance(data, list) else []
+    if data is None:  # empty file
+        return snapshot, []
+    if not isinstance(data, list):
+        raise ClaudeError(
+            f"{AUTOMATION_CONFIG_PATH} holds {type(data).__name__} rather than a list "
+            "of automations, so editing it would discard what's there; nothing was "
+            "changed."
+        )
+    return snapshot, data
 
 
 def _write_store(path: str, data: list[Any]) -> None:
     """Serialize then atomically write the automations list."""
     contents = dump(data)  # serialize BEFORE opening the file (no truncate on error)
     write_utf8_file_atomic(path, contents)
+
+
+def _restore_store(path: str, snapshot: str | None) -> None:
+    """Put the store back exactly as ``snapshot`` found it."""
+    if snapshot is None:
+        os.remove(path)
+    else:
+        write_utf8_file_atomic(path, snapshot)
+
+
+async def _reload_or_restore(
+    hass: HomeAssistant, path: str, snapshot: str | None, config_id: str
+) -> None:
+    """Reload automations, putting the file back if the reload fails.
+
+    Write-then-reload cannot be one atomic step, so the failure it can produce is
+    handled instead: the caller is told the change did not happen, and the file
+    is what it was before, rather than holding an edit that would take effect at
+    the next restart.
+    """
+    try:
+        await hass.services.async_call(
+            AUTOMATION_DOMAIN, SERVICE_RELOAD, {CONF_ID: config_id}, blocking=True
+        )
+    except (HomeAssistantError, OSError) as err:
+        try:
+            await hass.async_add_executor_job(_restore_store, path, snapshot)
+        except OSError as restore_err:
+            raise ClaudeError(
+                f"Couldn't reload automations ({err}), and {AUTOMATION_CONFIG_PATH} "
+                f"could not be put back ({restore_err}) — it still holds the change."
+            ) from restore_err
+        raise ClaudeError(f"Couldn't reload automations: {err}") from err
 
 
 async def _validate_and_check(
@@ -390,9 +443,11 @@ async def _persist_automation(
     alias = str(config.get("alias") or "automation").strip() or "automation"
     body = {key: value for key, value in config.items() if key != CONF_ID}
     path = hass.config.path(AUTOMATION_CONFIG_PATH)
-    try:
-        async with _STORE_LOCK:
-            current = await hass.async_add_executor_job(_read_store, path)
+    # The reload is inside the lock so that the snapshot a rollback restores is
+    # still the file we wrote over.
+    async with _STORE_LOCK:
+        try:
+            snapshot, current = await hass.async_add_executor_job(_load_store, path)
             current = [
                 item
                 for item in current
@@ -400,11 +455,11 @@ async def _persist_automation(
             ]
             current.append({**body, CONF_ID: config_id})
             await hass.async_add_executor_job(_write_store, path, current)
-        await hass.services.async_call(
-            AUTOMATION_DOMAIN, SERVICE_RELOAD, {CONF_ID: config_id}, blocking=True
-        )
-    except (HomeAssistantError, OSError) as err:
-        raise ClaudeError(f"Couldn't save the automation: {err}") from err
+        except ClaudeError:
+            raise  # already a clean, user-facing message
+        except (HomeAssistantError, OSError) as err:
+            raise ClaudeError(f"Couldn't save the automation: {err}") from err
+        await _reload_or_restore(hass, path, snapshot, config_id)
     return alias
 
 
@@ -440,7 +495,7 @@ async def async_read_automation_config(
     Used to give the model the REAL automation to edit; None if it isn't in the store.
     """
     path = hass.config.path(AUTOMATION_CONFIG_PATH)
-    current = await hass.async_add_executor_job(_read_store, path)
+    _, current = await hass.async_add_executor_job(_load_store, path)
     for item in current:
         if isinstance(item, dict) and item.get(CONF_ID) == config_id:
             return {key: value for key, value in item.items() if key != CONF_ID}
@@ -548,9 +603,9 @@ async def async_delete_automation(hass: HomeAssistant, config_id: str) -> None:
     fails, so the caller renders one clean chat error.
     """
     path = hass.config.path(AUTOMATION_CONFIG_PATH)
-    try:
-        async with _STORE_LOCK:
-            current = await hass.async_add_executor_job(_read_store, path)
+    async with _STORE_LOCK:
+        try:
+            snapshot, current = await hass.async_add_executor_job(_load_store, path)
             remaining = [
                 item
                 for item in current
@@ -559,14 +614,15 @@ async def async_delete_automation(hass: HomeAssistant, config_id: str) -> None:
             if len(remaining) == len(current):
                 raise ClaudeError("That automation no longer exists; nothing deleted.")
             await hass.async_add_executor_job(_write_store, path, remaining)
-        # Drop the (now orphaned) entity, then reload so the running automation stops.
+        except ClaudeError:
+            raise  # already a clean, user-facing message
+        except (HomeAssistantError, OSError) as err:
+            raise ClaudeError(f"Couldn't delete the automation: {err}") from err
+        # Reload first, so a failure leaves both the file AND the registry as they
+        # were; only once the automation is really gone is its entity orphaned.
+        await _reload_or_restore(hass, path, snapshot, config_id)
         entity_id = er.async_get(hass).async_get_entity_id(
             AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_id
         )
         if entity_id is not None:
             er.async_get(hass).async_remove(entity_id)
-        await hass.services.async_call(
-            AUTOMATION_DOMAIN, SERVICE_RELOAD, {CONF_ID: config_id}, blocking=True
-        )
-    except (HomeAssistantError, OSError) as err:
-        raise ClaudeError(f"Couldn't delete the automation: {err}") from err

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from custom_components.claude_ha import automation_commit
 from custom_components.claude_ha.api import ClaudeError
 from custom_components.claude_ha.automation_commit import (
     _enforce_action_policy,
@@ -23,6 +24,7 @@ from custom_components.claude_ha.automation_commit import (
     find_automations,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.yaml import load_yaml
 
@@ -413,6 +415,182 @@ async def test_commit_reports_write_or_reload_failure(
         await async_commit_automation(
             hass, _valid_config([{"action": "light.turn_on"}])
         )
+
+
+# --- store integrity --------------------------------------------------------
+#
+# Two ways the store could be left worse than it was found, both fixed here and
+# both asserted on the FILE rather than only on the error raised.
+
+# A store this code did not write: neither shape is a list of automations.
+NOT_A_LIST: list[str] = ["morning:\n  alias: Morning\n  actions: []\n", "broken\n"]
+
+
+def _boom_reload(_call: Any) -> None:
+    """Fail the reload the way a bad config makes it fail."""
+    raise HomeAssistantError("reload blew up")
+
+
+async def test_commit_treats_an_empty_store_file_as_an_empty_store(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """An existing but empty automations.yaml is empty, not unreadable."""
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text("", encoding="utf-8")
+
+    await async_commit_automation(hass, _valid_config([{"action": "light.turn_on"}]))
+
+    assert len(load_yaml(isolated_config)) == 1
+
+
+@pytest.mark.parametrize("contents", NOT_A_LIST)
+async def test_commit_refuses_a_store_that_is_not_a_list(
+    hass: HomeAssistant, isolated_config: str, contents: str
+) -> None:
+    """A non-list store is refused by name, and the file is left byte-identical.
+
+    Read as an empty store instead, the commit would have replaced the whole file
+    with its one automation and reported success.
+    """
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text(contents, encoding="utf-8")
+
+    with pytest.raises(ClaudeError, match="rather than a list"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert Path(isolated_config).read_text(encoding="utf-8") == contents
+
+
+@pytest.mark.parametrize("contents", NOT_A_LIST)
+async def test_delete_refuses_a_store_that_is_not_a_list(
+    hass: HomeAssistant, isolated_config: str, contents: str
+) -> None:
+    """The same refusal on the delete path; nothing is written."""
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text(contents, encoding="utf-8")
+
+    with pytest.raises(ClaudeError, match="rather than a list"):
+        await async_delete_automation(hass, "whatever")
+
+    assert Path(isolated_config).read_text(encoding="utf-8") == contents
+
+
+async def test_read_config_refuses_a_store_that_is_not_a_list(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """Reading says the store is unreadable rather than "no such automation"."""
+    Path(isolated_config).write_text(NOT_A_LIST[0], encoding="utf-8")
+
+    with pytest.raises(ClaudeError, match="rather than a list"):
+        await async_read_automation_config(hass, "morning")
+
+
+async def test_commit_reload_failure_restores_the_previous_file(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A failed reload leaves the store exactly as it was, not holding the draft."""
+    original = "- id: keep\n  alias: Keep\n  triggers: []\n  actions: []\n"
+    Path(isolated_config).write_text(original, encoding="utf-8")
+    hass.services.async_register("automation", "reload", _boom_reload)
+
+    with pytest.raises(ClaudeError, match="Couldn't reload automations"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert Path(isolated_config).read_text(encoding="utf-8") == original
+
+
+async def test_commit_reload_failure_removes_a_store_it_created(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """With no store to begin with, the rollback is removing the file we made."""
+    assert not Path(isolated_config).exists()
+    hass.services.async_register("automation", "reload", _boom_reload)
+
+    with pytest.raises(ClaudeError, match="Couldn't reload automations"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert not Path(isolated_config).exists()
+
+
+async def test_reload_failure_that_cannot_be_undone_says_so(
+    hass: HomeAssistant, isolated_config: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the rollback itself fails, the message says the file holds the change."""
+    Path(isolated_config).write_text("[]\n", encoding="utf-8")
+    hass.services.async_register("automation", "reload", _boom_reload)
+
+    def _no_restore(_path: str, _snapshot: str | None) -> None:
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr(automation_commit, "_restore_store", _no_restore)
+
+    with pytest.raises(ClaudeError, match="still holds the change"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+
+async def test_commit_reports_a_write_failure(
+    hass: HomeAssistant, isolated_config: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A write that fails is a clean error; the reload is never reached."""
+    reloads: list[dict[str, Any]] = []
+    hass.services.async_register(
+        "automation", "reload", lambda call: reloads.append(dict(call.data))
+    )
+
+    def _no_write(_path: str, _data: list[Any]) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(automation_commit, "_write_store", _no_write)
+
+    with pytest.raises(ClaudeError, match="Couldn't save the automation"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert reloads == []
+
+
+async def test_delete_reports_a_write_failure(
+    hass: HomeAssistant, isolated_config: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same on the delete path."""
+    hass.services.async_register("automation", "reload", lambda call: None)
+    Path(isolated_config).write_text(
+        "- id: gone\n  alias: Gone\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+
+    def _no_write(_path: str, _data: list[Any]) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(automation_commit, "_write_store", _no_write)
+
+    with pytest.raises(ClaudeError, match="Couldn't delete the automation"):
+        await async_delete_automation(hass, "gone")
+
+
+async def test_delete_reload_failure_restores_the_file_and_the_entity(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A failed delete leaves BOTH the store and the entity registry as they were."""
+    original = "- id: gone\n  alias: Gone\n  triggers: []\n  actions: []\n"
+    Path(isolated_config).write_text(original, encoding="utf-8")
+    registry = er.async_get(hass)
+    registry.async_get_or_create("automation", "automation", "gone")
+    hass.services.async_register("automation", "reload", _boom_reload)
+
+    with pytest.raises(ClaudeError, match="Couldn't reload automations"):
+        await async_delete_automation(hass, "gone")
+
+    assert Path(isolated_config).read_text(encoding="utf-8") == original
+    assert registry.async_get_entity_id("automation", "automation", "gone") is not None
 
 
 # --- find + delete ----------------------------------------------------------

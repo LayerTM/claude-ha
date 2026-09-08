@@ -498,7 +498,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 user_input, chat_log, f"I found more than one — which? {names}"
             )
         target = matches[0]
-        current = await async_read_automation_config(hass, target.config_id)
+        try:
+            current = await async_read_automation_config(hass, target.config_id)
+        except ClaudeError as err:
+            # An unreadable store says why; it must not read as "no such automation".
+            return self._error(user_input, chat_log, err)
         if current is None:
             return self._reply(
                 user_input, chat_log, "I couldn't read that automation's configuration."
