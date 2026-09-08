@@ -17,8 +17,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   name, and nothing is written. And if the reload that follows a save failed,
   the chat said the automation had not been saved while the edited file stayed
   on disk, ready to take effect at the next restart; the file is now put back
-  exactly as it was. A delete that fails to reload likewise leaves both the file
-  and the automation's entity untouched.
+  byte for byte — line endings included — and a delete that fails to reload
+  likewise leaves both the file and the automation's entity untouched. If
+  something else wrote the file in the meantime (Home Assistant's own automation
+  editor, or a person with an editor open), the rollback stands down and says so
+  rather than overwriting that; and if it cannot put the file back at all, it
+  says that too instead of claiming nothing happened.
 
 ## [1.7.0] - 2026-09-04
 

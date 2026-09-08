@@ -341,11 +341,13 @@ def _enforce_action_policy(validated: dict[str, Any]) -> None:
     _walk_actions(validated.get("actions", []))
 
 
-def _load_store(path: str) -> tuple[str | None, list[Any]]:
-    """Return the store's exact text and the automations it holds.
+def _load_store(path: str) -> tuple[bytes | None, list[Any]]:
+    """Return the store's exact bytes and the automations they hold.
 
-    The text is the snapshot a failed reload is rolled back to; ``None`` means
-    there is no file yet, so rolling back means removing the one we create.
+    The snapshot a failed reload is rolled back to, so it is BYTES: read as text
+    it would come back through universal newlines, and a CRLF file would be
+    "restored" with every line ending rewritten. ``None`` means there is no file
+    yet, so rolling back means removing the one we create.
 
     A missing or empty file is an empty store. Anything else that is not a LIST
     is a file this code did not write and cannot rewrite without discarding what
@@ -355,7 +357,7 @@ def _load_store(path: str) -> tuple[str | None, list[Any]]:
     """
     if not os.path.isfile(path):
         return None, []
-    snapshot = pathlib.Path(path).read_text(encoding="utf-8")
+    snapshot = pathlib.Path(path).read_bytes()
     data = load_yaml(path)
     if data is None:  # empty file
         return snapshot, []
@@ -368,29 +370,57 @@ def _load_store(path: str) -> tuple[str | None, list[Any]]:
     return snapshot, data
 
 
-def _write_store(path: str, data: list[Any]) -> None:
-    """Serialize then atomically write the automations list."""
-    contents = dump(data)  # serialize BEFORE opening the file (no truncate on error)
-    write_utf8_file_atomic(path, contents)
+class _StoreChangedError(Exception):
+    """Someone else wrote the store between our write and our rollback.
+
+    Deliberately NOT a :class:`ClaudeError`: that is a ``HomeAssistantError``, so
+    an ``except (HomeAssistantError, OSError)`` meant for a failed restore would
+    swallow this and report the wrong reason.
+    """
 
 
-def _restore_store(path: str, snapshot: str | None) -> None:
-    """Put the store back exactly as ``snapshot`` found it."""
+def _write_store(path: str, data: list[Any]) -> bytes:
+    """Atomically write the automations list; return the exact bytes written.
+
+    Those bytes are what the rollback compares the file against, so they are
+    produced here rather than re-read afterwards.
+    """
+    # Serialize BEFORE opening the file, so a dump error cannot truncate it.
+    contents = dump(data).encode("utf-8")
+    write_utf8_file_atomic(path, contents, mode="wb")
+    return contents
+
+
+def _restore_store(path: str, snapshot: bytes | None, written: bytes) -> None:
+    """Put the store back to ``snapshot`` — byte for byte, and only if it is ours.
+
+    ``written`` is what this code left on disk. If the file no longer matches it,
+    something else (Home Assistant's own automation editor, a person with an
+    editor) has written since, and restoring would destroy that instead: refuse,
+    and let the caller say so.
+    """
+    current = pathlib.Path(path).read_bytes() if os.path.isfile(path) else None
+    if current != written:
+        raise _StoreChangedError
     if snapshot is None:
         os.remove(path)
     else:
-        write_utf8_file_atomic(path, snapshot)
+        write_utf8_file_atomic(path, snapshot, mode="wb")
 
 
 async def _reload_or_restore(
-    hass: HomeAssistant, path: str, snapshot: str | None, config_id: str
+    hass: HomeAssistant,
+    path: str,
+    snapshot: bytes | None,
+    written: bytes,
+    config_id: str,
 ) -> None:
     """Reload automations, putting the file back if the reload fails.
 
     Write-then-reload cannot be one atomic step, so the failure it can produce is
-    handled instead: the caller is told the change did not happen, and the file
-    is what it was before, rather than holding an edit that would take effect at
-    the next restart.
+    handled instead. This layer states one thing: the store is returned to the
+    exact bytes it had, or the caller is told exactly why it was not — because
+    the file changed underneath, or because the restore itself failed.
     """
     try:
         await hass.services.async_call(
@@ -398,8 +428,16 @@ async def _reload_or_restore(
         )
     except (HomeAssistantError, OSError) as err:
         try:
-            await hass.async_add_executor_job(_restore_store, path, snapshot)
-        except OSError as restore_err:
+            await hass.async_add_executor_job(_restore_store, path, snapshot, written)
+        except _StoreChangedError:
+            raise ClaudeError(
+                f"Couldn't reload automations ({err}), and {AUTOMATION_CONFIG_PATH} "
+                "was changed by something else while that happened — it has been "
+                "left as it now is."
+            ) from err
+        # WriteError is what Home Assistant's atomic writer raises; it is a
+        # HomeAssistantError rather than an OSError, so both are caught here.
+        except (HomeAssistantError, OSError) as restore_err:
             raise ClaudeError(
                 f"Couldn't reload automations ({err}), and {AUTOMATION_CONFIG_PATH} "
                 f"could not be put back ({restore_err}) — it still holds the change."
@@ -454,12 +492,12 @@ async def _persist_automation(
                 if not (isinstance(item, dict) and item.get(CONF_ID) == config_id)
             ]
             current.append({**body, CONF_ID: config_id})
-            await hass.async_add_executor_job(_write_store, path, current)
+            written = await hass.async_add_executor_job(_write_store, path, current)
         except ClaudeError:
             raise  # already a clean, user-facing message
         except (HomeAssistantError, OSError) as err:
             raise ClaudeError(f"Couldn't save the automation: {err}") from err
-        await _reload_or_restore(hass, path, snapshot, config_id)
+        await _reload_or_restore(hass, path, snapshot, written, config_id)
     return alias
 
 
@@ -613,14 +651,14 @@ async def async_delete_automation(hass: HomeAssistant, config_id: str) -> None:
             ]
             if len(remaining) == len(current):
                 raise ClaudeError("That automation no longer exists; nothing deleted.")
-            await hass.async_add_executor_job(_write_store, path, remaining)
+            written = await hass.async_add_executor_job(_write_store, path, remaining)
         except ClaudeError:
             raise  # already a clean, user-facing message
         except (HomeAssistantError, OSError) as err:
             raise ClaudeError(f"Couldn't delete the automation: {err}") from err
         # Reload first, so a failure leaves both the file AND the registry as they
         # were; only once the automation is really gone is its entity orphaned.
-        await _reload_or_restore(hass, path, snapshot, config_id)
+        await _reload_or_restore(hass, path, snapshot, written, config_id)
         entity_id = er.async_get(hass).async_get_entity_id(
             AUTOMATION_DOMAIN, AUTOMATION_DOMAIN, config_id
         )

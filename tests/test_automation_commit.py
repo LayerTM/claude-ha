@@ -26,6 +26,8 @@ from custom_components.claude_ha.automation_commit import (
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
+from homeassistant.util.file import WriteError
 from homeassistant.util.yaml import load_yaml
 
 
@@ -521,19 +523,108 @@ async def test_commit_reload_failure_removes_a_store_it_created(
 async def test_reload_failure_that_cannot_be_undone_says_so(
     hass: HomeAssistant, isolated_config: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """If the rollback itself fails, the message says the file holds the change."""
+    """If the rollback itself fails, the message says the file holds the change.
+
+    The failure injected is the one the writer really raises: Home Assistant's
+    ``write_utf8_file_atomic`` wraps an ``OSError`` in ``WriteError``, which is a
+    ``HomeAssistantError`` and NOT an ``OSError`` — a test that injected a bare
+    ``OSError`` here would pass against code that cannot catch the real thing.
+    Only the restore is failed; the first write has to succeed for there to be
+    anything to roll back.
+    """
     Path(isolated_config).write_text("[]\n", encoding="utf-8")
     hass.services.async_register("automation", "reload", _boom_reload)
+    real_write = automation_commit.write_utf8_file_atomic
+    calls: list[int] = []
 
-    def _no_restore(_path: str, _snapshot: str | None) -> None:
-        raise OSError("read-only filesystem")
+    def _fail_the_restore(path: str, data: Any, **kwargs: Any) -> None:
+        calls.append(1)
+        if len(calls) > 1:  # the restore, not the write under test
+            raise WriteError(OSError("read-only filesystem"))
+        real_write(path, data, **kwargs)
 
-    monkeypatch.setattr(automation_commit, "_restore_store", _no_restore)
+    monkeypatch.setattr(automation_commit, "write_utf8_file_atomic", _fail_the_restore)
 
     with pytest.raises(ClaudeError, match="still holds the change"):
         await async_commit_automation(
             hass, _valid_config([{"action": "light.turn_on"}])
         )
+
+
+async def test_reload_failure_restores_crlf_byte_for_byte(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """A CRLF store comes back with its line endings, not rewritten to LF.
+
+    Snapshotting through text would read the file under universal newlines, and
+    "restoring the exact previous contents" would silently rewrite every line
+    ending in a file the user may share with Windows tooling.
+    """
+    original = b"- id: keep\r\n  alias: Keep\r\n  triggers: []\r\n  actions: []\r\n"
+    Path(isolated_config).write_bytes(original)
+    hass.services.async_register("automation", "reload", _boom_reload)
+
+    with pytest.raises(ClaudeError, match="Couldn't reload automations"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert Path(isolated_config).read_bytes() == original
+
+
+async def test_rollback_against_the_real_reload_service(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """The rollback works against Home Assistant's own reload, not just a stub.
+
+    Every other case here registers a fake `automation.reload`, which proves the
+    handling but not that the real service fails in a way this code catches. The
+    real one reads the whole configuration, so an unreadable config makes it
+    raise `FileNotFoundError` — an OSError, and a failure mode no stub was asked
+    to imitate. The automations carry no triggers, so nothing is left armed.
+    """
+    original = b"- id: keep\n  alias: Keep\n  triggers: []\n  actions: []\n"
+    Path(isolated_config).write_bytes(original)
+    assert await async_setup_component(hass, "automation", {})
+    await hass.async_block_till_done()
+    assert not Path(hass.config.path("configuration.yaml")).exists()
+
+    with pytest.raises(ClaudeError, match="Couldn't reload automations"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert Path(isolated_config).read_bytes() == original
+
+
+async def test_rollback_leaves_a_store_someone_else_rewrote(
+    hass: HomeAssistant, isolated_config: str
+) -> None:
+    """If the file changed under us during the reload, the rollback stands down.
+
+    Home Assistant's own automation editor writes this file too. Restoring a
+    snapshot blindly would destroy whatever it had just saved, turning a failed
+    save of ours into data loss that is entirely ours.
+    """
+    editor_wrote = b"- id: theirs\n  alias: Theirs\n  triggers: []\n  actions: []\n"
+
+    def _reload_then_someone_else_writes(_call: Any) -> None:
+        Path(isolated_config).write_bytes(editor_wrote)
+        raise HomeAssistantError("reload blew up")
+
+    Path(isolated_config).write_text(
+        "- id: keep\n  alias: Keep\n  triggers: []\n  actions: []\n", encoding="utf-8"
+    )
+    hass.services.async_register(
+        "automation", "reload", _reload_then_someone_else_writes
+    )
+
+    with pytest.raises(ClaudeError, match="changed by something else"):
+        await async_commit_automation(
+            hass, _valid_config([{"action": "light.turn_on"}])
+        )
+
+    assert Path(isolated_config).read_bytes() == editor_wrote
 
 
 async def test_commit_reports_a_write_failure(
