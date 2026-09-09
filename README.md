@@ -248,7 +248,10 @@ data:
 - **Daily budget spend** (`sensor.claude_code_daily_budget_spend`) — today's spend
   in USD against the add-on's daily budget, with `limit` / `remaining` /
   `fraction_used` / a soft `near_cap` flag as attributes (a limit of 0 = unlimited
-  leaves those null). Diagnostic; never a repair. Needs add-on ≥ 1.21.0.
+  leaves those null). Diagnostic; never a repair. Needs add-on ≥ 1.21.0. If the
+  add-on reports a spend or a cap that cannot be read as a plain amount, the
+  sensor goes unavailable rather than showing a figure nobody can stand behind —
+  an unreadable cap is never treated as no cap.
 - **Token usage today** (`sensor.claude_code_token_usage_today`) — today's input +
   output tokens (unit `tokens`), with the full usage report (per-period and
   per-model token totals, message counts) as attributes. Polled slowly (~5 min;

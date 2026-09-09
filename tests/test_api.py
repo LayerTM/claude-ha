@@ -16,12 +16,15 @@ from custom_components.claude_ha.api import (
     ClaudeRateLimitError,
     ClaudeRequestError,
     _epoch_ms,
+    _non_negative_amount,
     _non_negative_int,
+    _parse_budget,
 )
 from custom_components.claude_ha.const import (
     CHAT_HEALTH_STALE_FAILURE_S,
     HEADER_CALLER,
     MODE_WRITE,
+    REQUEST_TIMEOUT,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -219,9 +222,10 @@ def test_parsers_survive_unusable_numbers(raw: float) -> None:
     """
     assert _epoch_ms(raw) is None
     if raw != 10**18:
-        # 10**18 is out of range as a DATE but is a usable count; every other
-        # value here is unusable as either.
+        # 10**18 is out of range as a DATE but is a usable count and a usable
+        # amount; every other value here is unusable as all three.
         assert _non_negative_int(raw) is None
+        assert _non_negative_amount(raw) is None
 
 
 @pytest.mark.parametrize("field", ["recent", "degraded", "recovered"])
@@ -288,6 +292,154 @@ def test_count_ceiling_matches_what_home_assistant_can_publish() -> None:
 
     assert _non_negative_int(_MAX_JSON_INT) == _MAX_JSON_INT
     assert _non_negative_int(_MAX_JSON_INT + 1) is None
+
+
+def test_an_unreadable_budget_is_never_read_as_unlimited() -> None:
+    """The headline case, and the only one here that never raised anything.
+
+    ``limit: Infinity`` parses cleanly through ``float()``: nothing raises, so
+    nothing is logged and nothing is repaired. The spend sensor then reports
+    ``fraction_used = 0.0`` and ``near_cap = False`` against an infinite cap —
+    0% of an infinite budget used, forever, which is exactly the "silently
+    unlimited" reading the cap exists to prevent.
+
+    Falling back to 0 would land in the same place by a shorter route, because
+    limit 0 means UNLIMITED in this contract. Dropping the block is the only
+    answer that does not invent a cap: the sensor is then unavailable, which is
+    honest.
+
+    Asserted against the parser rather than over the wire: the aiohttp test
+    double decodes with Home Assistant's orjson-backed loader, which REJECTS
+    ``Infinity`` and over-64-bit integers, while production aiohttp decodes with
+    stdlib ``json`` and accepts both. A wire-level test for these could not fail.
+    """
+    assert _parse_budget({"limit": float("inf"), "spent": 12.5}) is None
+    assert _parse_budget({"limit": float("nan"), "spent": 12.5}) is None
+    assert _parse_budget({"limit": int("9" * 400), "spent": 12.5}) is None
+    assert _parse_budget({"spent": float("inf")}) is None
+
+    # The control: a readable budget still parses, and 0 still means unlimited.
+    real = _parse_budget({"limit": 20.0, "spent": 3.5})
+    assert real is not None and (real.limit, real.spent) == (20.0, 3.5)
+    unlimited = _parse_budget({"limit": 0, "spent": 3.5})
+    assert unlimited is not None and unlimited.limit == 0.0
+
+
+@pytest.mark.parametrize("field", ["limit", "spent"])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,  # the key present but null
+        "abc",
+        -1,  # a negative cap or a negative spend is not a number to publish
+        True,  # a bool is an int in Python, and would have read as 1.0
+    ],
+)
+async def test_status_budget_unreadable_amount_yields_no_block(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    bad: object,
+    field: str,
+) -> None:
+    """An amount that cannot be read drops the block instead of inventing one.
+
+    ``float(None)`` raised ``TypeError`` and ``float("abc")`` raised
+    ``ValueError``, neither a ``ClaudeError``, so both escaped the coordinator
+    and took every status entity unavailable once a minute.
+
+    Both fields are exercised, not just one: a guard on ``limit`` alone leaves a
+    malformed ``spent`` to be published as the sensor's own state.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={"ready": True, "budget": {**{"limit": 20.0, "spent": 3.5}, field: bad}},
+    )
+    status = await _client(hass).async_get_status()
+    assert status.ready is True
+    assert status.budget is None
+
+
+@pytest.mark.parametrize("field", ["active", "critical"])
+@pytest.mark.parametrize("bad", [None, "abc", -1, True])
+async def test_status_alerts_unreadable_count_yields_no_block(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    bad: object,
+    field: str,
+) -> None:
+    """A count that cannot be read drops the block instead of inventing a zero.
+
+    ``active: 0`` is the binary sensor's "all clear" — the one answer that must
+    never be invented — and reading the count was also how the poll died:
+    ``int(None)`` and ``int("abc")`` raise out of the parser, past the
+    coordinator's ``except ClaudeError``.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "alerts": {
+                **{"active": 2, "critical": 1, "items": []},
+                field: bad,
+            },
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.ready is True
+    assert status.alerts is None
+
+
+@pytest.mark.parametrize("items", [None, "leak", 5, {"key": "leak"}])
+async def test_alerts_items_that_cannot_be_iterated_yield_an_empty_set(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    items: object,
+) -> None:
+    """A non-list ``items`` empties the set but keeps the counts.
+
+    It fails separately from the counts and so is guarded separately:
+    ``items: null`` raised ``TypeError`` straight out of the comprehension while
+    both counts were perfectly readable. Dropping the whole block for it would
+    throw away what the add-on did manage to say.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={"ready": True, "alerts": {"active": 2, "critical": 1, "items": items}},
+    )
+    status = await _client(hass).async_get_status()
+    assert status.alerts is not None
+    assert (status.alerts.active, status.alerts.critical) == (2, 1)
+    assert status.alerts.items == []
+
+
+@pytest.mark.parametrize("bad", [None, "abc", -1, True, 1.5e300])
+async def test_unreadable_prompt_timeout_falls_back_to_the_request_floor(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    bad: object,
+) -> None:
+    """A budget nobody can read leaves the wall-clock at its documented floor.
+
+    ``note_prompt_timeout`` sits OUTSIDE the coordinator's ``try``, so anything
+    raising there is unguarded — and the old ``isinstance(raw, (int, float))``
+    test let two families through: ``int(inf)`` raised ``OverflowError``, and
+    ``True`` passed as a 1 ms budget, which is not a fallback but a wrong answer.
+
+    ``1.5e300`` is the wire-representable member of the over-large family (its
+    ``/ 1000`` is finite, but it is far past any timeout); ``Infinity`` and
+    over-64-bit integers cannot reach the parser through this mock and are
+    covered directly in `test_parsers_survive_unusable_numbers`.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={"ready": True, "prompt_timeout_ms": bad},
+    )
+    client = _client(hass)
+    status = await client.async_get_status()
+    assert status.prompt_timeout_ms is None
+
+    client.note_prompt_timeout(status.prompt_timeout_ms)
+    assert client.read_timeout == float(REQUEST_TIMEOUT)
 
 
 def test_chat_health_staleness_boundary_is_strict() -> None:
