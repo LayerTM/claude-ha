@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A malformed daily budget no longer reads as an unlimited one.** If the add-on
+  reported a spend cap that is not a plain number — including an infinite one —
+  the budget sensor accepted it and reported 0% of it used, so it could never
+  warn again. It now goes unavailable instead: an unreadable cap is not the same
+  as no cap, and a limit of 0 already means unlimited here.
+- **A malformed status field no longer takes every Claude entity offline.** A
+  null, a text value or an out-of-range number in the budget, the active-alert
+  counts or the add-on's prompt timeout raised out of the status poll, once a
+  minute, leaving every sensor unavailable until the add-on sent something
+  readable. Each block is now read on its own: the one that cannot be read is
+  dropped, its entity is honestly unavailable, and the rest keep updating. An
+  unreadable alert count in particular is no longer shown as zero, which used to
+  read as "all clear".
+
 ## [1.7.1] - 2026-09-08
 
 ### Fixed

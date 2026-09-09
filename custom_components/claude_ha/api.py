@@ -395,37 +395,9 @@ class ClaudeClient:
         ha_mcp = data.get(STATUS_HA_MCP)
         connected = data.get(STATUS_HA_MCP_CONNECTED)
         chat_health = _parse_chat_health(data.get(STATUS_CHAT_HEALTH))
-        raw_timeout = data.get(STATUS_PROMPT_TIMEOUT_MS)
-        prompt_timeout_ms = (
-            int(raw_timeout) if isinstance(raw_timeout, (int, float)) else None
-        )
-        raw_budget = data.get(STATUS_BUDGET)
-        budget = (
-            Budget(
-                limit=float(raw_budget.get("limit", 0.0)),
-                spent=float(raw_budget.get("spent", 0.0)),
-            )
-            if isinstance(raw_budget, dict)
-            else None
-        )
-        raw_alerts = data.get(STATUS_ALERTS)
-        alerts = (
-            Alerts(
-                active=int(raw_alerts.get("active", 0)),
-                critical=int(raw_alerts.get("critical", 0)),
-                items=[
-                    AlertItem(
-                        key=str(item.get("key", "")),
-                        critical=bool(item.get("critical", False)),
-                        line=str(item.get("line", "")),
-                    )
-                    for item in raw_alerts.get("items", [])
-                    if isinstance(item, dict)
-                ],
-            )
-            if isinstance(raw_alerts, dict)
-            else None
-        )
+        prompt_timeout_ms = _non_negative_int(data.get(STATUS_PROMPT_TIMEOUT_MS))
+        budget = _parse_budget(data.get(STATUS_BUDGET))
+        alerts = _parse_alerts(data.get(STATUS_ALERTS))
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
@@ -630,6 +602,92 @@ def _parse_chat_health(raw: Any) -> ChatHealth | None:
     )
 
 
+def _parse_budget(raw: Any) -> Budget | None:
+    """Build a ``Budget`` from the status block, or ``None`` if it says nothing.
+
+    Same rule as ``_parse_chat_health``: an amount that cannot be read is worth
+    less than no block at all, because every default available here is itself a
+    claim. Limit 0 means UNLIMITED in this contract, so falling back to it would
+    turn an unreadable cap into "spend anything" — measured before this guard,
+    ``limit: Infinity`` parsed cleanly and left the sensor reporting 0% of an
+    infinite budget used, with nothing raised and nothing logged. A spent of 0
+    would be the same invention in the other direction. ``None`` leaves the
+    sensor unavailable, which is honest.
+    """
+    if not isinstance(raw, dict):
+        return None
+    limit = _non_negative_amount(raw.get("limit", 0.0))
+    spent = _non_negative_amount(raw.get("spent", 0.0))
+    if limit is None or spent is None:
+        return None
+    return Budget(limit=limit, spent=spent)
+
+
+def _parse_alerts(raw: Any) -> Alerts | None:
+    """Build an ``Alerts`` from the status block, or ``None`` if it says nothing.
+
+    A count that cannot be read must not become 0: ``active: 0`` is the binary
+    sensor's "all clear", the one answer that must never be invented. Reading it
+    was also how the poll died — ``int(None)`` and ``int("abc")`` raise
+    ``TypeError``/``ValueError`` and ``int(inf)`` raises ``OverflowError``, none
+    of them a ``ClaudeError``, so the coordinator could not catch them and every
+    status entity went unavailable once a minute.
+
+    ``items`` is guarded separately because it fails separately: a non-list is
+    not a bad count, it is nothing to iterate, and ``items: null`` raised
+    ``TypeError`` out of the comprehension while both counts were perfectly
+    readable. The alert set is then honestly empty rather than absent, since the
+    counts still say what the add-on found.
+    """
+    if not isinstance(raw, dict):
+        return None
+    active = _non_negative_int(raw.get("active", 0))
+    critical = _non_negative_int(raw.get("critical", 0))
+    if active is None or critical is None:
+        return None
+    raw_items = raw.get("items", [])
+    return Alerts(
+        active=active,
+        critical=critical,
+        items=[
+            AlertItem(
+                key=str(item.get("key", "")),
+                critical=bool(item.get("critical", False)),
+                line=str(item.get("line", "")),
+            )
+            for item in (raw_items if isinstance(raw_items, list) else [])
+            if isinstance(item, dict)
+        ],
+    )
+
+
+def _non_negative_amount(raw: Any) -> float | None:
+    """Coerce a contract amount to a float, or ``None`` when it says nothing.
+
+    The float sibling of ``_non_negative_int``, and it decides validity the same
+    way: by performing the conversion the caller needs rather than predicting
+    which values survive it. stdlib ``json`` — what aiohttp decodes with in
+    production — accepts ``Infinity``, ``NaN`` and an arbitrarily long integer
+    literal, and each reaches a different end. ``float(inf)`` does not raise at
+    all, which is the dangerous one; ``float(int("9" * 400))`` raises
+    ``OverflowError``; and only a finite value can be divided in
+    ``fraction_used`` or published as a state attribute.
+
+    No ceiling is needed above finiteness, unlike the integer helper: every
+    finite float encodes, and it is the INTEGER that Home Assistant's encoder
+    stops at ``2**64 - 1``.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    try:
+        value = float(raw)
+    except OverflowError:
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
 def _epoch_ms(raw: Any) -> int | None:
     """Coerce a contract timestamp to epoch ms, or ``None`` when it says nothing.
 
@@ -666,11 +724,19 @@ def _epoch_ms(raw: Any) -> int | None:
 
 
 def _non_negative_int(raw: Any) -> int | None:
-    """Coerce a contract count to an int, or ``None`` when it says nothing.
+    """Coerce a contract whole number to an int, or ``None`` when it says nothing.
 
-    Absent means an add-on older than 1.49.0. Anything else that isn't a
-    non-negative number is read as unknown, which withholds the recovery rescue
-    rather than granting it on a value nobody can explain.
+    Absent means an add-on that does not report the field yet. Anything else that
+    isn't a non-negative number is read as unknown, which withholds the recovery
+    rescue rather than granting it on a value nobody can explain.
+
+    Three families of field share it: the chat-health counts, the alert counts,
+    and ``prompt_timeout_ms``. The last is not published anywhere, but it is
+    DIVIDED — ``note_prompt_timeout`` sits outside the coordinator's ``try``, and
+    an over-64-bit millisecond count raises ``OverflowError`` on ``/ 1000`` there,
+    where nothing would catch it. The publication ceiling below happens to bound
+    that too. ``True`` is rejected with the rest of the non-numbers: it passed the
+    old ``isinstance(raw, (int, float))`` guard and read as a 1 ms budget.
 
     The sign is tested BEFORE truncation, unlike ``_epoch_ms``: ``int(-0.5)`` is
     ``0``, and 0 is a claim here — "the newest run failed" — not an absence.
