@@ -131,8 +131,8 @@ the add-on for you. There are no options to fill in.
 
 ### Conversation agent
 
-Select **Claude** as a conversation agent under **Settings → Voice assistants**,
-or target it directly. It answers in any language, and it can **act** on your home.
+Select **Claude** (`conversation.claude_code`) as a conversation agent under
+**Settings → Voice assistants**, or target it directly. It answers in any language, and it can **act** on your home.
 Answers **stream in live**, token by token (with the Claude Code add-on ≥ 1.17.0;
 older add-ons return the whole answer at once).
 
@@ -223,8 +223,25 @@ data:
   notify: mobile_app_my_phone
 ```
 
-### Sensors
+### Entities
 
+The full set the integration creates, all on one device. The first two are
+meant to be acted on; the rest are diagnostic, which Home Assistant keeps out of
+the device's main controls by default.
+
+- **Claude** (`conversation.claude_code`) — the conversation agent itself: pick it
+  under **Settings → Voice assistants**, or target it from a script or automation.
+  See [Conversation agent](#conversation-agent).
+- **Active alerts** (`binary_sensor.claude_code_active_alerts`) — a `problem`
+  binary sensor, on while the add-on has any active proactive alert (leak,
+  offline, battery, CO₂ and the rest). It mirrors the add-on's own alert set, so
+  your automations and your history can react to it instead of only the push
+  notification. `active_count`, `critical_count` and an `items` list (each with
+  its `key`, a `critical` flag and the one-line reading) are the attributes;
+  `critical` marks the alerts the add-on always sends. The lines are your own
+  entity names and readings — home data you already have in Home Assistant, never
+  chat content. Needs add-on ≥ 1.39.0, and stays unavailable while proactive
+  alerts are off or have not run yet.
 - **Status** (`sensor.claude_code_status`) — `ready` / `initializing`, with the
   add-on version, Claude version, active model, whether a scoped HA MCP is
   configured and reachable, a `health` summary and the count of entities exposed
@@ -260,6 +277,8 @@ data:
   cost in USD (interactive-console use is measured in tokens, not dollars). The
   usage/cost sensors need the Claude Code add-on ≥ 1.7.0 and stay unavailable
   otherwise.
+- **Check Claude health** (`button.claude_code_check_claude_health`) — runs the
+  deeper probe described under [Health checks](#health-checks) on demand.
 
 Entity ids above are the defaults (device *Claude Code* + entity name); adjust to
 your own if you've renamed them.
@@ -325,7 +344,8 @@ raises a repair with the exact fix when it finds:
 - nothing is exposed to Assist (so there's nothing to see or control).
 
 These checks cost nothing (they read the status poll, not Claude). Press the
-**Check Claude health** button to run a deeper probe — a tiny read that confirms
+**Check Claude health** button (`button.claude_code_check_claude_health`) to run a
+deeper probe — a tiny read that confirms
 Claude can actually reach the MCP server right now. Needs the add-on ≥ 1.14.0 for
 the reachability signal.
 
