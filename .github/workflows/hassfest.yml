@@ -19,4 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # The registry answers `toomanyrequests` in under a second sometimes, and the
+      # pull is the first thing hassfest does, so the run goes red before any of this
+      # repository's code is read. Pulling it here, with retries, means the action
+      # finds the image locally and never asks the registry itself.
+      - name: Pre-pull the hassfest image
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: docker pull ghcr.io/home-assistant/hassfest:latest
+
       - uses: home-assistant/actions/hassfest@master
