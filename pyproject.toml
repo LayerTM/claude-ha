@@ -1,12 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "claude-ha"
-# Mirrors custom_components/claude_ha/manifest.json (the single source of truth);
-# bump both together at release. Not published to PyPI (no build-system).
-version = "1.7.2"
+# The version is READ from custom_components/claude_ha/manifest.json, which Home
+# Assistant already treats as the source of truth. It used to be copied here and
+# bumped by hand alongside it, which is a second place to be wrong.
+dynamic = ["version"]
 description = "Home Assistant integration exposing Claude via the Claude Code add-on."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.14"
+
+[tool.hatch.version]
+path = "custom_components/claude_ha/manifest.json"
+pattern = '"version":\s*"(?P<version>[^"]+)"'
+
+[tool.hatch.build.targets.wheel]
+packages = ["custom_components/claude_ha"]
 
 [tool.ruff]
 target-version = "py314"

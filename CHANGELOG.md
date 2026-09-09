@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The project version now has a single source. `pyproject.toml` reads it from
+  `custom_components/claude_ha/manifest.json` — the file Home Assistant itself
+  loads it from — instead of carrying its own copy to be bumped by hand beside
+  it. A test fails if a literal version reappears or the two stop agreeing.
+
 ### Documentation
 
 - The README now lists every entity the integration creates, not just the
