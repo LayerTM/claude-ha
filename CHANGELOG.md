@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- The README now lists every entity the integration creates, not just the
+  sensors. The **Active alerts** binary sensor was missing entirely, and the
+  conversation agent and the **Check Claude health** button were described in
+  prose without their entity ids.
+
 ## [1.7.2] - 2026-09-09
 
 ### Fixed
