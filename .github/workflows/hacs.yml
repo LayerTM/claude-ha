@@ -19,6 +19,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # The registry answers `toomanyrequests` in under a second sometimes, which
+      # reddens the run before any of this repository's code is read. Warming the
+      # image here, with retries, takes the layer download out of the way.
+      #
+      # It does NOT make this job immune, unlike the same step in hassfest.yml:
+      # `hacs/action` is a container action, so the runner runs its own
+      # `docker pull ghcr.io/hacs/action:main` afterwards and that request can
+      # still be refused. The image must match what the runner pulls for the
+      # warm-up to count, hence the digest-free tag it resolves.
+      - name: Pre-pull the HACS image
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: docker pull ghcr.io/hacs/action:main
+
       - uses: hacs/action@main
         with:
           category: integration
