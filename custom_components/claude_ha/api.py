@@ -147,6 +147,12 @@ class ChatHealth:
     version but is counted by entry order rather than by clock, so it is a plain
     number even on unstamped history — ``None`` here only ever means "older add-on".
 
+    ``window_dated`` (add-on >= 1.55.0) says how many of the ``recent`` runs
+    carried a stamp, and so how much of the window the two timestamps actually
+    span: 1 means they are one instant repeated rather than a range, and a value
+    equal to ``recent`` means the whole window. ``None`` on an older add-on —
+    which is not the same as 0, and is why the two are kept apart here.
+
     The add-on trims this window by count (cap 50), never by age — deciding what
     counts as healthy is deliberately left to this side.
 
@@ -163,6 +169,7 @@ class ChatHealth:
     window_to_ts: int | None = None
     consecutive_ok: int | None = None
     consecutive_failed: int | None = None
+    window_dated: int | None = None
 
     @property
     def failure_rate(self) -> float:
@@ -599,6 +606,7 @@ def _parse_chat_health(raw: Any) -> ChatHealth | None:
         window_to_ts=_epoch_ms(raw.get("window_to_ts")),
         consecutive_ok=_non_negative_int(raw.get("consecutive_ok")),
         consecutive_failed=_non_negative_int(raw.get("consecutive_failed")),
+        window_dated=_non_negative_int(raw.get("window_dated")),
     )
 
 

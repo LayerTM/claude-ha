@@ -140,6 +140,63 @@ async def test_chat_health_sensor_ok(
     assert state.attributes["last_failure"] is None
     assert state.attributes["window_from"] is None
     assert state.attributes["window_to"] is None
+    # The add-on here predates 1.55.0 and sends no `window_dated`.
+    assert state.attributes["window_dated"] is None
+
+
+@pytest.mark.parametrize(
+    ("sent", "expected"),
+    [
+        (12, 12),  # the whole window is stamped: the two ends are a real range
+        (1, 1),  # one stamped run: window_from == window_to, an instant not a range
+        (0, 0),  # nothing stamped, which is a claim and not the same as silence
+        (None, None),  # the key present but null
+        ("abc", None),
+        (-1, None),  # a count of runs cannot be negative
+    ],
+)
+async def test_chat_health_window_dated_says_how_much_of_the_window_is_stamped(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    sent: object,
+    expected: int | None,
+) -> None:
+    """`window_dated` is surfaced when the add-on sends it, and only then.
+
+    Without it the two window stamps cannot be read: identical ends mean either a
+    single stamped run or a window that truly spans an instant, and there is
+    nothing in the block to tell those apart. Observed live on a real install,
+    where `window_from` and `window_to` had been the same 2026-09-04 instant for
+    six days.
+
+    Both directions are exercised, because the absent case is the one that has to
+    keep working: an add-on older than 1.55.0 sends no such key, and the
+    attribute must then be `None` rather than an invented 0 — 0 is a real answer
+    here, meaning the add-on stamped nothing. The malformed values ride the same
+    coercion as every other count, so an unreadable one reads as unknown rather
+    than raising out of the poll.
+    """
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 12,
+                "degraded": 0,
+                "recovered": 0,
+                "last_reason": None,
+                "window_dated": sent,
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.state == "ok"
+    assert state.attributes["window_dated"] == expected
 
 
 async def test_chat_health_sensor_degraded(
