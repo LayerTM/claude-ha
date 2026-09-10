@@ -262,6 +262,10 @@ the device's main controls by default.
   ≥ 1.20.0; unavailable otherwise. The run counters and the timestamps need add-on
   ≥ 1.49.0 and are null without it — an add-on that reports none of them is judged
   on the rate alone, so a missing field neither quiets a warning nor invents one.
+  `window_dated` (add-on ≥ 1.55.0, null without it) is how many of the `recent`
+  chats carried a stamp, and it is what makes the two timestamps readable: equal
+  to `recent` they span the whole window, and at 1 they are a single instant
+  printed twice rather than a range.
 - **Daily budget spend** (`sensor.claude_code_daily_budget_spend`) — today's spend
   in USD against the add-on's daily budget, with `limit` / `remaining` /
   `fraction_used` / a soft `near_cap` flag as attributes (a limit of 0 = unlimited

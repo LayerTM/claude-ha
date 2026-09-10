@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Chat health now says how much of its window the timestamps cover.** The
+  `window_dated` attribute is the number of recent chats that carried a stamp,
+  which is what tells a range apart from a single instant printed twice: equal to
+  `recent` the two ends span the whole window, at 1 they are one moment. Needs
+  add-on 1.55.0; on anything older the attribute is null rather than a made-up
+  zero, since zero would mean the add-on stamped nothing.
+
 ### Changed
 
 - The project version now has a single source. `pyproject.toml` reads it from

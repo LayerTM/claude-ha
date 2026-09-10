@@ -191,7 +191,10 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
         """Expose the counts, the rate the state turns on, and the window's clock.
 
         The timestamps are ``None`` on an add-on older than 1.49.0, and on history
-        it wrote before it started stamping.
+        it wrote before it started stamping. ``window_dated`` says how many runs
+        those two stamps were taken from, which is what makes them readable: equal
+        to ``recent`` they span the window, at 1 they are a single instant printed
+        twice, and ``None`` means an add-on older than 1.55.0 that does not say.
         """
         health = self.coordinator.data.chat_health
         if health is None:
@@ -208,6 +211,7 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
             "last_failure": _as_utc(health.last_failure_ts),
             "window_from": _as_utc(health.window_from_ts),
             "window_to": _as_utc(health.window_to_ts),
+            "window_dated": health.window_dated,
         }
 
 
