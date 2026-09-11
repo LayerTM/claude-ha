@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import Final
 
@@ -239,6 +240,14 @@ SCAN_INTERVAL: Final = 60
 # for a genuine outage, so keep this small. Only the connected-signal path is
 # debounced — a genuinely-unloaded mcp_server (a hard local fact) still fires now.
 MCP_UNREACHABLE_DEBOUNCE_POLLS: Final = 2
+# How long the add-on may stay unreachable before it counts as an outage rather
+# than a restart. An update or a restart takes seconds, but the add-on is allowed
+# up to 5 minutes to stop (its `timeout` in config.yaml), so the window covers a
+# slow stop plus the start that follows it.
+ADDON_OUTAGE_GRACE: Final = timedelta(minutes=10)
+# Seconds between polls while a restart is in progress, so the entities come
+# back within seconds of the add-on answering rather than a full SCAN_INTERVAL.
+ADDON_RESTART_RETRY: Final = 10
 # The usage report is cached by the add-on and heavy to build, so poll it slowly
 # (contract §3a: no more than ~every 5 minutes).
 USAGE_SCAN_INTERVAL: Final = 300

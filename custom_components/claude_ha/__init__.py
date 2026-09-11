@@ -15,7 +15,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.hassio import is_hassio
 from homeassistant.helpers.typing import ConfigType
 
-from .addon import get_addon_manager
+from .addon import (
+    AddonWatch,
+    async_clear_addon_issues,
+    async_create_addon_issue,
+    get_addon_manager,
+)
 from .api import ClaudeClient
 from .confirm import async_setup_confirm
 from .const import (
@@ -63,8 +68,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
     """Set up Claude from a config entry."""
-    slug = entry.data.get(CONF_ADDON_SLUG)
-    if slug and is_hassio(hass):
+    # The add-on is Supervisor-managed only on a Supervisor install with a slug.
+    slug: str | None = entry.data.get(CONF_ADDON_SLUG) if is_hassio(hass) else None
+    if slug:
         await _async_ensure_addon_running(hass, entry, slug)
 
     client = ClaudeClient(
@@ -72,12 +78,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
         base_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
         token=entry.data[CONF_TOKEN],
     )
-    status = ClaudeStatusCoordinator(hass, entry, client)
+    watch = AddonWatch(hass, slug or None)
+    status = ClaudeStatusCoordinator(hass, entry, client, watch)
     await status.async_config_entry_first_refresh()
 
     # Usage is supplementary and needs add-on >= 1.7.0; a non-blocking refresh
     # keeps setup working (its sensors just stay unavailable) if it is missing.
-    usage = ClaudeUsageCoordinator(hass, entry, client)
+    usage = ClaudeUsageCoordinator(hass, entry, client, watch)
     await usage.async_refresh()
 
     entry.runtime_data = ClaudeRuntimeData(client=client, status=status, usage=usage)
@@ -143,38 +150,16 @@ async def _async_ensure_addon_running(
 
     if info.state is AddonState.NOT_INSTALLED:
         addon.async_schedule_install_setup_addon(info.options, catch_error=True)
-        _create_addon_issue(hass, ISSUE_ADDON_NOT_INSTALLED, slug, fixable=False)
+        async_create_addon_issue(hass, ISSUE_ADDON_NOT_INSTALLED, slug, fixable=False)
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="addon_not_installed"
         )
 
     if info.state is not AddonState.RUNNING:
         addon.async_schedule_start_addon(catch_error=True)
-        _create_addon_issue(hass, ISSUE_ADDON_NOT_RUNNING, slug, fixable=True)
+        async_create_addon_issue(hass, ISSUE_ADDON_NOT_RUNNING, slug, fixable=True)
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="addon_not_running"
         )
 
-    _clear_addon_issues(hass)
-
-
-def _create_addon_issue(
-    hass: HomeAssistant, issue_id: str, slug: str, *, fixable: bool
-) -> None:
-    """Raise a repair issue for a missing/stopped add-on."""
-    ir.async_create_issue(
-        hass,
-        DOMAIN,
-        issue_id,
-        is_fixable=fixable,
-        severity=ir.IssueSeverity.ERROR,
-        translation_key=issue_id,
-        translation_placeholders={"addon_slug": slug},
-        data={"addon_slug": slug},
-    )
-
-
-def _clear_addon_issues(hass: HomeAssistant) -> None:
-    """Remove any add-on availability repair issues."""
-    for issue_id in (ISSUE_ADDON_NOT_RUNNING, ISSUE_ADDON_NOT_INSTALLED):
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
+    async_clear_addon_issues(hass)
