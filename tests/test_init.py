@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+import logging
 from unittest.mock import patch
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from freezegun.api import FrozenDateTimeFactory
+import pytest
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.const import (
+    ADDON_OUTAGE_GRACE,
     DOMAIN,
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
@@ -72,23 +80,76 @@ async def test_setup_addon_task_in_progress(
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
 
 
-async def test_setup_addon_not_running_creates_issue(
+async def test_setup_leaves_stopped_addon_to_supervisor(
     hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
     mock_config_entry: MockConfigEntry,
     mock_status: None,
     mock_addon_manager,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A stopped add-on schedules a start and raises a repair issue."""
+    """A stopped add-on at setup is waited for, not started, and not a repair.
+
+    At boot the Supervisor starts the add-on right after Core; starting it from
+    setup raced that and flashed a repair on every Home Assistant restart.
+    """
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_RUNNING
     )
     with patch("custom_components.claude_ha.is_hassio", return_value=True):
         await setup_integration(hass, mock_config_entry)
 
+        assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+        mock_addon_manager.async_schedule_start_addon.assert_not_called()
+        registry = ir.async_get(hass)
+        assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is None
+
+        # The Supervisor brings the add-on up; the next setup retry succeeds.
+        mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
+        freezer.tick(timedelta(seconds=11))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    mock_addon_manager.async_schedule_start_addon.assert_not_called()
+    loud = [
+        r
+        for r in caplog.records
+        if r.name.startswith("custom_components.claude_ha")
+        and r.levelno >= logging.WARNING
+    ]
+    assert loud == []
+
+
+async def test_setup_stopped_addon_raises_repair_after_grace(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    mock_addon_manager,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An add-on still stopped past the grace period gets a WARNING and a repair."""
+    mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
+        AddonState.NOT_RUNNING
+    )
+    with patch("custom_components.claude_ha.is_hassio", return_value=True):
+        await setup_integration(hass, mock_config_entry)
+        freezer.tick(ADDON_OUTAGE_GRACE + timedelta(seconds=1))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
-    mock_addon_manager.async_schedule_start_addon.assert_called_once()
+    mock_addon_manager.async_schedule_start_addon.assert_not_called()
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is not None
+    warnings = [
+        r
+        for r in caplog.records
+        if r.name.startswith("custom_components.claude_ha")
+        and r.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 1
 
 
 async def test_setup_addon_not_installed_creates_issue(

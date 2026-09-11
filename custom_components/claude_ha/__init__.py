@@ -20,6 +20,7 @@ from .addon import (
     async_clear_addon_issues,
     async_create_addon_issue,
     get_addon_manager,
+    get_addon_watch,
 )
 from .api import ClaudeClient
 from .confirm import async_setup_confirm
@@ -32,7 +33,6 @@ from .const import (
     DOMAIN,
     HEALTH_ISSUES,
     ISSUE_ADDON_NOT_INSTALLED,
-    ISSUE_ADDON_NOT_RUNNING,
 )
 from .coordinator import (
     ClaudeConfigEntry,
@@ -78,7 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
         base_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
         token=entry.data[CONF_TOKEN],
     )
-    watch = AddonWatch(hass, slug or None)
+    watch = get_addon_watch(hass, slug) if slug else AddonWatch(hass, None)
     status = ClaudeStatusCoordinator(hass, entry, client, watch)
     await status.async_config_entry_first_refresh()
 
@@ -130,9 +130,10 @@ async def _async_ensure_addon_running(
 ) -> None:
     """Make sure the companion add-on is installed and running before setup.
 
-    Raises :class:`ConfigEntryNotReady` (so HA retries) and surfaces a
-    user-actionable repair issue while the add-on is down; clears the issues
-    once it is running.
+    Raises :class:`ConfigEntryNotReady` (so HA retries) while the add-on is
+    missing or down: a missing one is installed and raises a repair at once, a
+    stopped one is left to the Supervisor and reported by the add-on watch.
+    Clears the issues once it is running.
     """
     addon: AddonManager = get_addon_manager(hass, slug)
 
@@ -156,8 +157,10 @@ async def _async_ensure_addon_running(
         )
 
     if info.state is not AddonState.RUNNING:
-        addon.async_schedule_start_addon(catch_error=True)
-        async_create_addon_issue(hass, ISSUE_ADDON_NOT_RUNNING, slug, fixable=True)
+        # Not ours to start: at boot the Supervisor starts the add-on right
+        # after Core, and one the user stopped stays stopped. The watch raises
+        # the repair (which offers to start it) only if it stays down.
+        get_addon_watch(hass, slug).async_down(info.state)
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="addon_not_running"
         )

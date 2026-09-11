@@ -19,6 +19,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The integration no longer starts the Claude Code add-on itself.** When Home
+  Assistant starts and the add-on is not running, setup now waits and retries
+  instead of starting it. At boot the Supervisor starts the add-on right after
+  Home Assistant, and starting it from setup raced that: the Supervisor logged
+  that the add-on was already running, and a "not running" repair appeared for a
+  few seconds on every restart. An add-on you stopped now stays stopped across
+  Home Assistant restarts; if it is still down after 10 minutes, the "add-on is
+  not running" repair appears and offers to start it.
 - The project version now has a single source. `pyproject.toml` reads it from
   `custom_components/claude_ha/manifest.json` — the file Home Assistant itself
   loads it from — instead of carrying its own copy to be bumped by hand beside
