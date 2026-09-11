@@ -203,7 +203,7 @@
       "message": "The Claude Code add-on is being installed."
     },
     "addon_not_running": {
-      "message": "The Claude Code add-on is starting."
+      "message": "The Claude Code add-on is not running yet."
     },
     "voice_unknown_language": {
       "message": "No default Piper voice is known for the language {language}. Pass a voice via the tts_voice field."
