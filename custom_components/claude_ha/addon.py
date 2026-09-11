@@ -31,6 +31,7 @@ from .const import (
 )
 
 DATA_ADDON_MANAGERS = f"{DOMAIN}_addon_managers"
+DATA_ADDON_WATCHES = f"{DOMAIN}_addon_watches"
 
 
 @callback
@@ -92,6 +93,19 @@ async def _resolve_from_store(hass: HomeAssistant) -> str | None:
     )
 
 
+@callback
+def get_addon_watch(hass: HomeAssistant, slug: str) -> AddonWatch:
+    """Return the add-on's watch, kept across setup retries and reloads.
+
+    An outage that starts while the entry is still retrying its setup must be
+    timed from its first sighting, so the watch outlives any one setup attempt.
+    """
+    watches: dict[str, AddonWatch] = hass.data.setdefault(DATA_ADDON_WATCHES, {})
+    if slug not in watches:
+        watches[slug] = AddonWatch(hass, slug)
+    return watches[slug]
+
+
 def async_create_addon_issue(
     hass: HomeAssistant, issue_id: str, slug: str, *, fixable: bool
 ) -> None:
@@ -124,8 +138,12 @@ class AddonWatch:
     the add-on has not answered for :data:`ADDON_OUTAGE_GRACE`, it is an outage:
     one WARNING, plus a repair offering to start it when it is not running.
 
-    One watch is shared by every poller of an entry, so the INFO, the WARNING
-    and the repair are emitted once per outage, not once per coordinator.
+    The setup of an entry reports a stopped add-on here too, rather than
+    starting it: the Supervisor starts the add-on itself (at boot, right after
+    Core), and one the user stopped stays stopped until the repair is used.
+
+    One watch is shared by setup and every poller of an entry, so the INFO, the
+    WARNING and the repair are emitted once per outage, not once per caller.
     """
 
     def __init__(self, hass: HomeAssistant, slug: str | None) -> None:
@@ -157,20 +175,24 @@ class AddonWatch:
             return False
         if info.state is AddonState.NOT_INSTALLED:
             return False
+        self.async_down(info.state)
+        return True
 
+    @callback
+    def async_down(self, state: AddonState) -> None:
+        """Record that the add-on is not answering, in Supervisor ``state``."""
         now = dt_util.utcnow()
         if self._down_since is None:
             self._down_since = now
             LOGGER.info(
-                "The %s add-on is not answering (Supervisor state: %s); its "
-                "entities are unavailable until it is back",
+                "The %s add-on is not answering (Supervisor state: %s); Claude "
+                "is unavailable until it is back",
                 ADDON_NAME,
-                info.state.value,
+                state.value,
             )
         elif not self._outage_reported and now - self._down_since >= ADDON_OUTAGE_GRACE:
             self._outage_reported = True
-            self._report_outage(info.state)
-        return True
+            self._report_outage(state)
 
     @callback
     def async_reachable(self) -> None:
