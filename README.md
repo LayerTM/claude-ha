@@ -406,8 +406,14 @@ add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
 
 ## Troubleshooting
 
-- **"The Claude Code add-on is not running".** A repair issue offers to start it;
-  or start it from the add-on page. Home Assistant retries setup automatically.
+- **Entities unavailable for a few seconds after an add-on update or restart.**
+  Expected: while the add-on restarts its entities are unavailable and the log
+  carries one INFO line, not an error; they come back within seconds of the add-on
+  answering.
+- **"The Claude Code add-on is not running".** Raised when the add-on has been
+  stopped for 10 minutes (or at setup, while it is stopped). The repair offers to
+  start it; or start it from the add-on page. Home Assistant retries setup
+  automatically.
 - **Setup keeps retrying.** Check that the add-on is installed, started and
   healthy; the status endpoint must be reachable on the internal network.
 - **Diagnostics.** Download diagnostics from the integration's device page (the

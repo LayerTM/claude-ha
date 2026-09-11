@@ -22,6 +22,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   loads it from — instead of carrying its own copy to be bumped by hand beside
   it. A test fails if a literal version reappears or the two stop agreeing.
 
+### Fixed
+
+- **An add-on restart no longer logs an error.** Updating or restarting the
+  Claude Code add-on leaves its API refusing connections
+  for a few seconds, and the next status poll used to log
+  `Error fetching claude_ha_status data: Cannot connect to host …`. While the
+  Supervisor still manages the add-on, that window now logs one INFO line, the
+  entities go unavailable, and they are polled every 10 seconds until the add-on
+  answers, so they come back within seconds instead of after the next minute's
+  poll. An add-on that stays unreachable for 10 minutes is an outage: one
+  WARNING, plus the "add-on is not running" repair when it is stopped. Failures
+  the Supervisor cannot vouch for (no Supervisor, add-on removed, an HTTP error
+  from the add-on) are still reported as errors.
+
 ### Documentation
 
 - The README now lists every entity the integration creates, not just the
