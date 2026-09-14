@@ -455,3 +455,40 @@ def test_parser_reads_a_well_formed_limit() -> None:
     assert limit.severity == "normal"
     assert limit.model is None
     assert limit.resets_at is not None
+
+
+async def test_a_model_respelled_upstream_stays_one_sensor(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A model whose capitalisation changes upstream keeps its one sensor.
+
+    The entity id is built from a slug, so "Fable" and "FABLE" are one id. If the
+    sensors were tracked by the raw name instead, the second spelling would add a
+    second entity claiming an id that is already taken: Home Assistant refuses it
+    with a duplicate-unique-id error and the first sensor, still looking for a
+    name the account no longer sends, would be unavailable for good.
+    """
+    _serve(aioclient_mock, _limits(SCOPED_LIMIT))
+    await setup_integration(hass, mock_config_entry)
+    entity_id = _entity_id(hass, mock_config_entry, "weekly_limit_fable")
+    assert entity_id is not None
+    caplog.clear()
+
+    _serve(aioclient_mock, _limits({**SCOPED_LIMIT, "model": "FABLE", "percent": 91}))
+    await _poll_again(hass, freezer)
+
+    registered = [
+        e
+        for e in er.async_get(hass).entities.values()
+        if (e.unique_id or "").endswith("_weekly_limit_fable")
+    ]
+    assert len(registered) == 1
+    assert registered[0].entity_id == entity_id
+    state = hass.states.get(entity_id)
+    assert state.state == "91"
+    assert state.attributes["model"] == "FABLE"
+    assert _loud(caplog) == []

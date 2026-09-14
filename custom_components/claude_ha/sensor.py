@@ -90,17 +90,18 @@ def _async_add_account_limits(
     being reported leaves its sensor unavailable rather than removing an entity
     the user may already have placed somewhere.
     """
-    known: set[tuple[str, str | None]] = set()
+    known: set[str] = set()
 
     @callback
     def _async_add_new() -> None:
         result = coordinator.data
         if not result:
             return
-        new = [
-            limit for limit in result.limits if (limit.kind, limit.model) not in known
-        ]
-        known.update((limit.kind, limit.model) for limit in new)
+        # Keyed by the same identity the unique id is built from: upstream may
+        # change a model's capitalisation, and two spellings that slug to one id
+        # are one sensor, not a second entity claiming an id that is taken.
+        new = [limit for limit in result.limits if _limit_key(limit) not in known]
+        known.update(_limit_key(limit) for limit in new)
         async_add_entities(
             ClaudeAccountLimitSensor(coordinator, limit) for limit in new
         )
@@ -109,6 +110,11 @@ def _async_add_account_limits(
         coordinator.async_add_listener(_async_add_new)
     )
     _async_add_new()
+
+
+def _limit_key(limit: AccountLimit) -> str:
+    """Return the identity a limit is tracked by: the stem of its unique id."""
+    return _limit_identity(limit)[0]
 
 
 def _limit_identity(limit: AccountLimit) -> tuple[str, str, dict[str, str]]:
@@ -157,9 +163,8 @@ class ClaudeAccountLimitSensor(
     ) -> None:
         """Init from the account-limits coordinator and the limit it reports."""
         super().__init__(coordinator)
-        self._kind = limit.kind
-        self._model = limit.model
         stem, self._attr_translation_key, placeholders = _limit_identity(limit)
+        self._key = stem
         if placeholders:
             self._attr_translation_placeholders = placeholders
         entry = coordinator.config_entry
@@ -177,7 +182,7 @@ class ClaudeAccountLimitSensor(
             (
                 item
                 for item in self.coordinator.data.limits
-                if item.kind == self._kind and item.model == self._model
+                if _limit_key(item) == self._key
             ),
             None,
         )
