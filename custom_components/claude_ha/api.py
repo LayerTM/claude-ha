@@ -26,6 +26,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     ADDON_MIN_EDIT_VERSION,
     ADDON_MIN_SURFACE_VERSION,
+    API_ACCOUNT_LIMITS,
     API_PROMPT,
     API_STATUS,
     API_USAGE,
@@ -34,6 +35,14 @@ from .const import (
     CONTENT_TYPE_NDJSON,
     DOMAIN,
     HEADER_CALLER,
+    LIMIT_KIND,
+    LIMIT_MODEL,
+    LIMIT_PERCENT,
+    LIMIT_RESETS_AT,
+    LIMIT_SEVERITY,
+    LIMITS_FETCHED_AT,
+    LIMITS_LIST,
+    LIMITS_MODE,
     MODE_READ,
     MODE_WRITE,
     PROPOSAL_INTENTS,
@@ -91,6 +100,20 @@ class ClaudeConnectionError(ClaudeError):
     """The add-on prompt server is unreachable, timed out, or is busy."""
 
     translation_key = "cannot_connect"
+
+
+# The percentage scale of GET /api/account_limits (contract §3b): anything
+# outside it is a value this integration cannot stand behind, not a reading.
+PERCENT_MIN: Final = 0
+PERCENT_MAX: Final = 100
+
+
+class ClaudeNotFoundError(ClaudeError):
+    """The add-on answered 404: it has no such endpoint (an older add-on).
+
+    Distinct from a generic failure because a missing endpoint is not a fault —
+    the caller reports it by going unavailable rather than by logging an error.
+    """
 
 
 class ClaudeAuthError(ClaudeError):
@@ -329,6 +352,32 @@ class UsageResult:
     report: dict[str, Any]
 
 
+@dataclass(slots=True, frozen=True)
+class AccountLimit:
+    """One rate-limit bucket of the whole account (contract §3b)."""
+
+    kind: str
+    percent: int
+    severity: str | None
+    resets_at: datetime | None
+    model: str | None
+
+
+@dataclass(slots=True)
+class AccountLimitsResult:
+    """Parsed 200 response of ``GET /api/account_limits`` (contract §3b).
+
+    ``limits`` is empty for an API-key account (``mode`` ``api_key``): the
+    upstream buckets are OAuth-only, so such an account genuinely has none. That
+    is a fact about the account, not a failure, and carries no error at all.
+    """
+
+    mode: str | None
+    fetched_at: datetime | None
+    limits: tuple[AccountLimit, ...]
+    report: dict[str, Any]
+
+
 class ClaudeClient:
     """Thin async client over the add-on's internal prompt server."""
 
@@ -427,6 +476,16 @@ class ClaudeClient:
             today_tokens=int(today.get("input", 0)) + int(today.get("output", 0)),
             cost_today=float(cost.get("today", 0.0)),
             cost_total=float(cost.get("total", 0.0)),
+            report=data,
+        )
+
+    async def async_get_account_limits(self) -> AccountLimitsResult:
+        """Fetch the account's rate-limit utilisation (contract §3b)."""
+        data = await self._request("GET", API_ACCOUNT_LIMITS, timeout_s=STATUS_TIMEOUT)
+        return AccountLimitsResult(
+            mode=data.get(LIMITS_MODE),
+            fetched_at=_parse_instant(data.get(LIMITS_FETCHED_AT)),
+            limits=_parse_limits(data.get(LIMITS_LIST)),
             report=data,
         )
 
@@ -608,6 +667,54 @@ def _parse_chat_health(raw: Any) -> ChatHealth | None:
         consecutive_failed=_non_negative_int(raw.get("consecutive_failed")),
         window_dated=_non_negative_int(raw.get("window_dated")),
     )
+
+
+def _parse_limits(raw: Any) -> tuple[AccountLimit, ...]:
+    """Read the limits array, dropping any entry that cannot be read.
+
+    Same rule as ``_parse_budget``: an entry whose kind or percentage is unusable
+    is dropped rather than defaulted, because every default available here is a
+    claim about how much of the account's allowance is already gone, and 0 is the
+    one answer that must never be invented. A dropped entry leaves its own sensor
+    unavailable while the others keep updating.
+    """
+    if not isinstance(raw, list):
+        return ()
+    limits: list[AccountLimit] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get(LIMIT_KIND)
+        percent = _percent(item.get(LIMIT_PERCENT))
+        if not isinstance(kind, str) or not kind or percent is None:
+            continue
+        severity = item.get(LIMIT_SEVERITY)
+        model = item.get(LIMIT_MODEL)
+        limits.append(
+            AccountLimit(
+                kind=kind,
+                percent=percent,
+                severity=severity if isinstance(severity, str) else None,
+                resets_at=_parse_instant(item.get(LIMIT_RESETS_AT)),
+                model=model if isinstance(model, str) and model else None,
+            )
+        )
+    return tuple(limits)
+
+
+def _percent(raw: Any) -> int | None:
+    """Read a percentage of the scale below, or ``None`` if it cannot be trusted."""
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None
+    if isinstance(raw, float) and not math.isfinite(raw):
+        return None
+    value = int(raw)
+    return value if PERCENT_MIN <= value <= PERCENT_MAX else None
+
+
+def _parse_instant(raw: Any) -> datetime | None:
+    """Read an ISO-8601 instant, or ``None`` when absent or unreadable."""
+    return dt_util.parse_datetime(raw) if isinstance(raw, str) else None
 
 
 def _parse_budget(raw: Any) -> Budget | None:
@@ -823,6 +930,8 @@ def _raise_for_status(status: int) -> NoReturn:
         raise ClaudeAuthError
     if status in (HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.SERVICE_UNAVAILABLE):
         raise ClaudeRateLimitError
+    if status == HTTPStatus.NOT_FOUND:
+        raise ClaudeNotFoundError
     if status in (HTTPStatus.REQUEST_ENTITY_TOO_LARGE, HTTPStatus.BAD_REQUEST):
         raise ClaudeRequestError
     if status in (HTTPStatus.GATEWAY_TIMEOUT, HTTPStatus.BAD_GATEWAY):

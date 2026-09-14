@@ -35,6 +35,7 @@ from .const import (
     ISSUE_ADDON_NOT_INSTALLED,
 )
 from .coordinator import (
+    ClaudeAccountLimitsCoordinator,
     ClaudeConfigEntry,
     ClaudeRuntimeData,
     ClaudeStatusCoordinator,
@@ -87,7 +88,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
     usage = ClaudeUsageCoordinator(hass, entry, client, watch)
     await usage.async_refresh()
 
-    entry.runtime_data = ClaudeRuntimeData(client=client, status=status, usage=usage)
+    # Account-wide limits need an add-on new enough to have the endpoint; an older
+    # one answers 404 and its sensors simply never appear.
+    limits = ClaudeAccountLimitsCoordinator(hass, entry, client, watch)
+    await limits.async_refresh()
+
+    entry.runtime_data = ClaudeRuntimeData(
+        client=client, status=status, usage=usage, limits=limits
+    )
 
     _async_setup_health(hass, entry, status)
 

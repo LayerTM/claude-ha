@@ -30,6 +30,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 
 from .conftest import (
+    ACCOUNT_LIMITS_PAYLOAD,
     STATUS_PAYLOAD,
     TEST_BASE_URL,
     USAGE_PAYLOAD,
@@ -39,6 +40,7 @@ from .conftest import (
 
 STATUS_URL = f"{TEST_BASE_URL}/api/status"
 USAGE_URL = f"{TEST_BASE_URL}/api/usage"
+LIMITS_URL = f"{TEST_BASE_URL}/api/account_limits"
 PACKAGE_LOGGER = "custom_components.claude_ha"
 
 
@@ -55,9 +57,11 @@ def _serve(aioclient_mock: AiohttpClientMocker, *, up: bool) -> None:
     if up:
         aioclient_mock.get(STATUS_URL, json=STATUS_PAYLOAD)
         aioclient_mock.get(USAGE_URL, json=USAGE_PAYLOAD)
+        aioclient_mock.get(LIMITS_URL, json=ACCOUNT_LIMITS_PAYLOAD)
     else:
         aioclient_mock.get(STATUS_URL, exc=ClientConnectionError("Connection refused"))
         aioclient_mock.get(USAGE_URL, exc=ClientConnectionError("Connection refused"))
+        aioclient_mock.get(LIMITS_URL, exc=ClientConnectionError("Connection refused"))
 
 
 async def _advance(

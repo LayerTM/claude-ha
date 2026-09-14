@@ -86,6 +86,21 @@
       },
       "prompt_api_cost": {
         "name": "Prompt API cost"
+      },
+      "session_limit": {
+        "name": "Session limit"
+      },
+      "weekly_limit": {
+        "name": "Weekly limit"
+      },
+      "weekly_limit_model": {
+        "name": "Weekly limit ({model})"
+      },
+      "other_limit": {
+        "name": "Limit ({kind})"
+      },
+      "other_limit_model": {
+        "name": "Limit ({kind}: {model})"
       }
     },
     "binary_sensor": {
