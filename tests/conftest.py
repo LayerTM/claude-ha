@@ -36,6 +36,33 @@ STATUS_PAYLOAD = {
     "ha_mcp": True,
     "ha_mcp_connected": True,
 }
+ACCOUNT_LIMITS_PAYLOAD = {
+    "fetched_at": "2026-09-14T14:02:11Z",
+    "mode": "subscription",
+    "limits": [
+        {
+            "kind": "session",
+            "percent": 14,
+            "severity": "normal",
+            "resets_at": "2026-09-14T15:30:00+00:00",
+            "model": None,
+        },
+        {
+            "kind": "weekly_all",
+            "percent": 82,
+            "severity": "warning",
+            "resets_at": "2026-09-16T13:00:00+00:00",
+            "model": None,
+        },
+        {
+            "kind": "weekly_scoped",
+            "percent": 88,
+            "severity": "warning",
+            "resets_at": "2026-09-16T13:00:00+00:00",
+            "model": "Fable",
+        },
+    ],
+}
 PROMPT_PAYLOAD = {
     "text": "The living room is 21 °C.",
     "proposal": None,
@@ -105,9 +132,12 @@ def mock_config_entry() -> MockConfigEntry:
 
 @pytest.fixture
 def mock_status(aioclient_mock: AiohttpClientMocker) -> None:
-    """Mock a healthy GET /api/status and GET /api/usage."""
+    """Mock a healthy GET /api/status, /api/usage and /api/account_limits."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=STATUS_PAYLOAD)
     aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/account_limits", json=ACCOUNT_LIMITS_PAYLOAD
+    )
 
 
 @pytest.fixture

@@ -10,14 +10,18 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util
+from homeassistant.util import dt as dt_util, slugify
 
+from .api import AccountLimit
 from .const import (
     CHAT_HEALTH_DEGRADED_RATE,
+    LIMIT_KIND_SESSION,
+    LIMIT_KIND_WEEKLY_ALL,
+    LIMIT_KIND_WEEKLY_SCOPED,
     STATUS_CLAUDE_VERSION,
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
@@ -25,6 +29,7 @@ from .const import (
     STATUS_VERSION,
 )
 from .coordinator import (
+    ClaudeAccountLimitsCoordinator,
     ClaudeConfigEntry,
     ClaudeStatusCoordinator,
     ClaudeUsageCoordinator,
@@ -57,7 +62,7 @@ async def async_setup_entry(
     entry: ClaudeConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the status and usage sensors from a config entry."""
+    """Set up the status, usage and account-limit sensors from a config entry."""
     data = entry.runtime_data
     async_add_entities(
         [
@@ -68,6 +73,140 @@ async def async_setup_entry(
             ClaudeCostSensor(data.usage),
         ]
     )
+    _async_add_account_limits(data.limits, async_add_entities)
+
+
+@callback
+def _async_add_account_limits(
+    coordinator: ClaudeAccountLimitsCoordinator,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Create one sensor per limit the account reports, as limits appear.
+
+    The set is not fixed — kinds and scoped models come and go upstream — so the
+    entities are built from the data rather than from a hardcoded list. An
+    account with no limits at all (an API-key add-on) therefore gets no entity,
+    so nothing empty is added to a dashboard for it. A limit that later stops
+    being reported leaves its sensor unavailable rather than removing an entity
+    the user may already have placed somewhere.
+    """
+    known: set[tuple[str, str | None]] = set()
+
+    @callback
+    def _async_add_new() -> None:
+        result = coordinator.data
+        if not result:
+            return
+        new = [
+            limit for limit in result.limits if (limit.kind, limit.model) not in known
+        ]
+        known.update((limit.kind, limit.model) for limit in new)
+        async_add_entities(
+            ClaudeAccountLimitSensor(coordinator, limit) for limit in new
+        )
+
+    coordinator.config_entry.async_on_unload(
+        coordinator.async_add_listener(_async_add_new)
+    )
+    _async_add_new()
+
+
+def _limit_identity(limit: AccountLimit) -> tuple[str, str, dict[str, str]]:
+    """Return one limit's unique-id stem, translation key and name placeholders.
+
+    The three kinds the contract names get their own names; anything else is
+    still shown, named by what it says about itself, because a kind or model
+    that appears upstream must not go silently missing here.
+    """
+    model_slug = f"_{slugify(limit.model)}" if limit.model else ""
+    if limit.model is None:
+        if limit.kind == LIMIT_KIND_SESSION:
+            return "session_limit", "session_limit", {}
+        if limit.kind == LIMIT_KIND_WEEKLY_ALL:
+            return "weekly_limit", "weekly_limit", {}
+        return f"limit_{slugify(limit.kind)}", "other_limit", {"kind": limit.kind}
+    if limit.kind == LIMIT_KIND_WEEKLY_SCOPED:
+        return (
+            f"weekly_limit{model_slug}",
+            "weekly_limit_model",
+            {"model": limit.model},
+        )
+    return (
+        f"limit_{slugify(limit.kind)}{model_slug}",
+        "other_limit_model",
+        {"kind": limit.kind, "model": limit.model},
+    )
+
+
+class ClaudeAccountLimitSensor(
+    CoordinatorEntity[ClaudeAccountLimitsCoordinator], SensorEntity
+):
+    """How much of one of the ACCOUNT's rate limits is used.
+
+    Account-wide: every machine and every session signed in to the same account,
+    not just this add-on's own use, which is what the usage sensors report.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = PERCENTAGE
+
+    def __init__(
+        self, coordinator: ClaudeAccountLimitsCoordinator, limit: AccountLimit
+    ) -> None:
+        """Init from the account-limits coordinator and the limit it reports."""
+        super().__init__(coordinator)
+        self._kind = limit.kind
+        self._model = limit.model
+        stem, self._attr_translation_key, placeholders = _limit_identity(limit)
+        if placeholders:
+            self._attr_translation_placeholders = placeholders
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_{stem}"
+        self._attr_device_info = build_device_info(entry)
+
+    @property
+    def _limit(self) -> AccountLimit | None:
+        """Return this sensor's limit in the latest report, if it is still there.
+
+        A sensor is only ever created from a report, and a coordinator never
+        forgets the last one, so there is always a report to look in.
+        """
+        return next(
+            (
+                item
+                for item in self.coordinator.data.limits
+                if item.kind == self._kind and item.model == self._model
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Unavailable while the account stops reporting this particular limit."""
+        return super().available and self._limit is not None
+
+    @property
+    def native_value(self) -> int | None:
+        """Percentage of this limit already used."""
+        limit = self._limit
+        return limit.percent if limit is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose when the limit resets, its severity and which limit this is."""
+        limit = self._limit
+        if limit is None:
+            return {}
+        attributes: dict[str, Any] = {
+            "kind": limit.kind,
+            "severity": limit.severity,
+            "resets_at": limit.resets_at,
+        }
+        if limit.model is not None:
+            attributes["model"] = limit.model
+        return attributes
 
 
 class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):

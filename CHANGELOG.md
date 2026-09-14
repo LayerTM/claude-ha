@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Account-wide limit sensors.** New sensors show how much of your Claude
+  account's rate limits is used — the whole account, every machine and session
+  signed in to it, not just this add-on's own work: **Session limit**, **Weekly
+  limit**, and one sensor per model the account limits separately. Each reads a
+  percentage with `resets_at`, `severity` and `kind` attributes. They are built
+  from what the account reports, so a limit that appears upstream shows up on its
+  own and one that stops being reported goes unavailable instead of vanishing.
+  Accounts signed in with an API key have no such limits and get no sensors at
+  all; an add-on without the endpoint creates none either, quietly.
+
 ## [1.8.0] - 2026-09-11
 
 ### Added

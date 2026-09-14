@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import ClassVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -12,9 +13,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .addon import AddonWatch
 from .api import (
+    AccountLimitsResult,
     ClaudeClient,
     ClaudeConnectionError,
     ClaudeError,
+    ClaudeNotFoundError,
+    ClaudeRateLimitError,
     StatusResult,
     UsageResult,
 )
@@ -36,12 +40,18 @@ class ClaudeRuntimeData:
     client: ClaudeClient
     status: ClaudeStatusCoordinator
     usage: ClaudeUsageCoordinator
+    limits: ClaudeAccountLimitsCoordinator
 
 
 class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
     """Polls one add-on endpoint, staying quiet through an add-on restart."""
 
     config_entry: ClaudeConfigEntry
+
+    # Failures that mean "this endpoint has nothing for us" rather than "something
+    # broke": reported by going unavailable, without the coordinator's ERROR line.
+    # Subclasses opt in; everything else stays loud.
+    quiet_errors: ClassVar[tuple[type[ClaudeError], ...]] = ()
 
     def __init__(
         self,
@@ -87,6 +97,11 @@ class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
                 retry_after=ADDON_RESTART_RETRY if self._watch.in_grace else None,
             ) from err
         except ClaudeError as err:
+            if isinstance(err, self.quiet_errors):
+                # The add-on answered, and its answer is "no data". Mark the
+                # failure here for the same reason as above: the ERROR line is
+                # logged only while last_update_success is still True.
+                self.last_update_success = False
             raise UpdateFailed(str(err) or self._unavailable) from err
         self._watch.async_reachable()
         return data
@@ -148,3 +163,41 @@ class ClaudeUsageCoordinator(_AddonCoordinator[UsageResult]):
     async def _async_fetch(self) -> UsageResult:
         """Fetch the latest usage report."""
         return await self.client.async_get_usage()
+
+
+class ClaudeAccountLimitsCoordinator(_AddonCoordinator[AccountLimitsResult]):
+    """Polls ``/api/account_limits`` for the whole account's limit utilisation.
+
+    Two answers mean "no figures to show" rather than a fault, and both leave the
+    sensors unavailable with nothing in the log: an add-on too old to have the
+    endpoint (404), and one that has OAuth credentials but cannot reach upstream
+    (503). An API-key account is a third case and not a failure at all — it
+    answers 200 with an empty list, and no limit entity is created for it.
+    """
+
+    quiet_errors: ClassVar[tuple[type[ClaudeError], ...]] = (
+        ClaudeNotFoundError,
+        ClaudeRateLimitError,
+    )
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ClaudeConfigEntry,
+        client: ClaudeClient,
+        watch: AddonWatch,
+    ) -> None:
+        """Init the account-limits coordinator."""
+        super().__init__(
+            hass,
+            entry,
+            client,
+            watch,
+            name="account_limits",
+            interval=USAGE_SCAN_INTERVAL,
+            unavailable="Account limits unavailable",
+        )
+
+    async def _async_fetch(self) -> AccountLimitsResult:
+        """Fetch the account's current limit utilisation."""
+        return await self.client.async_get_account_limits()

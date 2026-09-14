@@ -18,6 +18,21 @@
       },
       "prompt_api_cost": {
         "default": "mdi:cash"
+      },
+      "session_limit": {
+        "default": "mdi:gauge"
+      },
+      "weekly_limit": {
+        "default": "mdi:gauge"
+      },
+      "weekly_limit_model": {
+        "default": "mdi:gauge"
+      },
+      "other_limit": {
+        "default": "mdi:gauge"
+      },
+      "other_limit_model": {
+        "default": "mdi:gauge"
       }
     }
   },

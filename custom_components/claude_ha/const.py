@@ -44,6 +44,7 @@ ADDON_OPTION_API_TOKEN: Final = "api_token"
 API_PROMPT: Final = "/api/prompt"
 API_STATUS: Final = "/api/status"
 API_USAGE: Final = "/api/usage"
+API_ACCOUNT_LIMITS: Final = "/api/account_limits"
 
 HEADER_CALLER: Final = "X-Claude-Caller"
 
@@ -155,6 +156,29 @@ STATUS_BUDGET: Final = "budget"
 # on older add-ons (the alerts binary sensor is then unavailable). items/line carry
 # the user's OWN home entity names and readings — home data, not chat content.
 STATUS_ALERTS: Final = "alerts"
+
+# GET /api/account_limits 200-response keys (account-wide rate-limit utilisation).
+# These figures are the ACCOUNT's, across every machine and session signed in to it
+# — not this add-on's own use, which is what /api/usage reports.
+LIMITS_MODE: Final = "mode"
+LIMITS_FETCHED_AT: Final = "fetched_at"
+LIMITS_LIST: Final = "limits"
+# An add-on authenticated with an API key answers mode "api_key" and an EMPTY list:
+# such an account has no rate-limit buckets upstream. That is a fact about the
+# account, not a failure, so the integration creates no limit entities for it.
+LIMITS_MODE_API_KEY: Final = "api_key"
+# Per-limit keys. percent is 0-100; severity is a free token (normal, warning, …);
+# resets_at is ISO-8601; model is the scoped model's display name, or null.
+LIMIT_KIND: Final = "kind"
+LIMIT_PERCENT: Final = "percent"
+LIMIT_SEVERITY: Final = "severity"
+LIMIT_RESETS_AT: Final = "resets_at"
+LIMIT_MODEL: Final = "model"
+# The kinds the contract names today. The list is NOT closed — new kinds and new
+# scoped models appear upstream, so anything else is still shown, named by itself.
+LIMIT_KIND_SESSION: Final = "session"
+LIMIT_KIND_WEEKLY_ALL: Final = "weekly_all"
+LIMIT_KIND_WEEKLY_SCOPED: Final = "weekly_scoped"
 
 # --- Chat-health thresholds -------------------------------------------------
 # The add-on trims its chat-health window by COUNT (cap 50), never by age, and

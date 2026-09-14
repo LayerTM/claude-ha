@@ -281,6 +281,17 @@ the device's main controls by default.
   cost in USD (interactive-console use is measured in tokens, not dollars). The
   usage/cost sensors need the Claude Code add-on ≥ 1.7.0 and stay unavailable
   otherwise.
+- **Account limits** — how much of your Claude **account's** rate limits is used,
+  across every machine and session signed in to it, not just this add-on:
+  **Session limit** (`sensor.claude_code_session_limit`), **Weekly limit**
+  (`sensor.claude_code_weekly_limit`) and one **Weekly limit (model)** sensor per
+  model the account limits separately (e.g.
+  `sensor.claude_code_weekly_limit_fable`). Each reads 0-100 %, with `resets_at`,
+  `severity` and `kind` as attributes. The sensors are built from what the account
+  reports, so a new limit appears on its own and one that stops being reported
+  goes unavailable rather than disappearing. Accounts signed in with an API key
+  have no such limits and get no sensors at all. Needs an add-on that provides
+  account limits; older ones simply don't create these sensors.
 - **Check Claude health** (`button.claude_code_check_claude_health`) — runs the
   deeper probe described under [Health checks](#health-checks) on demand.
 

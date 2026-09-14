@@ -23,4 +23,5 @@ async def async_get_config_entry_diagnostics(
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
         "status": asdict(data.status.data) if data.status.data else None,
         "usage": data.usage.data.report if data.usage.data else None,
+        "account_limits": data.limits.data.report if data.limits.data else None,
     }
