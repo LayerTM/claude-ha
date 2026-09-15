@@ -387,19 +387,19 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         caller: str | None,
         image_entity: str | None,
         edit_automation: dict[str, Any] | None = None,
-    ) -> tuple[PromptResult, bool]:
-        """Stream a read into the chat log; return its result and if it streamed.
+    ) -> tuple[PromptResult, str]:
+        """Stream a read into the chat log; return its result and what streamed.
 
         Text deltas are added live; the final ``PromptResult`` (carrying the
-        proposal) is captured out of band. ``streamed`` is False when the add-on
-        answered with a plain JSON body (no deltas) so the caller records it.
+        proposal) is captured out of band. The streamed answer, as recorded in the
+        chat log, is empty when the add-on answered with a plain JSON body (no
+        deltas) so the caller records it.
         ``edit_automation`` (a target's current config) asks the model to edit it.
         """
         captured: dict[str, PromptResult] = {}
-        streamed = False
+        streamed = ""
 
         async def _deltas() -> Any:
-            nonlocal streamed
             started = False
             async for chunk in self.coordinator.client.async_prompt_stream(
                 text,
@@ -416,13 +416,13 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                     if not started:
                         yield {"role": "assistant"}
                         started = True
-                    streamed = True
                     yield {"content": chunk.text}
 
-        async for _content in chat_log.async_add_delta_content_stream(
+        async for content in chat_log.async_add_delta_content_stream(
             user_input.agent_id, _deltas()
         ):
-            pass
+            if isinstance(content, conversation.AssistantContent):
+                streamed = content.content or ""
 
         result = captured.get("result")
         if result is None:
@@ -434,12 +434,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         text: str,
-        streamed: bool,
+        streamed: str,
     ) -> conversation.ConversationResult:
         """Return a pure-answer turn (no proposal)."""
         if streamed:
             # The streamed deltas are already the assistant turn.
-            return conversation.async_get_result_from_chat_log(user_input, chat_log)
+            return self._result(user_input, chat_log, streamed)
         return self._reply(user_input, chat_log, text)
 
     def _automation_confirm_reply(
@@ -448,7 +448,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log: conversation.ChatLog,
         automation: dict[str, Any],
         text: str,
-        streamed: bool,
+        streamed: str,
         alias: str,
         action: str = "Create",
     ) -> conversation.ConversationResult:
@@ -685,7 +685,29 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log.async_add_assistant_content_without_tools(
             conversation.AssistantContent(agent_id=user_input.agent_id, content=text)
         )
-        return conversation.async_get_result_from_chat_log(user_input, chat_log)
+        return self._result(user_input, chat_log, text)
+
+    def _result(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        speech: str,
+    ) -> conversation.ConversationResult:
+        """Build the turn's result from the answer this agent just recorded.
+
+        Home Assistant's ``async_get_result_from_chat_log`` adopts the last intent
+        result in the chat log since an LLM agent provided its prompt data. This
+        agent never provides it (Claude runs in the add-on), so a local intent
+        the Assist pipeline tried and failed before falling back here would make
+        Claude's answer an error response.
+        """
+        response = intent.IntentResponse(language=user_input.language)
+        response.async_set_speech(speech)
+        return conversation.ConversationResult(
+            response=response,
+            conversation_id=chat_log.conversation_id,
+            continue_conversation=chat_log.continue_conversation,
+        )
 
     def _error(
         self,
