@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-15
+
 ### Fixed
 
 - **Assist no longer says Claude cannot control your home.** The conversation
@@ -547,7 +549,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/LayerTM/claude-ha/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/LayerTM/claude-ha/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/LayerTM/claude-ha/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/LayerTM/claude-ha/compare/v1.7.1...v1.7.2
