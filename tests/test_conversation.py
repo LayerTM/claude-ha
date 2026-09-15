@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
@@ -18,9 +20,10 @@ from custom_components.claude_ha.conversation import (
 from homeassistant.components import conversation
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.helpers import entity_registry as er, intent
+from homeassistant.helpers import chat_session, entity_registry as er, intent, llm
 
 from .conftest import (
+    PROMPT_PAYLOAD,
     STATUS_PAYLOAD,
     TEST_BASE_URL,
     USAGE_PAYLOAD,
@@ -157,6 +160,106 @@ async def test_conversation_declares_control(
         state.attributes[ATTR_SUPPORTED_FEATURES]
         == conversation.ConversationEntityFeature.CONTROL
     )
+
+
+def _local_attempt_failed(chat_log: conversation.ChatLog, agent_id: str) -> None:
+    """Record a local intent that matched but found no target.
+
+    With "Prefer handling commands locally", the Assist pipeline tries Home
+    Assistant's own intents first, inside the same chat log, and the default
+    agent records the call and its error result there before falling back to
+    this agent.
+    """
+    tool_input = llm.ToolInput(
+        tool_name="HassClimateGetTemperature",
+        tool_args={"area": "bedroom"},
+        external=True,
+    )
+    chat_log.async_add_assistant_content_without_tools(
+        conversation.AssistantContent(
+            agent_id=agent_id, content=None, tool_calls=[tool_input]
+        )
+    )
+    failed = intent.IntentResponse(language="en")
+    failed.async_set_error(
+        intent.IntentResponseErrorCode.NO_VALID_TARGETS, "No area named bedroom"
+    )
+    chat_log.async_add_assistant_content_without_tools(
+        conversation.ToolResultContent(
+            agent_id=agent_id,
+            tool_call_id=tool_input.id,
+            tool_name=tool_input.tool_name,
+            tool_result=llm.IntentResponseDict(failed),
+        )
+    )
+
+
+@pytest.mark.parametrize("streamed", [True, False])
+async def test_answer_after_failed_local_intent_is_not_an_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    streamed: bool,
+) -> None:
+    """Claude's answer is the turn's result, whatever local handling left behind.
+
+    A failed local attempt must not turn Claude's answer into an error response
+    (the Assist dialog shows an error response as a second, red bubble), in
+    this turn or in a later turn of the same conversation.
+    """
+    if streamed:
+        aioclient_mock.post(
+            f"{TEST_BASE_URL}/api/prompt",
+            text=(
+                json.dumps({"type": "delta", "text": PROMPT_PAYLOAD["text"]})
+                + "\n"
+                + json.dumps({"type": "done", **PROMPT_PAYLOAD})
+                + "\n"
+            ),
+            headers={"Content-Type": "application/x-ndjson"},
+        )
+    else:
+        aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=PROMPT_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+    agent_id = _agent_id(hass, mock_config_entry)
+
+    user_input = conversation.ConversationInput(
+        text="What is the temperature in the bedroom?",
+        context=Context(),
+        conversation_id=None,
+        device_id=None,
+        satellite_id=None,
+        language="en",
+        agent_id=agent_id,
+    )
+    with (
+        chat_session.async_get_chat_session(hass, None) as session,
+        conversation.async_get_chat_log(hass, session, user_input) as chat_log,
+    ):
+        _local_attempt_failed(chat_log, conversation.HOME_ASSISTANT_AGENT)
+        result = await conversation.async_converse(
+            hass,
+            user_input.text,
+            session.conversation_id,
+            context=user_input.context,
+            language="en",
+            agent_id=agent_id,
+        )
+
+    assert result.response.response_type is intent.IntentResponseType.ACTION_DONE
+    assert result.response.error_code is None
+    assert result.response.speech["plain"]["speech"] == PROMPT_PAYLOAD["text"]
+
+    later = await conversation.async_converse(
+        hass,
+        "And in the kitchen?",
+        result.conversation_id,
+        context=Context(),
+        language="en",
+        agent_id=agent_id,
+    )
+    assert later.response.response_type is intent.IntentResponseType.ACTION_DONE
 
 
 async def test_conversation_error(

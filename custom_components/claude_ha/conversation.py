@@ -439,7 +439,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         """Return a pure-answer turn (no proposal)."""
         if streamed:
             # The streamed deltas are already the assistant turn.
-            return conversation.async_get_result_from_chat_log(user_input, chat_log)
+            return self._result(user_input, chat_log)
         return self._reply(user_input, chat_log, text)
 
     def _automation_confirm_reply(
@@ -685,7 +685,30 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log.async_add_assistant_content_without_tools(
             conversation.AssistantContent(agent_id=user_input.agent_id, content=text)
         )
-        return conversation.async_get_result_from_chat_log(user_input, chat_log)
+        return self._result(user_input, chat_log)
+
+    def _result(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+    ) -> conversation.ConversationResult:
+        """Build the turn's result from the answer this agent just recorded.
+
+        Home Assistant's ``async_get_result_from_chat_log`` adopts the last intent
+        result in the chat log since an LLM agent provided its prompt data. This
+        agent never provides it (Claude runs in the add-on), so a local intent
+        the Assist pipeline tried and failed before falling back here would make
+        Claude's answer an error response.
+        """
+        answer = chat_log.content[-1]
+        assert isinstance(answer, conversation.AssistantContent)
+        response = intent.IntentResponse(language=user_input.language)
+        response.async_set_speech(answer.content or "")
+        return conversation.ConversationResult(
+            response=response,
+            conversation_id=chat_log.conversation_id,
+            continue_conversation=chat_log.continue_conversation,
+        )
 
     def _error(
         self,
