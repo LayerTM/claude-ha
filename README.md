@@ -133,6 +133,11 @@ the add-on for you. There are no options to fill in.
 
 Select **Claude** (`conversation.claude_code`) as a conversation agent under
 **Settings → Voice assistants**, or target it directly. It answers in any language, and it can **act** on your home.
+With *Prefer handling commands locally* on, Home Assistant runs the device
+commands it recognises exactly (such as "turn off the kitchen light") itself,
+without the confirmation described below, and passes everything else — state
+questions included — on to Claude. Leave it off to have every request go
+through Claude.
 Answers **stream in live**, token by token (with the Claude Code add-on ≥ 1.17.0;
 older add-ons return the whole answer at once).
 
