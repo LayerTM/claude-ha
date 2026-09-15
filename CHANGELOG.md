@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Claude's answer no longer appears twice, the second time as an error.**
+  With *Prefer handling commands locally* on, Home Assistant first tries its own
+  intents, and when one matched but found nothing to act on (for example "what
+  is the temperature in the bedroom?" with no thermostat there), Claude's answer
+  came back marked as that failed attempt's error: the Assist dialog showed it a
+  second time in red, and every later answer in the same conversation did the
+  same. Claude's answer is now always its own, successful response.
+
 ## [1.9.1] - 2026-09-15
 
 ### Fixed
