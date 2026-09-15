@@ -223,6 +223,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
     # The add-on can stream the answer as NDJSON deltas (>= 1.17.0); older
     # add-ons return a full JSON body, which the client yields as one result.
     _attr_supports_streaming = True
+    # Claude acts on the home (auto-run or confirmed writes, automations). HA
+    # reads this to drop the Assist dialog's "cannot control your home" warning;
+    # with "prefer handling commands locally" it also stops answering state
+    # questions locally and passes them on to this agent.
+    _attr_supported_features = conversation.ConversationEntityFeature.CONTROL
 
     def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
         """Init from the runtime coordinator (which owns the API client)."""

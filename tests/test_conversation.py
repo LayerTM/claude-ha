@@ -16,6 +16,7 @@ from custom_components.claude_ha.conversation import (
     _spoken_confirm,
 )
 from homeassistant.components import conversation
+from homeassistant.const import ATTR_SUPPORTED_FEATURES
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import entity_registry as er, intent
 
@@ -135,6 +136,27 @@ async def test_conversation_supported_languages(
     await setup_integration(hass, mock_config_entry)
     entity = ClaudeConversationEntity(mock_config_entry.runtime_data.status)
     assert entity.supported_languages == MATCH_ALL
+
+
+async def test_conversation_declares_control(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+) -> None:
+    """The agent's state says it can control the home.
+
+    The Assist dialog reads this attribute to decide whether to warn that the
+    agent cannot control the home, and the pipeline reads it to decide which
+    sentences it may still answer locally before the agent.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_agent_id(hass, mock_config_entry))
+    assert state is not None
+    assert (
+        state.attributes[ATTR_SUPPORTED_FEATURES]
+        == conversation.ConversationEntityFeature.CONTROL
+    )
 
 
 async def test_conversation_error(

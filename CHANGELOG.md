@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Assist no longer says Claude cannot control your home.** The conversation
+  agent now declares that it controls devices, so the Assist dialog drops its
+  "This assistant cannot control your home" warning. With *Prefer handling
+  commands locally* turned on in a voice assistant, Home Assistant now passes
+  state questions such as "are any lights on?" and media searches on to Claude
+  instead of answering them itself; device commands it recognises exactly are
+  still run locally, as before.
+
 ## [1.9.0] - 2026-09-14
 
 ### Added
