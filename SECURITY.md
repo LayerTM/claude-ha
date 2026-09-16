@@ -39,6 +39,10 @@ Its guarantees:
   most five). Free-text writes are rejected before the add-on is contacted.
 - **Secret-scanned.** Every change is scanned (`scripts/secret_scan.py`, in
   pre-commit and CI) for tokens, keys and personal data.
+- **Scanned for machine traces.** Every change is scanned
+  (`scripts/hygiene_scan.py`, in pre-commit and CI) for paths that resolve only
+  on one computer, symlinks pointing outside the repository, and by-products of
+  authoring tools.
 
 If you are integrating or auditing, the request/response contract and its
 security rationale are documented alongside the add-on.

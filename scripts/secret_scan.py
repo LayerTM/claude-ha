@@ -2,7 +2,7 @@
 """Secret / PII scanner — blocks secrets and personal data from the repo.
 
 Pattern-based and placeholder-aware, so sanitized fixtures and docs pass while
-real credentials, tokens, personal paths/emails and private IPs are blocked.
+real credentials, tokens, personal emails and private IPs are blocked.
 Runs in pre-commit and CI. Exit code 1 on any finding.
 
 Usage:
@@ -25,6 +25,10 @@ ALLOW = re.compile(
 )
 
 # name -> compiled pattern. Each matches a *real-looking* secret / PII value.
+# Paths that only resolve on the machine a file was written on belong to
+# hygiene_scan.py, which owns them for every shape (home directories, temporary
+# directories, Windows profiles, file:// URLs) — so they are declared there once
+# and no line is ever reported by both scanners.
 PATTERNS: dict[str, re.Pattern[str]] = {
     "JWT / bearer token": re.compile(
         r"\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}"
@@ -43,7 +47,6 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "hardcoded password": re.compile(
         r'(?i)\bpassword\b\s*[:=]\s*["\'][^"\'{}<\s]{4,}["\']'
     ),
-    "personal macOS path": re.compile(r"/Users/[a-z]"),
     "personal email (gmail)": re.compile(r"[A-Za-z0-9._%+-]+@gmail\.com"),
     "private LAN IP": re.compile(r"\b(?:192\.168|10\.0\.0)\.\d{1,3}\b"),
 }

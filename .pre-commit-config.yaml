@@ -8,6 +8,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: hygiene-scan
+        name: repository hygiene scan
+        entry: python scripts/hygiene_scan.py
+        language: system
+        pass_filenames: false
+        always_run: true
       # mypy (strict) — mirrors the CI `tests` gate so a local commit catches what
       # CI catches. Uses the environment's installed mypy + Home Assistant (keep the
       # env in lockstep with requirements_test.txt so results match CI).
