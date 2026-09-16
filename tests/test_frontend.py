@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -17,6 +19,7 @@ from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.collection import ItemNotFound
 from homeassistant.loader import async_get_integration
 from homeassistant.setup import async_setup_component
 
@@ -38,7 +41,26 @@ def _card_resources(hass: HomeAssistant) -> list[dict[str, Any]]:
     return [
         item
         for item in hass.data[LOVELACE_DATA].resources.async_items()
-        if item["url"].split("?")[0] == CARD_URL
+        if item["url"] == CARD_URL or item["url"].startswith(f"{CARD_URL}?v=")
+    ]
+
+
+# Resources that only look like the card: another host, a scheme-relative URL,
+# another query, a local copy, and a string no URL parser accepts.
+FOREIGN = [
+    "https://example.org/claude_ha/claude-chat-card.js?custom=1",
+    "//cdn.example.org/claude_ha/claude-chat-card.js",
+    "/claude_ha/claude-chat-card.js?custom=1",
+    "/local/claude_ha/claude-chat-card.js",
+    "http://[",
+]
+
+
+async def _add_foreign(resources: ResourceStorageCollection) -> list[dict[str, Any]]:
+    await resources.async_get_info()
+    return [
+        await resources.async_create_item({"res_type": "module", "url": url})
+        for url in FOREIGN
     ]
 
 
@@ -182,3 +204,120 @@ async def test_card_registration_is_idempotent(
     await setup_integration(hass, mock_config_entry)
     # A second call must not re-register the static path (which would raise).
     await async_register_card(hass)
+
+
+async def test_foreign_resources_are_never_touched(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+) -> None:
+    """Look-alike and malformed resources survive setup and removal unchanged."""
+    assert await async_setup_component(hass, "lovelace", {})
+    resources = _storage(hass)
+    foreign = await _add_foreign(resources)
+
+    await setup_integration(hass, mock_config_entry)
+    assert len(_card_resources(hass)) == 1
+    assert [item for item in resources.async_items() if item in foreign] == foreign
+
+    assert await hass.config_entries.async_remove(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert resources.async_items() == foreign
+
+
+async def test_yaml_look_alikes_keep_the_fallback(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+) -> None:
+    """Only the card's own URL in YAML resources replaces the extra module."""
+    listed = [{"type": "module", "url": url} for url in FOREIGN]
+    assert await async_setup_component(
+        hass,
+        "lovelace",
+        {"lovelace": {"resource_mode": "yaml", "resources": listed}},
+    )
+
+    await setup_integration(hass, mock_config_entry)
+
+    assert CARD_URL in _extra_modules(hass)
+
+
+async def test_concurrent_setups_leave_one_resource(hass: HomeAssistant) -> None:
+    """Two setups racing over an old and a duplicate resource end with one."""
+    assert await async_setup_component(hass, "lovelace", {})
+    resources = _storage(hass)
+    await resources.async_get_info()
+    await resources.async_create_item({"res_type": "js", "url": f"{CARD_URL}?v=0.1"})
+    await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+
+    async def slow_listener(*_args: Any) -> None:
+        await asyncio.sleep(0.01)
+
+    resources.async_add_listener(slow_listener)
+
+    await asyncio.gather(
+        async_ensure_card_resource(hass), async_ensure_card_resource(hass)
+    )
+
+    assert [item["url"] for item in _card_resources(hass)] == [
+        f"{CARD_URL}?v={await _version(hass)}"
+    ]
+
+
+async def test_resource_deleted_meanwhile_is_read_again(hass: HomeAssistant) -> None:
+    """A resource removed between read and write is re-read, not an error."""
+    assert await async_setup_component(hass, "lovelace", {})
+    resources = _storage(hass)
+    await resources.async_get_info()
+    old = await resources.async_create_item({"res_type": "js", "url": CARD_URL})
+    update = resources.async_update_item
+
+    async def vanish_once(item_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        if item_id == old["id"]:
+            await resources.async_delete_item(item_id)
+        return await update(item_id, updates)
+
+    with patch.object(resources, "async_update_item", side_effect=vanish_once):
+        await async_ensure_card_resource(hass)
+
+    assert [item["url"] for item in _card_resources(hass)] == [
+        f"{CARD_URL}?v={await _version(hass)}"
+    ]
+
+
+async def test_resource_that_keeps_vanishing_is_an_error(hass: HomeAssistant) -> None:
+    """Retrying is bounded: an update that never finds its item raises."""
+    assert await async_setup_component(hass, "lovelace", {})
+    resources = _storage(hass)
+    await resources.async_get_info()
+    await resources.async_create_item({"res_type": "js", "url": CARD_URL})
+
+    with (
+        patch.object(
+            resources, "async_update_item", side_effect=ItemNotFound("gone")
+        ) as update,
+        pytest.raises(ItemNotFound),
+    ):
+        await async_ensure_card_resource(hass)
+    assert update.call_count == 3
+
+
+async def test_already_deleted_resource_is_not_an_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Removal tolerates a card resource someone else deleted first."""
+    await setup_integration(hass, mock_config_entry)
+    resources = _storage(hass)
+
+    with patch.object(
+        resources, "async_delete_item", side_effect=ItemNotFound("gone")
+    ) as delete:
+        assert await hass.config_entries.async_remove(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+    delete.assert_called_once()
+    # Home Assistant logs, rather than raises, an error from a removal hook.
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]

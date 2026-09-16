@@ -154,13 +154,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> N
         ISSUE_ADDON_NOT_RUNNING,
     )
     async_drop_addon_watch(hass, entry.entry_id)
-    others = [
-        other
-        for other in hass.config_entries.async_entries(DOMAIN)
-        if other.entry_id != entry.entry_id
-    ]
-    if not others:
-        await async_remove_card_resource(hass)
+    await async_remove_card_resource(hass, entry.entry_id)
 
 
 async def _async_ensure_addon_running(
