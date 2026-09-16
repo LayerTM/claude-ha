@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-16
+
+### Added
+
+- **The chat card can target a specific entry.** A `config_entry` option, with a
+  picker in the card editor, chooses which entry the card talks to. Without it
+  the card behaves as before while a single entry exists. An applied
+  suggestion always goes back to the entry that made it, and changing the
+  target starts a fresh conversation.
+
 ### Fixed
 
 - **Several entries no longer interfere with each other.** With more than one
@@ -21,14 +31,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Setup no longer picks an add-on silently.** When more than one Claude Code
   add-on is available, setup asks which one to use instead of taking the first
   it finds; an add-on that is already set up is skipped.
-
-### Added
-
-- **The chat card can target a specific entry.** A `config_entry` option, with a
-  picker in the card editor, chooses which entry the card talks to. Without it
-  the card behaves as before while a single entry exists. An applied suggestion always
-  goes back to the entry that made it, and changing the target starts a fresh
-  conversation.
 
 ## [1.9.2] - 2026-09-15
 
@@ -585,7 +587,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.9.2...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/LayerTM/claude-ha/compare/v1.9.2...v1.10.0
 [1.9.2]: https://github.com/LayerTM/claude-ha/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/LayerTM/claude-ha/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/LayerTM/claude-ha/compare/v1.8.0...v1.9.0
