@@ -9,6 +9,9 @@
  *
  * With more than one Claude configured, `config_entry` names the one this card
  * talks to (the service refuses to guess); with a single one it may be omitted.
+ * Every answer remembers the entry it came from, and an Apply goes back to that
+ * entry. Changing the target starts a new conversation: the old history and any
+ * answer still on its way belong to the previous entry and are dropped.
  */
 const CARD_VERSION = "0.3.0";
 
@@ -19,10 +22,23 @@ class ClaudeChatCard extends HTMLElement {
     this._messages = [];
     this._busy = false;
     this._built = false;
+    this._config = {};
+    // Bumped whenever the target entry changes; a reply started under an older
+    // value is discarded.
+    this._generation = 0;
   }
 
   setConfig(config) {
-    this._config = config || {};
+    const next = config || {};
+    const retarget = next.config_entry !== this._config.config_entry;
+    this._config = next;
+    if (!retarget) return;
+    this._generation += 1;
+    this._messages = [];
+    if (this._built) {
+      this._setBusy(false);
+      this._renderLog();
+    }
   }
 
   set hass(hass) {
@@ -122,12 +138,12 @@ class ClaudeChatCard extends HTMLElement {
     this._input.value = "";
     this._messages.push({ role: "user", text });
     this._renderLog();
-    await this._ask({ prompt: text });
+    await this._ask({ prompt: text }, this._config.config_entry);
   }
 
-  async _ask(data) {
+  async _ask(data, entry) {
+    const generation = this._generation;
     this._setBusy(true);
-    const entry = this._config.config_entry;
     try {
       const result = await this._hass.callService(
         "claude_ha",
@@ -137,33 +153,44 @@ class ClaudeChatCard extends HTMLElement {
         false,
         true,
       );
+      if (generation !== this._generation) return;
       const resp = (result && result.response) || {};
       this._messages.push({
+        entry,
+        generation,
         role: "assistant",
         text: resp.text || "",
         proposal: resp.proposal || null,
         prompt: data.prompt,
       });
     } catch (err) {
+      if (generation !== this._generation) return;
       this._messages.push({
         role: "error",
         text: (err && err.message) || String(err),
       });
     } finally {
-      this._setBusy(false);
-      this._renderLog();
+      if (generation === this._generation) {
+        this._setBusy(false);
+        this._renderLog();
+      }
     }
   }
 
   async _apply(msg) {
     if (!msg.proposal || msg.applied || msg.dismissed) return;
+    // A proposal from before a target change is never applied anywhere.
+    if (msg.generation !== this._generation) return;
     msg.applied = true;
     this._renderLog();
-    await this._ask({
-      prompt: msg.prompt,
-      mode: "write",
-      intents: msg.proposal.intents || [],
-    });
+    await this._ask(
+      {
+        prompt: msg.prompt,
+        mode: "write",
+        intents: msg.proposal.intents || [],
+      },
+      msg.entry,
+    );
   }
 
   _dismiss(msg) {

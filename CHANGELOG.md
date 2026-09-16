@@ -20,7 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **The chat card can target a specific entry.** A `config_entry` option, with a
   picker in the card editor, chooses which entry the card talks to. Without it
-  the card behaves as before while a single entry exists.
+  the card behaves as before while a single entry exists. An applied suggestion always
+  goes back to the entry that made it, and changing the target starts a fresh
+  conversation.
 
 ## [1.9.2] - 2026-09-15
 
