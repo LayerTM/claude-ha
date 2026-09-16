@@ -43,7 +43,11 @@ from .coordinator import (
     ClaudeStatusCoordinator,
     ClaudeUsageCoordinator,
 )
-from .frontend import async_register_card
+from .frontend import (
+    async_ensure_card_resource,
+    async_register_card,
+    async_remove_card_resource,
+)
 from .health import (
     async_apply as async_apply_health,
     debounce_mcp_unreachable,
@@ -72,6 +76,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
     """Set up Claude from a config entry."""
+    await async_ensure_card_resource(hass)
     # The add-on is Supervisor-managed only on a Supervisor install with a slug.
     slug: str | None = entry.data.get(CONF_ADDON_SLUG) if is_hassio(hass) else None
     if slug:
@@ -149,6 +154,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> N
         ISSUE_ADDON_NOT_RUNNING,
     )
     async_drop_addon_watch(hass, entry.entry_id)
+    others = [
+        other
+        for other in hass.config_entries.async_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ]
+    if not others:
+        await async_remove_card_resource(hass)
 
 
 async def _async_ensure_addon_running(

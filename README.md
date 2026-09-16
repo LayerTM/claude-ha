@@ -178,8 +178,19 @@ integration passes only the entity id.
 
 ### Dashboard card
 
-A chat card ships with the integration — no separate install. Add a **Manual**
-card (or pick *Claude Chat* in the card picker) with:
+A chat card ships with the integration — no separate install: the integration
+adds it to your dashboard resources (**Settings → Dashboards → ⋮ → Resources**)
+and keeps that entry current. If your resources are managed in YAML
+(`lovelace: resource_mode: yaml`), add it there yourself:
+
+```yaml
+lovelace:
+  resources:
+    - url: /claude_ha/claude-chat-card.js
+      type: module
+```
+
+Add a **Manual** card (or pick *Claude Chat* in the card picker) with:
 
 ```yaml
 type: custom:claude-chat-card

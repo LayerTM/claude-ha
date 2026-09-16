@@ -12,6 +12,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   entry set up, a healthy entry used to clear another entry's repairs, and
   unloading one entry removed the others' repairs too. Each entry now raises and
   clears only its own repairs, and removing an entry removes its repairs.
+- **The chat card no longer fails with "Custom element doesn't exist" on a
+  slow first load.** The card was loaded next to the frontend instead of by it,
+  and when it arrived before the frontend's own code it was registered where
+  dashboards do not look. It is now a dashboard resource, added and kept
+  current by the integration and removed with it; with resources managed in
+  YAML, list it there (see the README).
 - **Setup no longer picks an add-on silently.** When more than one Claude Code
   add-on is available, setup asks which one to use instead of taking the first
   it finds; an add-on that is already set up is skipped.
