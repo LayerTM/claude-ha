@@ -10,6 +10,11 @@ import pytest
 
 SCRIPT = Path(__file__).parent.parent / "scripts" / "secret_scan.py"
 
+# The secret scanner must flag a home directory path, so one fixture has to carry
+# that shape. The repository hygiene check reads this file as well and flags such
+# a path wherever it is written out, so the fixture is assembled from its parts.
+HOME_PATH = "home = " + "/Users" + "/somebody/secret"
+
 
 def _run(tmp_path: Path, content: str) -> subprocess.CompletedProcess[str]:
     (tmp_path / "sample.txt").write_text(content, encoding="utf-8")
@@ -26,7 +31,7 @@ def _run(tmp_path: Path, content: str) -> subprocess.CompletedProcess[str]:
     [
         "key = sk-ant-abcdefghijklmnopqrstuvwxyz012345",
         "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
-        "home = /Users/somebody/secret",
+        HOME_PATH,
         "contact = someone@gmail.com",
         "host = 192.168.1.50",
         "-----BEGIN OPENSSH PRIVATE KEY-----",

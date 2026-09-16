@@ -1,0 +1,19 @@
+name: hygiene
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The rules live in one place and this repository adopts them by calling that
+  # workflow, never by copying the scanner or its patterns.
+  hygiene:
+    uses: LayerTM/ClaudeInHA/.github/workflows/hygiene-scan.yml@main
