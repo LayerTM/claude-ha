@@ -22,7 +22,9 @@ async def test_addon_not_running_fix_flow(
 ) -> None:
     """Confirming the repair starts the add-on."""
     flow = await async_create_fix_flow(
-        hass, ISSUE_ADDON_NOT_RUNNING, {"addon_slug": TEST_SLUG}
+        hass,
+        f"{ISSUE_ADDON_NOT_RUNNING}_entry",
+        {"issue": ISSUE_ADDON_NOT_RUNNING, "addon_slug": TEST_SLUG},
     )
     assert isinstance(flow, AddonNotRunningRepairFlow)
     flow.hass = hass
@@ -42,7 +44,9 @@ async def test_addon_not_running_fix_flow_start_error(
     """A start failure aborts the repair flow."""
     mock_addon_manager.async_start_addon.side_effect = AddonError("no")
     flow = await async_create_fix_flow(
-        hass, ISSUE_ADDON_NOT_RUNNING, {"addon_slug": TEST_SLUG}
+        hass,
+        f"{ISSUE_ADDON_NOT_RUNNING}_entry",
+        {"issue": ISSUE_ADDON_NOT_RUNNING, "addon_slug": TEST_SLUG},
     )
     flow.hass = hass
 
@@ -55,4 +59,14 @@ async def test_addon_not_running_fix_flow_start_error(
 async def test_unknown_issue_uses_confirm_flow(hass: HomeAssistant) -> None:
     """An unknown issue id falls back to a plain confirm flow."""
     flow = await async_create_fix_flow(hass, "something_else", None)
+    assert isinstance(flow, ConfirmRepairFlow)
+
+
+async def test_fix_flow_follows_the_issue_kind_not_the_id(hass: HomeAssistant) -> None:
+    """Only data naming the not-running kind gets the start-the-add-on flow."""
+    flow = await async_create_fix_flow(
+        hass,
+        f"{ISSUE_ADDON_NOT_RUNNING}_entry",
+        {"issue": "addon_not_installed", "addon_slug": TEST_SLUG},
+    )
     assert isinstance(flow, ConfirmRepairFlow)

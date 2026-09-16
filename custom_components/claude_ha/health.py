@@ -21,7 +21,6 @@ from homeassistant.helpers import issue_registry as ir
 from .api import ClaudeClient, ClaudeError, StatusResult
 from .const import (
     ASSIST_ASSISTANT,
-    DOMAIN,
     HEALTH_PROBE_PROMPT,
     ISSUE_CAMERA_VISION_NO_CAMERAS,
     ISSUE_MCP_UNREACHABLE,
@@ -33,6 +32,7 @@ from .const import (
     MCP_UNREACHABLE_DEBOUNCE_POLLS,
     MODE_READ,
 )
+from .issues import async_clear_issues, async_raise_issue
 
 # All health issues, each with its severity and a doc link for the fix.
 _ISSUES: dict[str, tuple[ir.IssueSeverity, str]] = {
@@ -177,36 +177,32 @@ def debounce_mcp_unreachable(
 
 
 @callback
-def async_apply(hass: HomeAssistant, report: HealthReport) -> None:
-    """Raise the active health issue and clear the others."""
-    for issue_id, (severity, learn_more_url) in _ISSUES.items():
-        if issue_id == report.problem:
-            ir.async_create_issue(
+def async_apply(hass: HomeAssistant, entry_id: str, report: HealthReport) -> None:
+    """Raise the entry's active health issue and clear its others."""
+    for issue, (severity, learn_more_url) in _ISSUES.items():
+        if issue == report.problem:
+            async_raise_issue(
                 hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
+                entry_id,
+                issue,
                 severity=severity,
-                translation_key=issue_id,
                 learn_more_url=learn_more_url,
             )
         else:
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            async_clear_issues(hass, entry_id, issue)
 
     # Independent of the single-problem set above: the camera-vision advisory can
     # coexist with an otherwise-healthy home, so raise/clear it on its own.
     if report.camera_vision_inert:
-        ir.async_create_issue(
+        async_raise_issue(
             hass,
-            DOMAIN,
+            entry_id,
             ISSUE_CAMERA_VISION_NO_CAMERAS,
-            is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
-            translation_key=ISSUE_CAMERA_VISION_NO_CAMERAS,
             learn_more_url="https://www.home-assistant.io/voice_control/voice_remote_expose_devices/",
         )
     else:
-        ir.async_delete_issue(hass, DOMAIN, ISSUE_CAMERA_VISION_NO_CAMERAS)
+        async_clear_issues(hass, entry_id, ISSUE_CAMERA_VISION_NO_CAMERAS)
 
 
 async def async_probe(hass: HomeAssistant, client: ClaudeClient) -> None:

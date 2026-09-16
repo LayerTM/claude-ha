@@ -10,7 +10,7 @@ from homeassistant.components.hassio import (
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, issue_registry as ir
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.hassio import is_hassio
 from homeassistant.helpers.typing import ConfigType
@@ -19,6 +19,7 @@ from .addon import (
     AddonWatch,
     async_clear_addon_issues,
     async_create_addon_issue,
+    async_drop_addon_watch,
     get_addon_manager,
     get_addon_watch,
 )
@@ -33,6 +34,7 @@ from .const import (
     DOMAIN,
     HEALTH_ISSUES,
     ISSUE_ADDON_NOT_INSTALLED,
+    ISSUE_ADDON_NOT_RUNNING,
 )
 from .coordinator import (
     ClaudeAccountLimitsCoordinator,
@@ -47,6 +49,7 @@ from .health import (
     debounce_mcp_unreachable,
     evaluate as evaluate_health,
 )
+from .issues import async_clear_issues
 from .services import async_setup_services
 
 PLATFORMS = (
@@ -79,7 +82,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
         base_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
         token=entry.data[CONF_TOKEN],
     )
-    watch = get_addon_watch(hass, slug) if slug else AddonWatch(hass, None)
+    watch = (
+        get_addon_watch(hass, entry.entry_id, slug)
+        if slug
+        else AddonWatch(hass, entry.entry_id, None)
+    )
     status = ClaudeStatusCoordinator(hass, entry, client, watch)
     await status.async_config_entry_first_refresh()
 
@@ -118,7 +125,7 @@ def _async_setup_health(
         report, mcp_unreachable_streak = debounce_mcp_unreachable(
             report, mcp_unreachable_streak
         )
-        async_apply_health(hass, report)
+        async_apply_health(hass, entry.entry_id, report)
 
     entry.async_on_unload(status.async_add_listener(_refresh_health))
     _refresh_health()
@@ -128,9 +135,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> b
     """Unload a config entry and its platforms."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        for issue_id in HEALTH_ISSUES:
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
+        async_clear_issues(hass, entry.entry_id, *HEALTH_ISSUES)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> None:
+    """Forget everything a removed entry left behind: its issues and its watch."""
+    async_clear_issues(
+        hass,
+        entry.entry_id,
+        *HEALTH_ISSUES,
+        ISSUE_ADDON_NOT_INSTALLED,
+        ISSUE_ADDON_NOT_RUNNING,
+    )
+    async_drop_addon_watch(hass, entry.entry_id)
 
 
 async def _async_ensure_addon_running(
@@ -159,7 +177,9 @@ async def _async_ensure_addon_running(
 
     if info.state is AddonState.NOT_INSTALLED:
         addon.async_schedule_install_setup_addon(info.options, catch_error=True)
-        async_create_addon_issue(hass, ISSUE_ADDON_NOT_INSTALLED, slug, fixable=False)
+        async_create_addon_issue(
+            hass, entry.entry_id, ISSUE_ADDON_NOT_INSTALLED, slug, fixable=False
+        )
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="addon_not_installed"
         )
@@ -168,9 +188,9 @@ async def _async_ensure_addon_running(
         # Not ours to start: at boot the Supervisor starts the add-on right
         # after Core, and one the user stopped stays stopped. The watch raises
         # the repair (which offers to start it) only if it stays down.
-        get_addon_watch(hass, slug).async_down(info.state)
+        get_addon_watch(hass, entry.entry_id, slug).async_down(info.state)
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="addon_not_running"
         )
 
-    async_clear_addon_issues(hass)
+    async_clear_addon_issues(hass, entry.entry_id)

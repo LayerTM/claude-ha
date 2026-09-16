@@ -6,8 +6,11 @@
  * `proposal`. Read mode is always used for typed messages; a proposal is offered
  * as an inline Apply/Dismiss, and Apply issues the confirmed `mode: "write"` call
  * with the proposal's intents.
+ *
+ * With more than one Claude configured, `config_entry` names the one this card
+ * talks to (the service refuses to guess); with a single one it may be omitted.
  */
-const CARD_VERSION = "0.2.0";
+const CARD_VERSION = "0.3.0";
 
 class ClaudeChatCard extends HTMLElement {
   constructor() {
@@ -33,6 +36,24 @@ class ClaudeChatCard extends HTMLElement {
 
   static getStubConfig() {
     return { title: "Claude" };
+  }
+
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: "title", selector: { text: {} } },
+        {
+          name: "config_entry",
+          selector: { config_entry: { integration: "claude_ha" } },
+        },
+      ],
+      computeLabel: (schema) =>
+        ({ title: "Title", config_entry: "Claude" })[schema.name],
+      computeHelper: (schema) =>
+        schema.name === "config_entry"
+          ? "Which Claude this card talks to. Needed when more than one is set up."
+          : undefined,
+    };
   }
 
   _build() {
@@ -106,11 +127,12 @@ class ClaudeChatCard extends HTMLElement {
 
   async _ask(data) {
     this._setBusy(true);
+    const entry = this._config.config_entry;
     try {
       const result = await this._hass.callService(
         "claude_ha",
         "ask",
-        data,
+        entry ? { ...data, config_entry: entry } : data,
         undefined,
         false,
         true,

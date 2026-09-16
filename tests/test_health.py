@@ -17,8 +17,12 @@ from custom_components.claude_ha.const import (
     ISSUE_NOT_LOGGED_IN,
     MCP_SERVER_DOMAIN,
 )
+from custom_components.claude_ha.issues import entry_issue_id
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+
+ENTRY_ID = "entry-a"
+OTHER_ENTRY_ID = "entry-b"
 
 
 def _expose_except_cameras(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -164,13 +168,26 @@ async def test_exposed_count_handles_missing_store(
 async def test_apply_raises_active_and_clears_others(hass: HomeAssistant) -> None:
     """async_apply raises exactly the active issue and clears the rest."""
     registry = ir.async_get(hass)
-    health.async_apply(hass, health.HealthReport(ISSUE_NO_HA_TOKEN, 1, True, True))
-    assert registry.async_get_issue(DOMAIN, ISSUE_NO_HA_TOKEN) is not None
-    assert registry.async_get_issue(DOMAIN, ISSUE_MCP_UNREACHABLE) is None
+    health.async_apply(
+        hass, ENTRY_ID, health.HealthReport(ISSUE_NO_HA_TOKEN, 1, True, True)
+    )
+    assert (
+        registry.async_get_issue(DOMAIN, entry_issue_id(ISSUE_NO_HA_TOKEN, ENTRY_ID))
+        is not None
+    )
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_MCP_UNREACHABLE, ENTRY_ID)
+        )
+        is None
+    )
 
     # A later clean report clears the previously-raised issue.
-    health.async_apply(hass, health.HealthReport(None, 1, True, True))
-    assert registry.async_get_issue(DOMAIN, ISSUE_NO_HA_TOKEN) is None
+    health.async_apply(hass, ENTRY_ID, health.HealthReport(None, 1, True, True))
+    assert (
+        registry.async_get_issue(DOMAIN, entry_issue_id(ISSUE_NO_HA_TOKEN, ENTRY_ID))
+        is None
+    )
 
 
 async def test_camera_vision_inert_when_no_camera_exposed(
@@ -248,14 +265,51 @@ async def test_apply_raises_and_clears_camera_issue(hass: HomeAssistant) -> None
     """The camera advisory is raised/cleared independently of the single problem."""
     registry = ir.async_get(hass)
     health.async_apply(
-        hass, health.HealthReport(None, 5, True, True, camera_vision_inert=True)
+        hass,
+        ENTRY_ID,
+        health.HealthReport(None, 5, True, True, camera_vision_inert=True),
     )
-    assert registry.async_get_issue(DOMAIN, ISSUE_CAMERA_VISION_NO_CAMERAS) is not None
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_CAMERA_VISION_NO_CAMERAS, ENTRY_ID)
+        )
+        is not None
+    )
 
     health.async_apply(
-        hass, health.HealthReport(None, 5, True, True, camera_vision_inert=False)
+        hass,
+        ENTRY_ID,
+        health.HealthReport(None, 5, True, True, camera_vision_inert=False),
     )
-    assert registry.async_get_issue(DOMAIN, ISSUE_CAMERA_VISION_NO_CAMERAS) is None
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_CAMERA_VISION_NO_CAMERAS, ENTRY_ID)
+        )
+        is None
+    )
+
+
+async def test_apply_leaves_other_entries_issues_alone(hass: HomeAssistant) -> None:
+    """One entry's clean report never clears another entry's issues."""
+    registry = ir.async_get(hass)
+    health.async_apply(
+        hass,
+        ENTRY_ID,
+        health.HealthReport(
+            ISSUE_MCP_UNREACHABLE, 1, True, True, camera_vision_inert=True
+        ),
+    )
+    health.async_apply(hass, OTHER_ENTRY_ID, health.HealthReport(None, 1, True, True))
+
+    for issue in (ISSUE_MCP_UNREACHABLE, ISSUE_CAMERA_VISION_NO_CAMERAS):
+        raised = registry.async_get_issue(DOMAIN, entry_issue_id(issue, ENTRY_ID))
+        assert raised is not None
+        assert raised.translation_key == issue
+        assert raised.data == {"issue": issue, "entry_id": ENTRY_ID}
+        assert (
+            registry.async_get_issue(DOMAIN, entry_issue_id(issue, OTHER_ENTRY_ID))
+            is None
+        )
 
 
 async def test_camera_vision_not_inert_when_exposure_store_unready(
