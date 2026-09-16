@@ -5,8 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from custom_components.claude_ha.addon import (
-    async_resolve_addon_slug,
+    async_drop_addon_watch,
+    async_find_addon_slugs,
     get_addon_manager,
+    get_addon_watch,
 )
 from homeassistant.core import HomeAssistant
 
@@ -28,7 +30,46 @@ async def test_resolve_from_installed(hass: HomeAssistant) -> None:
         "custom_components.claude_ha.addon.get_addons_info",
         return_value={"other_addon": {}, TEST_SLUG: {}},
     ):
-        assert await async_resolve_addon_slug(hass) == TEST_SLUG
+        assert await async_find_addon_slugs(hass) == [TEST_SLUG]
+
+
+async def test_resolve_every_installed_match(hass: HomeAssistant) -> None:
+    """Every installed match is returned, sorted, so none is picked silently."""
+    with patch(
+        "custom_components.claude_ha.addon.get_addons_info",
+        return_value={TEST_SLUG: {}, "local_claude-code": {}, "other_addon": {}},
+    ):
+        assert await async_find_addon_slugs(hass) == [TEST_SLUG, "local_claude-code"]
+
+
+async def test_resolve_every_store_match(hass: HomeAssistant) -> None:
+    """Every not-installed store match is returned, sorted."""
+    client = MagicMock()
+    client.store.addons_list = _async_return(
+        [
+            MagicMock(slug="local_claude-code", installed=False),
+            MagicMock(slug=TEST_SLUG, installed=False),
+            MagicMock(slug="other_claude-code", installed=True),
+        ]
+    )
+    with (
+        patch("custom_components.claude_ha.addon.get_addons_info", return_value={}),
+        patch(
+            "custom_components.claude_ha.addon.get_supervisor_client",
+            return_value=client,
+        ),
+    ):
+        assert await async_find_addon_slugs(hass) == [TEST_SLUG, "local_claude-code"]
+
+
+def test_addon_watch_is_per_entry(hass: HomeAssistant) -> None:
+    """Each entry keeps its own watch until it is removed."""
+    first = get_addon_watch(hass, "entry-a", TEST_SLUG)
+    assert get_addon_watch(hass, "entry-a", TEST_SLUG) is first
+    assert get_addon_watch(hass, "entry-b", "local_claude-code") is not first
+
+    async_drop_addon_watch(hass, "entry-a")
+    assert get_addon_watch(hass, "entry-a", TEST_SLUG) is not first
 
 
 async def test_resolve_from_store(hass: HomeAssistant) -> None:
@@ -43,7 +84,7 @@ async def test_resolve_from_store(hass: HomeAssistant) -> None:
             return_value=client,
         ),
     ):
-        assert await async_resolve_addon_slug(hass) == TEST_SLUG
+        assert await async_find_addon_slugs(hass) == [TEST_SLUG]
 
 
 async def test_resolve_none(hass: HomeAssistant) -> None:
@@ -60,7 +101,7 @@ async def test_resolve_none(hass: HomeAssistant) -> None:
             return_value=client,
         ),
     ):
-        assert await async_resolve_addon_slug(hass) is None
+        assert await async_find_addon_slugs(hass) == []
 
 
 async def test_resolve_store_error(hass: HomeAssistant) -> None:
@@ -74,7 +115,7 @@ async def test_resolve_store_error(hass: HomeAssistant) -> None:
             return_value=client,
         ),
     ):
-        assert await async_resolve_addon_slug(hass) is None
+        assert await async_find_addon_slugs(hass) == []
 
 
 def _async_return(value: object):

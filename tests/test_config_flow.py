@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -38,8 +39,8 @@ def mock_on_supervisor() -> Generator[None]:
     with (
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         patch(
-            "custom_components.claude_ha.config_flow.async_resolve_addon_slug",
-            return_value=TEST_SLUG,
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[TEST_SLUG],
         ),
     ):
         yield
@@ -71,8 +72,8 @@ async def test_user_flow_addon_not_found(hass: HomeAssistant) -> None:
     with (
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         patch(
-            "custom_components.claude_ha.config_flow.async_resolve_addon_slug",
-            return_value=None,
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[],
         ),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -384,5 +385,86 @@ async def test_user_flow_already_configured(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+OTHER_SLUG = "local_claude-code"
+
+
+def _on_supervisor_with(slugs: list[str]) -> Any:
+    """Patch the add-on lookup to return ``slugs``."""
+    return patch(
+        "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+        return_value=slugs,
+    )
+
+
+async def test_user_flow_asks_which_addon(
+    hass: HomeAssistant,
+    mock_addon_manager: MagicMock,
+    mock_status: None,
+    mock_setup_entry: MagicMock,
+) -> None:
+    """Two unconfigured add-ons: the user picks one, it is the one set up."""
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "pick_addon"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"addon": OTHER_SLUG}
+        )
+        assert result["step_id"] == "on_supervisor"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_USE_ADDON: True}
+        )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == OTHER_SLUG
+    assert result["data"][CONF_ADDON_SLUG] == OTHER_SLUG
+
+
+async def test_user_flow_skips_the_configured_addon(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_addon_manager: MagicMock,
+    mock_status: None,
+    mock_setup_entry: MagicMock,
+) -> None:
+    """Two add-ons, one already set up: the other is the only choice."""
+    mock_config_entry.add_to_hass(hass)
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        assert result["step_id"] == "on_supervisor"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_USE_ADDON: True}
+        )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == OTHER_SLUG
+
+
+async def test_user_flow_every_addon_configured(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Several add-ons, all set up: nothing is left to add."""
+    mock_config_entry.add_to_hass(hass)
+    MockConfigEntry(domain=DOMAIN, unique_id=OTHER_SLUG).add_to_hass(hass)
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"

@@ -19,7 +19,14 @@ from custom_components.claude_ha.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-from .conftest import TEST_BASE_URL, setup_integration
+from .conftest import (
+    ACCOUNT_LIMITS_PAYLOAD,
+    PROMPT_PAYLOAD,
+    STATUS_PAYLOAD,
+    TEST_BASE_URL,
+    USAGE_PAYLOAD,
+    setup_integration,
+)
 
 
 async def test_ask_returns_response(
@@ -247,3 +254,54 @@ async def test_ask_add_on_error(
             blocking=True,
             return_response=True,
         )
+
+
+async def test_ask_with_two_entries_needs_a_choice(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    mock_prompt: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """With two entries the service never guesses; a named entry gets the call."""
+    other_url = "http://local-claude-code:8126"
+    for path, payload in (
+        ("status", STATUS_PAYLOAD),
+        ("usage", USAGE_PAYLOAD),
+        ("account_limits", ACCOUNT_LIMITS_PAYLOAD),
+    ):
+        aioclient_mock.get(f"{other_url}/api/{path}", json=payload)
+    aioclient_mock.post(
+        f"{other_url}/api/prompt", json={**PROMPT_PAYLOAD, "text": "other"}
+    )
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        title="Claude Code",
+        unique_id="local_claude-code",
+        data={
+            **mock_config_entry.data,
+            "host": "local-claude-code",
+            "addon_slug": "local_claude-code",
+        },
+    )
+    await setup_integration(hass, mock_config_entry)
+    await setup_integration(hass, other)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASK,
+            {ATTR_PROMPT: "hi"},
+            blocking=True,
+            return_response=True,
+        )
+    assert err.value.translation_key == "no_config_entry"
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASK,
+        {ATTR_PROMPT: "hi", ATTR_CONFIG_ENTRY: other.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+    assert response["text"] == "other"

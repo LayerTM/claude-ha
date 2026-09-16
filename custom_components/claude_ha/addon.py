@@ -2,7 +2,9 @@
 
 The add-on slug is repository-prefixed and varies per install, so it is resolved
 at runtime (from discovery, or by matching :data:`ADDON_SLUG_SUFFIX` against the
-installed/store add-on lists) rather than hardcoded.
+installed/store add-on lists) rather than hardcoded. More than one add-on can
+match (e.g. a store build and a local build), so lookups return every match and
+the caller decides; nothing here picks one silently.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from .const import (
     ISSUE_ADDON_NOT_RUNNING,
     LOGGER,
 )
+from .issues import async_clear_issues, async_raise_issue
 
 DATA_ADDON_MANAGERS = f"{DOMAIN}_addon_managers"
 DATA_ADDON_WATCHES = f"{DOMAIN}_addon_watches"
@@ -48,84 +51,86 @@ def get_addon_manager(hass: HomeAssistant, slug: str) -> AddonManager:
     return managers[slug]
 
 
-async def async_resolve_addon_slug(hass: HomeAssistant) -> str | None:
-    """Find the Claude Code add-on's slug, or ``None`` if it is not available.
+async def async_find_addon_slugs(hass: HomeAssistant) -> list[str]:
+    """Return every slug the Claude Code add-on could have, sorted.
 
-    Prefers an already-installed add-on (the common case: the user installed the
-    add-on, which then advertised itself via discovery), and falls back to the
-    add-on store so the config flow can offer to install it.
+    Installed add-ons win (the common case: the user installed the add-on,
+    which then advertised itself via discovery); only when none is installed
+    is the add-on store searched, so the config flow can offer to install one.
     """
-    installed = _resolve_from_installed(hass)
-    if installed is not None:
+    installed = _find_installed(hass)
+    if installed:
         return installed
-    return await _resolve_from_store(hass)
+    return await _find_in_store(hass)
 
 
 @callback
-def _resolve_from_installed(hass: HomeAssistant) -> str | None:
+def _find_installed(hass: HomeAssistant) -> list[str]:
     """Match the slug suffix against installed add-ons (sync Supervisor cache)."""
     try:
         addons = get_addons_info(hass)
     except Exception:  # noqa: BLE001 - Supervisor data may not be loaded yet
-        return None
+        return []
     if not addons:
-        return None
-    return next(
-        (slug for slug in addons if slug.endswith(ADDON_SLUG_SUFFIX)),
-        None,
-    )
+        return []
+    return sorted(slug for slug in addons if slug.endswith(ADDON_SLUG_SUFFIX))
 
 
-async def _resolve_from_store(hass: HomeAssistant) -> str | None:
+async def _find_in_store(hass: HomeAssistant) -> list[str]:
     """Match the slug suffix against store add-ons that are not yet installed."""
     client = get_supervisor_client(hass)
     try:
         store_addons = await client.store.addons_list()
     except Exception:  # noqa: BLE001 - store may be unavailable
-        return None
-    return next(
-        (
-            addon.slug
-            for addon in store_addons
-            if not addon.installed and addon.slug.endswith(ADDON_SLUG_SUFFIX)
-        ),
-        None,
+        return []
+    return sorted(
+        addon.slug
+        for addon in store_addons
+        if not addon.installed and addon.slug.endswith(ADDON_SLUG_SUFFIX)
     )
 
 
 @callback
-def get_addon_watch(hass: HomeAssistant, slug: str) -> AddonWatch:
-    """Return the add-on's watch, kept across setup retries and reloads.
+def get_addon_watch(hass: HomeAssistant, entry_id: str, slug: str) -> AddonWatch:
+    """Return the entry's add-on watch, kept across setup retries and reloads.
 
     An outage that starts while the entry is still retrying its setup must be
     timed from its first sighting, so the watch outlives any one setup attempt.
     """
     watches: dict[str, AddonWatch] = hass.data.setdefault(DATA_ADDON_WATCHES, {})
-    if slug not in watches:
-        watches[slug] = AddonWatch(hass, slug)
-    return watches[slug]
+    if entry_id not in watches:
+        watches[entry_id] = AddonWatch(hass, entry_id, slug)
+    return watches[entry_id]
 
 
+@callback
+def async_drop_addon_watch(hass: HomeAssistant, entry_id: str) -> None:
+    """Forget a removed entry's watch."""
+    hass.data.get(DATA_ADDON_WATCHES, {}).pop(entry_id, None)
+
+
+@callback
 def async_create_addon_issue(
-    hass: HomeAssistant, issue_id: str, slug: str, *, fixable: bool
+    hass: HomeAssistant, entry_id: str, issue: str, slug: str, *, fixable: bool
 ) -> None:
-    """Raise a repair issue for a missing/stopped add-on."""
-    ir.async_create_issue(
+    """Raise one entry's repair issue for its missing/stopped add-on."""
+    async_raise_issue(
         hass,
-        DOMAIN,
-        issue_id,
-        is_fixable=fixable,
+        entry_id,
+        issue,
         severity=ir.IssueSeverity.ERROR,
-        translation_key=issue_id,
-        translation_placeholders={"addon_slug": slug},
+        fixable=fixable,
+        placeholders={"addon_slug": slug},
         data={"addon_slug": slug},
     )
 
 
-def async_clear_addon_issues(hass: HomeAssistant) -> None:
-    """Remove any add-on availability repair issues."""
-    for issue_id in (ISSUE_ADDON_NOT_RUNNING, ISSUE_ADDON_NOT_INSTALLED):
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
+@callback
+def async_clear_addon_issues(hass: HomeAssistant, entry_id: str) -> None:
+    """Remove one entry's add-on availability repair issues."""
+    async_clear_issues(
+        hass, entry_id, ISSUE_ADDON_NOT_RUNNING, ISSUE_ADDON_NOT_INSTALLED
+    )
 
 
 class AddonWatch:
@@ -146,9 +151,10 @@ class AddonWatch:
     WARNING and the repair are emitted once per outage, not once per caller.
     """
 
-    def __init__(self, hass: HomeAssistant, slug: str | None) -> None:
-        """Watch the add-on ``slug``; ``None`` when no Supervisor manages it."""
+    def __init__(self, hass: HomeAssistant, entry_id: str, slug: str | None) -> None:
+        """Watch entry ``entry_id``'s add-on ``slug``; ``None`` without Supervisor."""
         self._hass = hass
+        self._entry_id = entry_id
         self._slug = slug
         self._down_since: datetime | None = None
         self._outage_reported = False
@@ -200,7 +206,7 @@ class AddonWatch:
         if self._down_since is None:
             return
         if self._outage_reported:
-            async_clear_addon_issues(self._hass)
+            async_clear_addon_issues(self._hass, self._entry_id)
         self._down_since = None
         self._outage_reported = False
 
@@ -224,5 +230,9 @@ class AddonWatch:
             state.value,
         )
         async_create_addon_issue(
-            self._hass, ISSUE_ADDON_NOT_RUNNING, self._slug, fixable=True
+            self._hass,
+            self._entry_id,
+            ISSUE_ADDON_NOT_RUNNING,
+            self._slug,
+            fixable=True,
         )

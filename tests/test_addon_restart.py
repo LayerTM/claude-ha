@@ -24,6 +24,7 @@ from custom_components.claude_ha.const import (
     SCAN_INTERVAL,
     USAGE_SCAN_INTERVAL,
 )
+from custom_components.claude_ha.issues import entry_issue_id
 from homeassistant.components.hassio import AddonError, AddonState
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
@@ -149,7 +150,12 @@ async def test_restart_window_is_quiet(
     assert _loud(caplog) == []
     infos = [r for r in _records(caplog, logging.INFO) if "add-on" in r.getMessage()]
     assert len(infos) == 1
-    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is None
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
+        )
+        is None
+    )
 
 
 async def test_usage_poll_in_restart_window_is_quiet(
@@ -204,13 +210,23 @@ async def test_outage_warns_once_and_raises_repair(
     assert [r.levelno for r in warnings] == [logging.WARNING]
     assert "not been running" in warnings[0].getMessage()
     registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is not None
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
+        )
+        is not None
+    )
 
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
     _serve(aioclient_mock, up=True)
     await _advance(hass, freezer, SCAN_INTERVAL)
     assert _status_state(hass, mock_config_entry) != STATE_UNAVAILABLE
-    assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is None
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
+        )
+        is None
+    )
 
 
 async def test_running_but_unreachable_outage_warns_without_repair(
@@ -233,7 +249,12 @@ async def test_running_but_unreachable_outage_warns_without_repair(
     warnings = _loud(caplog)
     assert [r.levelno for r in warnings] == [logging.WARNING]
     assert "running but its API" in warnings[0].getMessage()
-    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is None
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(

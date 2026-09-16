@@ -12,6 +12,16 @@
           "use_addon": "The add-on runs Claude on your Home Assistant host and is required by this integration."
         }
       },
+      "pick_addon": {
+        "title": "Choose the Claude Code add-on",
+        "description": "More than one Claude Code add-on is available. Choose the one to set up.",
+        "data": {
+          "addon": "Add-on"
+        },
+        "data_description": {
+          "addon": "The add-on's slug, which starts with the repository it comes from."
+        }
+      },
       "hassio_confirm": {
         "title": "Set up Claude with the Claude Code add-on",
         "description": "Do you want to set up Claude using the discovered {addon} add-on?"

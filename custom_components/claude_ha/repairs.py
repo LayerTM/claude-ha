@@ -13,6 +13,7 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .addon import get_addon_manager
 from .const import ISSUE_ADDON_NOT_RUNNING, LOGGER
+from .issues import ISSUE_DATA_KIND
 
 
 class AddonNotRunningRepairFlow(RepairsFlow):
@@ -47,7 +48,14 @@ async def async_create_fix_flow(
     issue_id: str,
     data: dict[str, str | int | float | None] | None,
 ) -> RepairsFlow:
-    """Create the fix flow for a repair issue."""
-    if issue_id == ISSUE_ADDON_NOT_RUNNING and data and "addon_slug" in data:
+    """Create the fix flow for a repair issue.
+
+    Issue ids carry the owning entry, so the kind is read from the issue data.
+    """
+    if (
+        data
+        and data.get(ISSUE_DATA_KIND) == ISSUE_ADDON_NOT_RUNNING
+        and "addon_slug" in data
+    ):
         return AddonNotRunningRepairFlow(str(data["addon_slug"]))
     return ConfirmRepairFlow()

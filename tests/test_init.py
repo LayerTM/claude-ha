@@ -17,9 +17,12 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.claude_ha.const import (
     ADDON_OUTAGE_GRACE,
     DOMAIN,
+    HEALTH_ISSUES,
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
+    ISSUE_NO_HA_TOKEN,
 )
+from custom_components.claude_ha.issues import async_raise_issue, entry_issue_id
 from homeassistant.components.hassio import AddonState
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -42,6 +45,62 @@ async def test_setup_and_unload(
     assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
     await hass.async_block_till_done()
     assert mock_config_entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_unload_clears_only_its_own_health_issues(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+) -> None:
+    """Unloading one entry leaves another entry's repairs in place."""
+    await setup_integration(hass, mock_config_entry)
+    registry = ir.async_get(hass)
+    for entry_id in (mock_config_entry.entry_id, "other-entry"):
+        async_raise_issue(
+            hass, entry_id, ISSUE_NO_HA_TOKEN, severity=ir.IssueSeverity.ERROR
+        )
+
+    assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_NO_HA_TOKEN, mock_config_entry.entry_id)
+        )
+        is None
+    )
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_NO_HA_TOKEN, "other-entry")
+        )
+        is not None
+    )
+
+
+async def test_remove_clears_every_issue_of_the_entry(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+) -> None:
+    """A removed entry leaves no repair of its own behind, add-on ones included."""
+    await setup_integration(hass, mock_config_entry)
+    kinds = (*HEALTH_ISSUES, ISSUE_ADDON_NOT_INSTALLED, ISSUE_ADDON_NOT_RUNNING)
+    for kind in kinds:
+        async_raise_issue(
+            hass, mock_config_entry.entry_id, kind, severity=ir.IssueSeverity.ERROR
+        )
+
+    assert await hass.config_entries.async_remove(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = ir.async_get(hass)
+    for kind in kinds:
+        assert (
+            registry.async_get_issue(
+                DOMAIN, entry_issue_id(kind, mock_config_entry.entry_id)
+            )
+            is None
+        )
 
 
 async def test_setup_status_unreachable(
@@ -102,7 +161,13 @@ async def test_setup_leaves_stopped_addon_to_supervisor(
         assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
         mock_addon_manager.async_schedule_start_addon.assert_not_called()
         registry = ir.async_get(hass)
-        assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is None
+        assert (
+            registry.async_get_issue(
+                DOMAIN,
+                entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id),
+            )
+            is None
+        )
 
         # The Supervisor brings the add-on up; the next setup retry succeeds.
         mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
@@ -142,7 +207,12 @@ async def test_setup_stopped_addon_raises_repair_after_grace(
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
     mock_addon_manager.async_schedule_start_addon.assert_not_called()
     registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_RUNNING) is not None
+    assert (
+        registry.async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
+        )
+        is not None
+    )
     warnings = [
         r
         for r in caplog.records
@@ -168,7 +238,13 @@ async def test_setup_addon_not_installed_creates_issue(
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
     mock_addon_manager.async_schedule_install_setup_addon.assert_called_once()
     registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, ISSUE_ADDON_NOT_INSTALLED) is not None
+    assert (
+        registry.async_get_issue(
+            DOMAIN,
+            entry_issue_id(ISSUE_ADDON_NOT_INSTALLED, mock_config_entry.entry_id),
+        )
+        is not None
+    )
 
 
 async def test_setup_addon_info_error(

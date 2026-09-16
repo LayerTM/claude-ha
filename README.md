@@ -126,7 +126,9 @@ Setup is zero-touch: when the Claude Code add-on starts it advertises its host,
 port and a freshly generated token through Supervisor discovery, and Home
 Assistant surfaces a one-click setup. You can also add it from **Settings →
 Devices & services → Add integration → Claude**; it will find, install and start
-the add-on for you. There are no options to fill in.
+the add-on for you. There are no options to fill in. If more than one Claude
+Code add-on is installed (for example a store build and a local build), setup
+asks which one to use; each one can be set up as its own entry.
 
 ## Usage
 
@@ -186,6 +188,10 @@ title: Claude
 
 Type a message and the card shows Claude's reply. If Claude proposes a change, an
 inline **Apply / Dismiss** appears; **Apply** runs the confirmed write.
+
+With more than one Claude entry, pick the one the card talks to in the card
+editor, or set its entry id in YAML (`config_entry: <entry id>`). Without it the
+card works only while a single entry exists.
 
 ### The `claude_ha.ask` action
 

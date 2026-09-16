@@ -26,7 +26,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.hassio import is_hassio
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 
-from .addon import async_resolve_addon_slug, get_addon_manager
+from .addon import async_find_addon_slugs, get_addon_manager
 from .api import ClaudeClient, ClaudeError
 from .const import (
     ADDON_NAME,
@@ -47,6 +47,9 @@ from .const import (
 
 ON_SUPERVISOR_SCHEMA = vol.Schema({vol.Required(CONF_USE_ADDON, default=True): bool})
 
+# The add-on slug picked in the "pick_addon" step.
+CONF_ADDON = "addon"
+
 
 class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Claude, backed by the Claude Code add-on."""
@@ -63,6 +66,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         """Init flow state."""
         self._addon_slug: str | None = None
         self._discovery: dict[str, Any] | None = None
+        self._addon_choices: list[str] = []
         self.install_task: asyncio.Task[None] | None = None
         self.start_task: asyncio.Task[None] | None = None
 
@@ -113,9 +117,18 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Resolve the add-on and branch on its install/run state."""
         if self._addon_slug is None:
-            self._addon_slug = await async_resolve_addon_slug(self.hass)
-            if self._addon_slug is None:
+            slugs = await async_find_addon_slugs(self.hass)
+            if not slugs:
                 return self.async_abort(reason="addon_not_found")
+            if len(slugs) > 1:
+                configured = self._async_current_ids(include_ignore=False)
+                slugs = [slug for slug in slugs if slug not in configured]
+                if not slugs:
+                    return self.async_abort(reason="already_configured")
+                if len(slugs) > 1:
+                    self._addon_choices = slugs
+                    return await self.async_step_pick_addon()
+            self._addon_slug = slugs[0]
 
         if user_input is None:
             return self.async_show_form(
@@ -135,6 +148,24 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         if info.state is AddonState.NOT_RUNNING:
             return await self.async_step_start_addon()
         return await self.async_step_install_addon()
+
+    async def async_step_pick_addon(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Let the user choose when more than one add-on could be meant."""
+        if user_input is not None:
+            self._addon_slug = user_input[CONF_ADDON]
+            return await self.async_step_on_supervisor()
+        return self.async_show_form(
+            step_id="pick_addon",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ADDON): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=self._addon_choices)
+                    )
+                }
+            ),
+        )
 
     async def async_step_install_addon(
         self, user_input: dict[str, Any] | None = None
