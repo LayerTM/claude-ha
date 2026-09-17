@@ -456,6 +456,12 @@ add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
 - **"The add-on runs a different AI engine".** The entry was set up for one
   engine and its add-on now reports another. Restore the add-on the entry was
   set up for, or delete the entry and add the add-on again.
+- **A request is refused with a reason.** "The request is too large" means the
+  prompt or request exceeds the add-on's size limit (shown when the add-on
+  publishes one); shorten it. "Can't make changes because it has no Home
+  Assistant token" means the add-on options need a token before `mode: write`
+  works. "Needs your explicit confirmation" means the action must be confirmed
+  before it runs. "Took too long to answer" is a timeout; try again.
 - **Setup keeps retrying.** Check that the add-on is installed, started and
   healthy; the status endpoint must be reachable on the internal network.
 - **Diagnostics.** Download diagnostics from the integration's device page (the
