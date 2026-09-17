@@ -17,6 +17,8 @@ from custom_components.claude_ha.api import (
     StatusResult,
 )
 from custom_components.claude_ha.const import (
+    ATTR_CONFIG_ENTRY,
+    ATTR_PROMPT,
     CONF_ADDON_SLUG,
     CONF_ENGINE,
     CONF_HOST,
@@ -24,16 +26,19 @@ from custom_components.claude_ha.const import (
     CONF_TOKEN,
     DOMAIN,
     ISSUE_ENGINE_MISMATCH,
+    SERVICE_ASK,
 )
 from custom_components.claude_ha.engines import CLAUDE, engine_for_slug
 from custom_components.claude_ha.entity import build_device_info
 from custom_components.claude_ha.issues import entry_issue_id
+from homeassistant.components import conversation
 from homeassistant.config_entries import SOURCE_HASSIO, ConfigEntryState
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
+    intent,
     issue_registry as ir,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -437,3 +442,131 @@ async def test_write_sends_only_accepted_fields(
 def test_engine_for_slug(slug: str, engine: object) -> None:
     """A slug belongs to the engine whose suffix it ends with."""
     assert engine_for_slug(slug) is engine
+
+
+_OTHER_URL = "http://local-claude-code:8126"
+
+
+def _mock_two_addons(
+    aioclient_mock: AiohttpClientMocker, first_status: dict[str, Any]
+) -> None:
+    """Register the first add-on with ``first_status`` and a healthy second one."""
+    aioclient_mock.clear_requests()
+    _mock_addon(aioclient_mock, first_status)
+    aioclient_mock.post(_PROMPT_URL, json=PROMPT_PAYLOAD)
+    for path, payload in (
+        ("status", STATUS_PAYLOAD),
+        ("usage", USAGE_PAYLOAD),
+        ("account_limits", ACCOUNT_LIMITS_PAYLOAD),
+    ):
+        aioclient_mock.get(f"{_OTHER_URL}/api/{path}", json=payload)
+    aioclient_mock.post(
+        f"{_OTHER_URL}/api/prompt", json={**PROMPT_PAYLOAD, "text": "other"}
+    )
+
+
+def _posts(aioclient_mock: AiohttpClientMocker, base_url: str) -> int:
+    return sum(
+        1
+        for method, url, *_ in aioclient_mock.mock_calls
+        if method == "POST" and str(url).startswith(base_url)
+    )
+
+
+async def _converse(hass: HomeAssistant, entry: MockConfigEntry) -> Any:
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "conversation", DOMAIN, entry.entry_id
+    )
+    return await conversation.async_converse(
+        hass, "what's the temperature?", None, Context(), agent_id=entity_id
+    )
+
+
+async def _ask(hass: HomeAssistant, entry: MockConfigEntry) -> Any:
+    return await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASK,
+        {ATTR_PROMPT: "hi", ATTR_CONFIG_ENTRY: entry.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+
+
+async def test_nothing_is_sent_to_an_addon_with_another_engine(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """After a mismatch, chat and the action send nothing until identity is back.
+
+    A second entry keeps working throughout.
+    """
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        title="Claude Code",
+        unique_id="local_claude-code",
+        version=1,
+        minor_version=2,
+        data={
+            **mock_config_entry.data,
+            CONF_HOST: "local-claude-code",
+            CONF_ADDON_SLUG: "local_claude-code",
+        },
+    )
+    _mock_two_addons(aioclient_mock, STATUS_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+    await setup_integration(hass, other)
+
+    _mock_two_addons(aioclient_mock, {**STATUS_PAYLOAD, "engine": "other"})
+    await mock_config_entry.runtime_data.status.async_refresh()
+
+    result = await _converse(hass, mock_config_entry)
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+    with pytest.raises(ClaudeEngineMismatchError):
+        await _ask(hass, mock_config_entry)
+    assert _posts(aioclient_mock, TEST_BASE_URL) == 0
+
+    assert (await _ask(hass, other))["text"] == "other"
+    result = await _converse(hass, other)
+    assert result.response.response_type is intent.IntentResponseType.ACTION_DONE
+    assert _posts(aioclient_mock, _OTHER_URL) == 2
+
+    # The add-on reports this entry's engine again: requests flow again.
+    _mock_two_addons(aioclient_mock, STATUS_PAYLOAD)
+    await mock_config_entry.runtime_data.status.async_refresh()
+
+    assert _mismatch_issue(hass, mock_config_entry) is None
+    result = await _converse(hass, mock_config_entry)
+    assert result.response.response_type is intent.IntentResponseType.ACTION_DONE
+    assert (await _ask(hass, mock_config_entry))["text"] == PROMPT_PAYLOAD["text"]
+    assert _posts(aioclient_mock, TEST_BASE_URL) == 2
+
+
+async def test_client_refuses_every_request_after_a_mismatch(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Writes, streamed reads and other endpoints are refused too; status is not."""
+    aioclient_mock.get(_STATUS_URL, json={**STATUS_PAYLOAD, "engine": "other"})
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    aioclient_mock.post(_PROMPT_URL, json=PROMPT_PAYLOAD)
+    client = _client(hass)
+    with pytest.raises(ClaudeEngineMismatchError):
+        await client.async_get_status()
+    calls = len(aioclient_mock.mock_calls)
+
+    with pytest.raises(ClaudeEngineMismatchError):
+        await client.async_prompt(
+            "do it", mode="write", intents=[{"a": 1}], confirmation="confirmed"
+        )
+    with pytest.raises(ClaudeEngineMismatchError) as err:
+        async for _ in client.async_prompt_stream("hi"):
+            pass  # pragma: no cover - refused before the first item
+    assert err.value.reported == "other"
+    with pytest.raises(ClaudeEngineMismatchError):
+        await client.async_get_usage()
+    assert len(aioclient_mock.mock_calls) == calls
+
+    # The status check itself still goes out, and is what lifts the refusal.
+    with pytest.raises(ClaudeEngineMismatchError):
+        await client.async_get_status()
+    assert len(aioclient_mock.mock_calls) == calls + 1

@@ -11,8 +11,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Each entry checks the AI engine of its add-on.** The engine is stored with
   the entry (existing entries are migrated as Claude) and compared with the one
   the add-on reports on every status poll. A different engine makes the entry
-  unavailable and raises a repair. The status sensor shows the engine and its
-  version.
+  unavailable and raises a repair, and nothing else is sent to that add-on
+  (chat, actions, usage) until it reports the entry's engine again. The status
+  sensor shows the engine and its version.
 
 ### Changed
 

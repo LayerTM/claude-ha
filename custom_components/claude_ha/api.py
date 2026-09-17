@@ -415,6 +415,9 @@ class ClaudeClient:
         self._read_timeout = float(REQUEST_TIMEOUT)
         self._addon_version: str | None = None
         self._request_fields: frozenset[str] | None = None
+        # The engine the add-on last reported when it was not ours, until a
+        # status reports ours again (see ``_ensure_identity``).
+        self._foreign_engine: str | None = None
 
     @property
     def _auth_headers(self) -> dict[str, str]:
@@ -485,7 +488,9 @@ class ClaudeClient:
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
         engine = data.get(STATUS_ENGINE, LEGACY_ENGINE.key)
         if engine != self._engine.key:
-            raise ClaudeEngineMismatchError(str(engine))
+            self._foreign_engine = str(engine)
+            raise ClaudeEngineMismatchError(self._foreign_engine)
+        self._foreign_engine = None
         ha_mcp = data.get(STATUS_HA_MCP)
         connected = data.get(STATUS_HA_MCP_CONNECTED)
         chat_health = _parse_chat_health(data.get(STATUS_CHAT_HEALTH))
@@ -621,6 +626,7 @@ class ClaudeClient:
         if caller:
             headers[HEADER_CALLER] = caller
 
+        self._ensure_identity(API_PROMPT)
         url = f"{self._base_url}{API_PROMPT}"
         try:
             async with (
@@ -643,6 +649,17 @@ class ClaudeClient:
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
 
+    def _ensure_identity(self, path: str) -> None:
+        """Refuse every request but the status check to another engine's add-on.
+
+        Once a status poll has found another engine, nothing else is sent to the
+        add-on (no prompt, no write, no usage read) until a poll finds this
+        client's engine again. Every caller of the client is covered here, not
+        only the ones that look at the status coordinator.
+        """
+        if self._foreign_engine is not None and path != API_STATUS:
+            raise ClaudeEngineMismatchError(self._foreign_engine)
+
     async def _request(
         self,
         method: str,
@@ -653,6 +670,7 @@ class ClaudeClient:
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Perform one request, mapping transport/HTTP failures to typed errors."""
+        self._ensure_identity(path)
         url = f"{self._base_url}{path}"
         try:
             async with (
