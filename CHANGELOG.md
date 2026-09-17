@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **A rejected request says why.** With an add-on that reports error codes, a
+  refused chat turn or `claude_ha.ask` call names the cause instead of a generic
+  "rejected as invalid". The possible causes are: a prompt or request over its
+  size limit, with the limit; a request field the add-on refused; an action that
+  needs explicit confirmation; changes being unavailable because the add-on has
+  no Home Assistant token; or the add-on taking too long. A timeout or a
+  confirmation request is no longer reported as an unreachable add-on or an
+  outdated token.
+- **Prompts over the add-on's limit are refused before sending.** The limit is
+  the one the add-on publishes. An add-on that does not publish one still
+  receives the prompt and answers for it.
+
 ## [1.11.2] - 2026-09-17
 
 ### Fixed

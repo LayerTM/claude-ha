@@ -37,7 +37,6 @@ from .const import (
     MODE_READ,
     MODE_WRITE,
     MODES,
-    PROMPT_MAX_BYTES,
     RESP_PROPOSAL,
     RESP_TEXT,
     RESP_TOOLS_USED,
@@ -126,13 +125,6 @@ async def _async_handle_ask(call: ServiceCall) -> ServiceResponse:
     prompt: str = call.data[ATTR_PROMPT]
     mode: str = call.data[ATTR_MODE]
     intents: list[dict[str, Any]] | None = call.data.get(ATTR_INTENTS)
-
-    if len(prompt.encode("utf-8")) > PROMPT_MAX_BYTES:
-        raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="prompt_too_large",
-            translation_placeholders={"max_bytes": str(PROMPT_MAX_BYTES)},
-        )
 
     # Contract §2: write requires the user-confirmed proposal intents (max 5);
     # read forbids them. This keeps writes scoped to a prior read-mode proposal

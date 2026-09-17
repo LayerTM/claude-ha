@@ -13,7 +13,6 @@ from custom_components.claude_ha.const import (
     ATTR_PROMPT,
     DOMAIN,
     MODE_WRITE,
-    PROMPT_MAX_BYTES,
     SERVICE_ASK,
 )
 from homeassistant.core import HomeAssistant
@@ -169,18 +168,24 @@ async def test_ask_prompt_too_large(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """An oversized prompt is rejected before contacting the add-on."""
+    """A prompt over the add-on's published limit is refused before sending."""
     await setup_integration(hass, mock_config_entry)
+    calls = len(aioclient_mock.mock_calls)
 
-    with pytest.raises(ServiceValidationError):
+    with pytest.raises(ServiceValidationError) as err:
         await hass.services.async_call(
             DOMAIN,
             SERVICE_ASK,
-            {ATTR_PROMPT: "x" * (PROMPT_MAX_BYTES + 1)},
+            {ATTR_PROMPT: "x" * 8193},
             blocking=True,
             return_response=True,
         )
+
+    assert err.value.translation_key == "prompt_too_large"
+    assert err.value.translation_placeholders == {"max_bytes": "8192"}
+    assert len(aioclient_mock.mock_calls) == calls
 
 
 async def test_ask_invalid_config_entry(

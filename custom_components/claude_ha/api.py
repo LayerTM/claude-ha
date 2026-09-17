@@ -9,7 +9,7 @@ contract, so keep request/response shapes here in lockstep with it.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncIterable, AsyncIterator, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,11 +18,11 @@ import json
 import math
 from typing import Any, Final, NoReturn
 
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError, ClientResponse, ClientSession
 from awesomeversion import AwesomeVersion, AwesomeVersionException
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import translation
 from homeassistant.util import dt as dt_util
 
@@ -37,6 +37,9 @@ from .const import (
     CHAT_HEALTH_STALE_FAILURE_S,
     CONTENT_TYPE_NDJSON,
     DOMAIN,
+    ERROR_CODE,
+    ERROR_FIELD,
+    ERROR_LIMIT_BYTES,
     HEADER_CALLER,
     LIMIT_KIND,
     LIMIT_MODEL,
@@ -74,6 +77,7 @@ from .const import (
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
+    STATUS_PROMPT_MAX_BYTES,
     STATUS_PROMPT_TIMEOUT_MS,
     STATUS_READY,
     STATUS_REQUEST_FIELDS,
@@ -186,6 +190,12 @@ class ClaudeRequestError(ClaudeError):
     """The request was rejected as invalid before Claude ran (e.g. 413 too large)."""
 
     translation_key = "request_rejected"
+
+
+class ClaudePromptTooLargeError(ClaudeRequestError, ServiceValidationError):
+    """The prompt is longer than the add-on accepts; the caller must shorten it."""
+
+    translation_key = "prompt_too_large"
 
 
 class ClaudeEngineMismatchError(ClaudeError):
@@ -406,6 +416,8 @@ class StatusResult:
     engine_version: str | None = None
     # ``None``: the add-on predates the list (see ``ClaudeClient.accepts``).
     request_fields: frozenset[str] | None = None
+    # ``None``: the add-on predates the field; the prompt is not checked locally.
+    prompt_max_bytes: int | None = None
     chat_health: ChatHealth | None = None
     prompt_timeout_ms: int | None = None
     budget: Budget | None = None
@@ -462,6 +474,7 @@ class ClaudeClient:
         self._read_timeout = float(REQUEST_TIMEOUT)
         self._addon_version: str | None = None
         self._request_fields: frozenset[str] | None = None
+        self._prompt_max_bytes: int | None = None
         # The engine the add-on last reported when it was not ours, until a
         # status reports ours again (see ``_ensure_identity``).
         self._foreign_engine: str | None = None
@@ -507,9 +520,23 @@ class ClaudeClient:
         return self.accepts(REQUEST_EDIT_AUTOMATION, ADDON_MIN_EDIT_VERSION)
 
     def note_status(self, status: StatusResult) -> None:
-        """Record what the last ``/api/status`` said about accepted fields."""
+        """Record what the last ``/api/status`` said the add-on accepts."""
         self._addon_version = status.version
         self._request_fields = status.request_fields
+        self._prompt_max_bytes = status.prompt_max_bytes
+
+    def _check_prompt(self, prompt: str) -> None:
+        """Refuse a prompt longer than the add-on's published limit, before sending.
+
+        The add-on refuses it too, with the same limit; checking here only saves
+        the round trip. Without a published limit, the add-on's answer decides.
+        """
+        limit = self._prompt_max_bytes
+        if limit is not None and len(prompt.encode("utf-8")) > limit:
+            raise ClaudePromptTooLargeError(
+                f"Prompt over {limit} bytes",
+                translation_placeholders={"max_bytes": str(limit)},
+            )
 
     def note_prompt_timeout(self, prompt_timeout_ms: int | None) -> None:
         """Track the add-on's prompt budget so our wall-clock stays just above it.
@@ -551,6 +578,7 @@ class ClaudeClient:
             engine=engine,
             engine_version=data.get(STATUS_ENGINE_VERSION),
             request_fields=_parse_request_fields(data),
+            prompt_max_bytes=_positive_int(data.get(STATUS_PROMPT_MAX_BYTES)),
             model=data.get(STATUS_MODEL),
             ha_mcp=None if ha_mcp is None else bool(ha_mcp),
             ha_mcp_connected=None if connected is None else bool(connected),
@@ -616,6 +644,7 @@ class ClaudeClient:
         Each optional field is sent only if the add-on accepts it (see
         :meth:`accepts`).
         """
+        self._check_prompt(prompt)
         payload: dict[str, object] = {"prompt": prompt, "mode": mode}
         self._put(payload, REQUEST_CONVERSATION_ID, conversation_id)
         self._put(payload, REQUEST_LANGUAGE, language)
@@ -660,6 +689,7 @@ class ClaudeClient:
         Each optional field is sent only if the add-on accepts it (see
         :meth:`accepts`).
         """
+        self._check_prompt(prompt)
         payload: dict[str, object] = {"prompt": prompt, "mode": MODE_READ}
         self._put(payload, REQUEST_STREAM, True)
         self._put(payload, REQUEST_CONVERSATION_ID, conversation_id)
@@ -683,7 +713,7 @@ class ClaudeClient:
                 ) as resp,
             ):
                 if resp.status >= HTTPStatus.BAD_REQUEST:
-                    _raise_for_status(resp.status)
+                    await _raise_for_answer(resp)
                 content_type = resp.headers.get("Content-Type", "")
                 if CONTENT_TYPE_NDJSON not in content_type:
                     data = await resp.json(content_type=None) or {}
@@ -730,7 +760,7 @@ class ClaudeClient:
                 ) as resp,
             ):
                 if resp.status >= HTTPStatus.BAD_REQUEST:
-                    _raise_for_status(resp.status)
+                    await _raise_for_answer(resp)
                 return await resp.json(content_type=None) or {}
         except TimeoutError as err:
             raise ClaudeConnectionError("Timed out talking to the add-on") from err
@@ -961,6 +991,12 @@ def _parse_request_fields(data: dict[str, Any]) -> frozenset[str] | None:
     return frozenset(raw)
 
 
+def _positive_int(raw: Any) -> int | None:
+    """Return a size limit the add-on states if it is above zero, else ``None``."""
+    value = _non_negative_int(raw)
+    return value if value else None
+
+
 def _non_negative_int(raw: Any) -> int | None:
     """Coerce a contract whole number to an int, or ``None`` when it says nothing.
 
@@ -1043,25 +1079,99 @@ async def _iter_ndjson(
             yield _parse_prompt_result(event)
             return
         elif kind == STREAM_KIND_ERROR:
-            raise ClaudeConnectionError(str(event.get(STREAM_ERROR, "stream error")))
+            raise _coded_error(event) or ClaudeConnectionError(
+                str(event.get(STREAM_ERROR, "stream error"))
+            )
     raise ClaudeConnectionError("Stream ended without a final result")
 
 
-def _raise_for_status(status: int) -> NoReturn:
-    """Map an HTTP status code (contract §2) onto a typed error."""
+# The add-on's error ``code`` → the error that carries its meaning for callers,
+# and the translation a user reads. The error class keeps today's behaviour per
+# kind (a quiet coordinator error, a retry); the key says what to do about it.
+_ERROR_CODES: Final[Mapping[str, tuple[type[ClaudeError], str]]] = {
+    "unauthorized": (ClaudeAuthError, "auth_error"),
+    "forbidden": (ClaudeAuthError, "auth_error"),
+    "invalid_json": (ClaudeRequestError, "request_rejected"),
+    "invalid_body": (ClaudeRequestError, "request_rejected"),
+    "invalid_intents": (ClaudeRequestError, "request_rejected"),
+    "unknown_field": (ClaudeRequestError, "request_field_rejected"),
+    "invalid_field": (ClaudeRequestError, "request_field_rejected"),
+    "mode_mismatch": (ClaudeRequestError, "request_field_rejected"),
+    "prompt_too_large": (ClaudePromptTooLargeError, "prompt_too_large"),
+    "body_too_large": (ClaudeRequestError, "request_too_large"),
+    "confirmation_required": (ClaudeRequestError, "confirmation_required"),
+    "rate_limited": (ClaudeRateLimitError, "rate_limited"),
+    "busy": (ClaudeRateLimitError, "rate_limited"),
+    "write_unavailable": (ClaudeError, "write_unavailable"),
+    "timeout": (ClaudeConnectionError, "addon_timeout"),
+    "internal": (ClaudeError, "unknown"),
+    "usage_unavailable": (ClaudeRateLimitError, "unknown"),
+    "limits_unavailable": (ClaudeRateLimitError, "unknown"),
+    "not_found": (ClaudeNotFoundError, "unknown"),
+}
+
+# What a translation needs from the answer: key → (answer field, placeholder).
+_ERROR_PLACEHOLDERS: Final[Mapping[str, tuple[str, str]]] = {
+    "request_field_rejected": (ERROR_FIELD, "field"),
+    "prompt_too_large": (ERROR_LIMIT_BYTES, "max_bytes"),
+    "request_too_large": (ERROR_LIMIT_BYTES, "max_bytes"),
+}
+
+
+async def _raise_for_answer(resp: ClientResponse) -> NoReturn:
+    """Raise the error an add-on's failed HTTP answer describes."""
+    try:
+        body = await resp.json(content_type=None)
+    except ClientError, ValueError:
+        body = None
+    raise _coded_error(body, resp.status) or _status_error(resp.status)
+
+
+def _coded_error(body: Any, status: int | None = None) -> ClaudeError | None:
+    """Return the error a coded answer names, or ``None`` if it names none usable.
+
+    ``None`` covers an add-on that predates codes, a code this version does not
+    know, and a code without the value its message needs; the caller then falls
+    back to what it knew before codes existed.
+    """
+    if not isinstance(body, dict) or body.get(ERROR_CODE) not in _ERROR_CODES:
+        return None
+    code = body[ERROR_CODE]
+    error, key = _ERROR_CODES[code]
+    placeholders: dict[str, str] | None = None
+    if key in _ERROR_PLACEHOLDERS:
+        field, name = _ERROR_PLACEHOLDERS[key]
+        value = body.get(field)
+        if field == ERROR_LIMIT_BYTES:
+            value = _positive_int(value)
+        if not isinstance(value, (str, int)) or value == "":
+            return None
+        placeholders = {name: str(value)}
+    return error(
+        f"{status or 'stream'} {code}",
+        translation_key=key,
+        translation_placeholders=placeholders,
+    )
+
+
+def _status_error(status: int) -> ClaudeError:
+    """Return the error an HTTP status means (contract §2), without a code."""
     if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
-        raise ClaudeAuthError
+        return ClaudeAuthError()
     if status in (HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.SERVICE_UNAVAILABLE):
-        raise ClaudeRateLimitError
+        return ClaudeRateLimitError()
     if status == HTTPStatus.NOT_FOUND:
-        raise ClaudeNotFoundError
+        return ClaudeNotFoundError()
     if status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
-        # Too large, but the status alone does not say which limit.
-        raise ClaudeRequestError(
+        # Too large, but without a code the answer does not say which limit.
+        return ClaudeRequestError(
             f"HTTP {status}", translation_key="request_too_large_unsized"
         )
     if status == HTTPStatus.BAD_REQUEST:
-        raise ClaudeRequestError
-    if status in (HTTPStatus.GATEWAY_TIMEOUT, HTTPStatus.BAD_GATEWAY):
-        raise ClaudeConnectionError("The add-on timed out running Claude")
-    raise ClaudeError
+        return ClaudeRequestError()
+    if status == HTTPStatus.GATEWAY_TIMEOUT:
+        return ClaudeConnectionError(f"HTTP {status}", translation_key="addon_timeout")
+    if status == HTTPStatus.BAD_GATEWAY:
+        # What a proxy answers while the add-on is down or restarting.
+        return ClaudeConnectionError(f"HTTP {status}")
+    return ClaudeError()

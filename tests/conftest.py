@@ -57,6 +57,8 @@ STATUS_PAYLOAD = {
     "engine": "claude",
     "engine_version": "2.0.1",
     "request_fields": REQUEST_FIELDS,
+    "prompt_max_bytes": 8192,
+    "body_max_bytes": 65536,
 }
 ACCOUNT_LIMITS_PAYLOAD = {
     "fetched_at": "2026-09-14T14:02:11Z",
