@@ -472,6 +472,7 @@ add-on store.
 ```bash
 python3.14 -m venv .venv && source .venv/bin/activate
 pip install -r requirements_test.txt
+python scripts/install_component_requirements.py
 pre-commit install
 
 ruff check custom_components tests scripts
