@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-09-17
+
 ### Fixed
 
 - **A request the add-on refuses as too large says so.** Instead of "rejected
@@ -623,7 +625,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.11.2...HEAD
+[1.11.2]: https://github.com/LayerTM/claude-ha/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/LayerTM/claude-ha/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/LayerTM/claude-ha/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/LayerTM/claude-ha/compare/v1.9.2...v1.10.0
