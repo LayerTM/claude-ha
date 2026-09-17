@@ -46,6 +46,7 @@ from .const import (
     LIMITS_FETCHED_AT,
     LIMITS_LIST,
     LIMITS_MODE,
+    LOGGER,
     MODE_READ,
     MODE_WRITE,
     PROPOSAL_INTENTS,
@@ -87,6 +88,10 @@ from .const import (
 )
 from .engines import LEGACY_ENGINE, Engine
 
+# The English text of the ``unknown`` exception translation, for when no
+# translation can be loaded (a test holds the two equal).
+GENERIC_ERROR_MESSAGE: Final = "Unexpected error talking to the add-on."
+
 
 class ClaudeError(HomeAssistantError):
     """An error of this integration that a user may be shown.
@@ -118,20 +123,27 @@ class ClaudeError(HomeAssistantError):
 async def async_error_message(
     hass: HomeAssistant, language: str, err: ClaudeError
 ) -> str:
-    """Return what ``err`` says to a user, in ``language``.
+    """Return what ``err`` says to a user, in ``language``; never raises.
 
     Home Assistant falls back to English for a language without a translation.
-    A key or placeholder that cannot be rendered gives the generic message
-    rather than a raw key or template.
+    A key or placeholder that cannot be rendered gives the generic message, and
+    translations that cannot be loaded at all give :data:`GENERIC_ERROR_MESSAGE`,
+    so a failure is never answered with a raw key, a template or a traceback.
     """
-    translations = await translation.async_get_translations(
-        hass, language, "exceptions", {DOMAIN}
-    )
+    try:
+        translations = await translation.async_get_translations(
+            hass, language, "exceptions", {DOMAIN}
+        )
+    except Exception:  # noqa: BLE001 - a failed turn must still get an answer
+        LOGGER.exception("Could not load the error messages for %s", language)
+        return GENERIC_ERROR_MESSAGE
     template = translations.get(_exception_key(err.translation_key))
     if template is not None:
         with suppress(KeyError, IndexError, ValueError):
             return template.format(**(err.translation_placeholders or {}))
-    return translations[_exception_key(ClaudeError.translation_key)]
+    return translations.get(
+        _exception_key(ClaudeError.translation_key), GENERIC_ERROR_MESSAGE
+    )
 
 
 def _exception_key(translation_key: str | None) -> str:

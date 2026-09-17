@@ -250,7 +250,7 @@
       "message": "The drafted automation has an unrecognized action; not created."
     },
     "automation_templated_block": {
-      "message": "The drafted automation has a templated '{block}' block, which can't be verified as safe; not created."
+      "message": "The drafted automation has a templated {block} block, which can't be verified as safe; not created."
     },
     "automation_broad_target": {
       "message": "The drafted automation targets a device or area rather than specific entities, which can't be bounded to safe domains; not created."

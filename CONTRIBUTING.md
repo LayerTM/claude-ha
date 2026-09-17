@@ -32,10 +32,11 @@ mypy custom_components/claude_ha          # strict
 pytest --cov=custom_components.claude_ha --cov-report=term-missing --cov-fail-under=100
 python scripts/secret_scan.py .
 python scripts/hygiene_scan.py .
+# hassfest, the image CI runs (needs Docker; pre-commit runs it too)
+docker run --rm -v "$PWD":/github/workspace ghcr.io/home-assistant/hassfest
 ```
 
-CI runs the same set plus `hassfest` and HACS validation on every push and pull
-request.
+CI runs the same set plus HACS validation on every push and pull request.
 
 ## Standards
 

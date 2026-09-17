@@ -26,6 +26,14 @@ repos:
       # ruff — runs the environment's installed ruff for the same reason as mypy
       # above, which also keeps requirements_test.txt the only place the ruff
       # version is written down.
+      # hassfest — the same image CI runs, so a manifest, services or
+      # translations rule it enforces fails here before a push. Needs Docker.
+      - id: hassfest
+        name: hassfest (Home Assistant's integration validator)
+        entry: bash -c 'docker run --rm -v "$PWD":/github/workspace ghcr.io/home-assistant/hassfest'
+        language: system
+        pass_filenames: false
+        files: ^(custom_components/|hacs\.json$)
       - id: ruff
         name: ruff (lint)
         entry: ruff check --fix

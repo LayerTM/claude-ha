@@ -5,13 +5,18 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from aiohttp import ClientError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.claude_ha.api import ClaudeError, async_error_message
+from custom_components.claude_ha.api import (
+    GENERIC_ERROR_MESSAGE,
+    ClaudeError,
+    async_error_message,
+)
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import intent
@@ -191,3 +196,45 @@ def test_every_error_key_has_a_translation() -> None:
     for strings in ("strings.json", "translations/en.json"):
         exceptions = json.loads((_PACKAGE / strings).read_text())["exceptions"]
         assert keys - exceptions.keys() == set(), strings
+
+
+async def test_unloadable_translations_give_the_generic_text(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing translation load still answers, with a fixed text, and logs it."""
+    aioclient_mock.post(_PROMPT_URL, status=503)
+    await setup_integration(hass, mock_config_entry)
+
+    with patch(
+        "custom_components.claude_ha.api.translation.async_get_translations",
+        side_effect=OSError("disk gone"),
+    ):
+        result = await _speech(hass, mock_config_entry)
+
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+    assert result.response.speech["plain"]["speech"] == GENERIC_ERROR_MESSAGE
+    assert "Could not load the error messages" in caplog.text
+
+
+async def test_missing_generic_translation_gives_the_generic_text(
+    hass: HomeAssistant,
+) -> None:
+    """Even without the generic key the fixed text is returned, not a KeyError."""
+    with patch(
+        "custom_components.claude_ha.api.translation.async_get_translations",
+        return_value={},
+    ):
+        message = await async_error_message(hass, "en", ClaudeError("raw"))
+
+    assert message == GENERIC_ERROR_MESSAGE
+
+
+def test_generic_text_matches_its_translation() -> None:
+    """The fixed fallback says what the ``unknown`` translation says."""
+    for strings in ("strings.json", "translations/en.json"):
+        exceptions = json.loads((_PACKAGE / strings).read_text())["exceptions"]
+        assert exceptions["unknown"]["message"] == GENERIC_ERROR_MESSAGE, strings
