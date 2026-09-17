@@ -49,7 +49,8 @@ async def _speech(
             {"status": 401},
             "The add-on rejected the request. The shared token may be out of date.",
         ),
-        ({"status": 413}, "The add-on rejected the request as invalid."),
+        ({"status": 413}, "The request is too large for the add-on."),
+        ({"status": 400}, "The add-on rejected the request as invalid."),
         ({"status": 500}, "Unexpected error talking to the add-on."),
         (
             {"exc": ClientError("Cannot connect to host abcd:8126")},

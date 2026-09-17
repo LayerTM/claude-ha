@@ -1055,7 +1055,12 @@ def _raise_for_status(status: int) -> NoReturn:
         raise ClaudeRateLimitError
     if status == HTTPStatus.NOT_FOUND:
         raise ClaudeNotFoundError
-    if status in (HTTPStatus.REQUEST_ENTITY_TOO_LARGE, HTTPStatus.BAD_REQUEST):
+    if status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
+        # Too large, but the status alone does not say which limit.
+        raise ClaudeRequestError(
+            f"HTTP {status}", translation_key="request_too_large_unsized"
+        )
+    if status == HTTPStatus.BAD_REQUEST:
         raise ClaudeRequestError
     if status in (HTTPStatus.GATEWAY_TIMEOUT, HTTPStatus.BAD_GATEWAY):
         raise ClaudeConnectionError("The add-on timed out running Claude")

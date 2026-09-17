@@ -198,6 +198,9 @@
     "request_rejected": {
       "message": "The add-on rejected the request as invalid."
     },
+    "request_too_large_unsized": {
+      "message": "The request is too large for the add-on."
+    },
     "invalid_config_entry": {
       "message": "Claude configuration {config_entry} not found."
     },
