@@ -9,6 +9,7 @@ from typing import ClassVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .addon import AddonWatch
@@ -16,6 +17,7 @@ from .api import (
     AccountLimitsResult,
     ClaudeClient,
     ClaudeConnectionError,
+    ClaudeEngineMismatchError,
     ClaudeError,
     ClaudeNotFoundError,
     ClaudeRateLimitError,
@@ -25,10 +27,12 @@ from .api import (
 from .const import (
     ADDON_RESTART_RETRY,
     DOMAIN,
+    ISSUE_ENGINE_MISMATCH,
     LOGGER,
     SCAN_INTERVAL,
     USAGE_SCAN_INTERVAL,
 )
+from .issues import async_clear_issues, async_raise_issue
 
 type ClaudeConfigEntry = ConfigEntry[ClaudeRuntimeData]
 
@@ -129,13 +133,28 @@ class ClaudeStatusCoordinator(_AddonCoordinator[StatusResult]):
         )
 
     async def _async_fetch(self) -> StatusResult:
-        """Fetch the latest add-on status."""
-        status = await self.client.async_get_status()
+        """Fetch the latest add-on status.
+
+        An add-on that runs another engine than the entry's is not this entry's
+        add-on any more: the poll fails and a repair says so, until it matches.
+        """
+        entry_id = self.config_entry.entry_id
+        try:
+            status = await self.client.async_get_status()
+        except ClaudeEngineMismatchError as err:
+            async_raise_issue(
+                self.hass,
+                entry_id,
+                ISSUE_ENGINE_MISMATCH,
+                severity=ir.IssueSeverity.ERROR,
+                placeholders={"engine": err.reported},
+            )
+            raise
+        async_clear_issues(self.hass, entry_id, ISSUE_ENGINE_MISMATCH)
         # Keep the prompt wall-clock just above the add-on's reported budget.
         self.client.note_prompt_timeout(status.prompt_timeout_ms)
-        # Track the add-on version so version-gated request fields (e.g. surface)
-        # are only sent to peers that accept them.
-        self.client.note_version(status.version)
+        # Only send optional request fields the add-on accepts.
+        self.client.note_status(status)
         return status
 
 

@@ -1,7 +1,7 @@
-"""Supervisor add-on management for the Claude Code companion add-on.
+"""Supervisor add-on management for the companion add-ons.
 
 The add-on slug is repository-prefixed and varies per install, so it is resolved
-at runtime (from discovery, or by matching :data:`ADDON_SLUG_SUFFIX` against the
+at runtime (from discovery, or by matching each engine's slug suffix against the
 installed/store add-on lists) rather than hardcoded. More than one add-on can
 match (e.g. a store build and a local build), so lookups return every match and
 the caller decides; nothing here picks one silently.
@@ -23,14 +23,13 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    ADDON_NAME,
     ADDON_OUTAGE_GRACE,
-    ADDON_SLUG_SUFFIX,
     DOMAIN,
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
     LOGGER,
 )
+from .engines import Engine, engine_for_slug
 from .issues import async_clear_issues, async_raise_issue
 
 DATA_ADDON_MANAGERS = f"{DOMAIN}_addon_managers"
@@ -42,17 +41,24 @@ def get_addon_manager(hass: HomeAssistant, slug: str) -> AddonManager:
     """Return a cached :class:`AddonManager` for the resolved add-on slug.
 
     Cached per slug in ``hass.data`` (rather than via ``@singleton``) because the
-    slug is only known at runtime. There is one Claude Code add-on per install,
-    so the slug is stable for the lifetime of the entry.
+    slug is only known at runtime. ``slug`` is one of an engine's add-ons: it
+    came from discovery or a lookup, both of which accept only those.
     """
     managers: dict[str, AddonManager] = hass.data.setdefault(DATA_ADDON_MANAGERS, {})
     if slug not in managers:
-        managers[slug] = AddonManager(hass, LOGGER, ADDON_NAME, slug)
+        managers[slug] = AddonManager(hass, LOGGER, _engine(slug).addon_name, slug)
     return managers[slug]
 
 
+def _engine(slug: str) -> Engine:
+    """Return the engine of a slug already known to be an engine's add-on."""
+    engine = engine_for_slug(slug)
+    assert engine is not None
+    return engine
+
+
 async def async_find_addon_slugs(hass: HomeAssistant) -> list[str]:
-    """Return every slug the Claude Code add-on could have, sorted.
+    """Return every slug a companion add-on of any engine could have, sorted.
 
     Installed add-ons win (the common case: the user installed the add-on,
     which then advertised itself via discovery); only when none is installed
@@ -73,7 +79,7 @@ def _find_installed(hass: HomeAssistant) -> list[str]:
         return []
     if not addons:
         return []
-    return sorted(slug for slug in addons if slug.endswith(ADDON_SLUG_SUFFIX))
+    return sorted(slug for slug in addons if engine_for_slug(slug) is not None)
 
 
 async def _find_in_store(hass: HomeAssistant) -> list[str]:
@@ -86,7 +92,7 @@ async def _find_in_store(hass: HomeAssistant) -> list[str]:
     return sorted(
         addon.slug
         for addon in store_addons
-        if not addon.installed and addon.slug.endswith(ADDON_SLUG_SUFFIX)
+        if not addon.installed and engine_for_slug(addon.slug) is not None
     )
 
 
@@ -160,6 +166,12 @@ class AddonWatch:
         self._outage_reported = False
 
     @property
+    def _engine(self) -> Engine:
+        """The watched add-on's engine (only asked once a slug is known)."""
+        assert self._slug is not None
+        return _engine(self._slug)
+
+    @property
     def in_grace(self) -> bool:
         """Whether a failure is inside the expected-restart window."""
         return self._down_since is not None and not self._outage_reported
@@ -190,11 +202,13 @@ class AddonWatch:
         now = dt_util.utcnow()
         if self._down_since is None:
             self._down_since = now
+            engine = self._engine
             LOGGER.info(
-                "The %s add-on is not answering (Supervisor state: %s); Claude "
+                "The %s add-on is not answering (Supervisor state: %s); %s "
                 "is unavailable until it is back",
-                ADDON_NAME,
+                engine.addon_name,
                 state.value,
+                engine.name,
             )
         elif not self._outage_reported and now - self._down_since >= ADDON_OUTAGE_GRACE:
             self._outage_reported = True
@@ -213,21 +227,23 @@ class AddonWatch:
     def _report_outage(self, state: AddonState) -> None:
         """Surface an add-on that stayed unreachable past the grace period."""
         assert self._slug is not None
+        engine = self._engine
         minutes = int(ADDON_OUTAGE_GRACE.total_seconds() // 60)
         if state is AddonState.RUNNING:
             LOGGER.warning(
                 "The %s add-on is running but its API has not answered for %d "
                 "minutes; check the add-on log",
-                ADDON_NAME,
+                engine.addon_name,
                 minutes,
             )
             return
         LOGGER.warning(
             "The %s add-on has not been running for %d minutes (Supervisor "
-            "state: %s); Claude is unavailable until it is started",
-            ADDON_NAME,
+            "state: %s); %s is unavailable until it is started",
+            engine.addon_name,
             minutes,
             state.value,
+            engine.name,
         )
         async_create_addon_issue(
             self._hass,

@@ -40,7 +40,8 @@
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
       "not_hassio": "This integration requires the Home Assistant Supervisor and the Claude Code add-on.",
-      "not_claude_addon": "The discovered add-on is not the Claude Code add-on.",
+      "unsupported_addon": "The discovered add-on is not one this integration supports.",
+      "engine_mismatch": "The add-on runs a different AI engine than expected, so it was not set up.",
       "addon_not_found": "The Claude Code add-on could not be found. Add its repository and install the add-on, then try again.",
       "addon_required": "The Claude Code add-on is required to use this integration.",
       "addon_info_failed": "Failed to get the Claude Code add-on info.",
@@ -221,6 +222,12 @@
     "addon_not_ready": {
       "message": "The Claude Code add-on is not ready yet."
     },
+    "engine_mismatch": {
+      "message": "The add-on runs a different AI engine than this entry was set up for."
+    },
+    "unsupported_engine": {
+      "message": "This entry was set up for an AI engine that this version of the integration does not support."
+    },
     "addon_info_failed": {
       "message": "Failed to get the Claude Code add-on info."
     },
@@ -238,6 +245,10 @@
     }
   },
   "issues": {
+    "engine_mismatch": {
+      "title": "The add-on runs a different AI engine",
+      "description": "This entry was set up for one AI engine, but its add-on now reports `{engine}`. The entry stays unavailable until they match: restore the add-on it was set up for, or delete this entry and add the add-on again."
+    },
     "addon_not_running": {
       "title": "The Claude Code add-on is not running",
       "fix_flow": {

@@ -27,23 +27,24 @@ from homeassistant.helpers.hassio import is_hassio
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 
 from .addon import async_find_addon_slugs, get_addon_manager
-from .api import ClaudeClient, ClaudeError
+from .api import ClaudeClient, ClaudeEngineMismatchError, ClaudeError
 from .const import (
-    ADDON_NAME,
     ADDON_OPTION_API_TOKEN,
-    ADDON_SLUG_SUFFIX,
     CONF_ADDON_SLUG,
     CONF_AUTO_EXECUTE,
     CONF_CAMERA_VISION,
     CONF_CRITICAL_ENTITIES,
+    CONF_ENGINE,
     CONF_HOST,
     CONF_PORT,
     CONF_TOKEN,
     CONF_USE_ADDON,
+    CONFIG_ENTRY_MINOR_VERSION,
     DEFAULT_PORT,
     DOMAIN,
     LOGGER,
 )
+from .engines import Engine, engine_for_slug
 
 ON_SUPERVISOR_SCHEMA = vol.Schema({vol.Required(CONF_USE_ADDON, default=True): bool})
 
@@ -52,9 +53,10 @@ CONF_ADDON = "addon"
 
 
 class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Claude, backed by the Claude Code add-on."""
+    """Handle a config flow for an AI agent, backed by its companion add-on."""
 
     VERSION = 1
+    MINOR_VERSION = CONFIG_ENTRY_MINOR_VERSION
 
     @staticmethod
     @callback
@@ -82,8 +84,8 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         self, discovery_info: HassioServiceInfo
     ) -> ConfigFlowResult:
         """Handle add-on discovery (the add-on advertised host/port/token)."""
-        if not discovery_info.slug.endswith(ADDON_SLUG_SUFFIX):
-            return self.async_abort(reason="not_claude_addon")
+        if engine_for_slug(discovery_info.slug) is None:
+            return self.async_abort(reason="unsupported_addon")
 
         config = discovery_info.config
         await self.async_set_unique_id(discovery_info.slug)
@@ -96,7 +98,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         self._addon_slug = discovery_info.slug
         self._discovery = dict(config)
-        self.context["title_placeholders"] = {"addon": ADDON_NAME}
+        self.context["title_placeholders"] = {"addon": self._engine.addon_name}
         return await self.async_step_hassio_confirm()
 
     async def async_step_hassio_confirm(
@@ -109,7 +111,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         # fills the flow title, so the step description needs its own placeholder.
         return self.async_show_form(
             step_id="hassio_confirm",
-            description_placeholders={"addon": ADDON_NAME},
+            description_placeholders={"addon": self._engine.addon_name},
         )
 
     async def async_step_on_supervisor(
@@ -140,7 +142,9 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             info = await self._addon_manager.async_get_addon_info()
         except AddonError as err:
-            LOGGER.error("Failed to get Claude Code add-on info: %s", err)
+            LOGGER.error(
+                "Failed to get %s add-on info: %s", self._engine.addon_name, err
+            )
             raise AbortFlow("addon_info_failed") from err
 
         if info.state is AddonState.RUNNING:
@@ -182,7 +186,9 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await self.install_task
         except AddonError as err:
-            LOGGER.error("Failed to install Claude Code add-on: %s", err)
+            LOGGER.error(
+                "Failed to install %s add-on: %s", self._engine.addon_name, err
+            )
             return self.async_show_progress_done(next_step_id="install_failed")
         finally:
             self.install_task = None
@@ -209,7 +215,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await self.start_task
         except AddonError as err:
-            LOGGER.error("Failed to start Claude Code add-on: %s", err)
+            LOGGER.error("Failed to start %s add-on: %s", self._engine.addon_name, err)
             return self.async_show_progress_done(next_step_id="start_failed")
         finally:
             self.start_task = None
@@ -236,26 +242,45 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(self._addon_slug, raise_on_progress=False)
         self._abort_if_unique_id_configured()
 
+        engine = self._engine
         client = ClaudeClient(
             async_get_clientsession(self.hass),
             base_url=f"http://{host}:{port}",
             token=token,
+            engine=engine,
         )
         try:
             await client.async_get_status()
+        except ClaudeEngineMismatchError as err:
+            LOGGER.error(
+                "The %s add-on reports engine %r, not %r",
+                engine.addon_name,
+                err.reported,
+                engine.key,
+            )
+            return self.async_abort(reason="engine_mismatch")
         except ClaudeError as err:
-            LOGGER.error("Could not reach the Claude Code add-on: %s", err)
+            LOGGER.error("Could not reach the %s add-on: %s", engine.addon_name, err)
             return self.async_abort(reason="cannot_connect")
 
         return self.async_create_entry(
-            title=ADDON_NAME,
+            title=engine.addon_name,
             data={
                 CONF_HOST: host,
                 CONF_PORT: port,
                 CONF_TOKEN: token,
                 CONF_ADDON_SLUG: self._addon_slug,
+                CONF_ENGINE: engine.key,
             },
         )
+
+    @property
+    def _engine(self) -> Engine:
+        """The engine of the add-on this flow sets up (once its slug is known)."""
+        assert self._addon_slug is not None
+        engine = engine_for_slug(self._addon_slug)
+        assert engine is not None
+        return engine
 
     @property
     def _addon_manager(self) -> AddonManager:

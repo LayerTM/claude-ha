@@ -22,6 +22,7 @@ from custom_components.claude_ha.api import (
     _parse_limits,
 )
 from custom_components.claude_ha.const import DOMAIN, USAGE_SCAN_INTERVAL
+from custom_components.claude_ha.engines import CLAUDE
 from custom_components.claude_ha.sensor import ClaudeAccountLimitSensor
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
@@ -382,7 +383,10 @@ async def test_client_drops_percentages_it_cannot_trust(
         ),
     )
     client = ClaudeClient(
-        async_get_clientsession(hass), base_url=TEST_BASE_URL, token=TEST_TOKEN
+        async_get_clientsession(hass),
+        base_url=TEST_BASE_URL,
+        token=TEST_TOKEN,
+        engine=CLAUDE,
     )
 
     result = await client.async_get_account_limits()

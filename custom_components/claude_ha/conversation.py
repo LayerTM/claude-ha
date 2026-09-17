@@ -234,12 +234,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         self.coordinator = coordinator
         entry = coordinator.config_entry
         self._attr_unique_id = entry.entry_id
-        status = coordinator.data
-        self._attr_device_info = build_device_info(
-            entry,
-            claude_version=status.claude_version if status else None,
-            model=status.model if status else None,
-        )
+        self._attr_device_info = build_device_info(entry, coordinator.data)
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:

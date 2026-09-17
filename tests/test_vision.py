@@ -9,6 +9,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.claude_ha import vision
 from custom_components.claude_ha.api import ClaudeClient
 from custom_components.claude_ha.const import CONF_CAMERA_VISION, DOMAIN
+from custom_components.claude_ha.engines import CLAUDE
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import (
@@ -133,7 +134,9 @@ async def test_async_prompt_sends_image_entity(
     aioclient_mock.post(
         _URL, json={"text": "x", "proposal": None, "tools_used": [], "truncated": False}
     )
-    client = ClaudeClient(async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN)
+    client = ClaudeClient(
+        async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN, engine=CLAUDE
+    )
     await client.async_prompt("who's there?", image_entity="camera.front")
     assert aioclient_mock.mock_calls[0][2]["image_entity"] == "camera.front"
 

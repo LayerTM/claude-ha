@@ -1,6 +1,6 @@
 {
   "domain": "claude_ha",
-  "name": "Claude",
+  "name": "AI Agent",
   "after_dependencies": ["assist_pipeline", "hassio", "intent", "logbook"],
   "codeowners": ["@LayerTM"],
   "config_flow": true,

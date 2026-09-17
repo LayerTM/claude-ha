@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Each entry checks the AI engine of its add-on.** The engine is stored with
+  the entry (existing entries are migrated as Claude) and compared with the one
+  the add-on reports on every status poll. A different engine makes the entry
+  unavailable and raises a repair, and nothing else is sent to that add-on
+  (chat, actions, usage) until it reports the entry's engine again. The status
+  sensor shows the engine and its version.
+
+### Changed
+
+- **The integration is listed as "AI Agent"**, with a new icon for the light
+  and dark themes. The domain, actions, entity ids and the device of an
+  existing entry are unchanged.
+- **Optional request fields follow what the add-on says it accepts.** An
+  add-on that reports its accepted request fields gets exactly those; an
+  older add-on keeps getting the fields its version is known to accept.
+
 ## [1.10.0] - 2026-09-16
 
 ### Added

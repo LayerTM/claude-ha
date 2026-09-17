@@ -47,8 +47,11 @@ from .const import (
     MODE_WRITE,
     PROPOSAL_INTENTS,
     PROPOSAL_SUMMARY,
+    REQUEST_CONFIRMATION,
+    REQUEST_CONVERSATION_ID,
     REQUEST_EDIT_AUTOMATION,
     REQUEST_IMAGE_ENTITY,
+    REQUEST_INTENTS,
     REQUEST_LANGUAGE,
     REQUEST_STREAM,
     REQUEST_SURFACE,
@@ -62,11 +65,14 @@ from .const import (
     STATUS_BUDGET,
     STATUS_CHAT_HEALTH,
     STATUS_CLAUDE_VERSION,
+    STATUS_ENGINE,
+    STATUS_ENGINE_VERSION,
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
     STATUS_PROMPT_TIMEOUT_MS,
     STATUS_READY,
+    STATUS_REQUEST_FIELDS,
     STATUS_TIMEOUT,
     STATUS_VERSION,
     STREAM_ERROR,
@@ -76,6 +82,7 @@ from .const import (
     STREAM_KIND_ERROR,
     TIMEOUT_MARGIN,
 )
+from .engines import LEGACY_ENGINE, Engine
 
 
 class ClaudeError(HomeAssistantError):
@@ -132,6 +139,17 @@ class ClaudeRequestError(ClaudeError):
     """The request was rejected as invalid before Claude ran (e.g. 413 too large)."""
 
     translation_key = "request_rejected"
+
+
+class ClaudeEngineMismatchError(ClaudeError):
+    """The add-on runs a different engine than the client was made for."""
+
+    translation_key = "engine_mismatch"
+
+    def __init__(self, reported: str) -> None:
+        """Init with the engine the add-on reported."""
+        super().__init__(f"The add-on runs engine {reported!r}")
+        self.reported = reported
 
 
 @dataclass(slots=True)
@@ -336,6 +354,11 @@ class StatusResult:
     model: str | None
     ha_mcp: bool | None
     ha_mcp_connected: bool | None
+    # The defaults are what an add-on that predates these fields means.
+    engine: str = LEGACY_ENGINE.key
+    engine_version: str | None = None
+    # ``None``: the add-on predates the list (see ``ClaudeClient.accepts``).
+    request_fields: frozenset[str] | None = None
     chat_health: ChatHealth | None = None
     prompt_timeout_ms: int | None = None
     budget: Budget | None = None
@@ -381,13 +404,20 @@ class AccountLimitsResult:
 class ClaudeClient:
     """Thin async client over the add-on's internal prompt server."""
 
-    def __init__(self, session: ClientSession, base_url: str, token: str) -> None:
-        """Store the shared session, add-on base URL and bearer token."""
+    def __init__(
+        self, session: ClientSession, base_url: str, token: str, engine: Engine
+    ) -> None:
+        """Store the session, the add-on's address and token, and its engine."""
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._token = token
+        self._engine = engine
         self._read_timeout = float(REQUEST_TIMEOUT)
         self._addon_version: str | None = None
+        self._request_fields: frozenset[str] | None = None
+        # The engine the add-on last reported when it was not ours, until a
+        # status reports ours again (see ``_ensure_identity``).
+        self._foreign_engine: str | None = None
 
     @property
     def _auth_headers(self) -> dict[str, str]:
@@ -401,9 +431,7 @@ class ClaudeClient:
     def _addon_at_least(self, min_version: str) -> bool:
         """Whether the last-observed add-on version is >= ``min_version``.
 
-        Additive request fields are rejected by an add-on that predates them (its
-        body-key allowlist 400s an unknown key), so a field is only put on the wire
-        once a new-enough version is observed. Absent/unparseable version -> False.
+        Absent/unparseable version -> False.
         """
         if self._addon_version is None:
             return False
@@ -412,23 +440,29 @@ class ClaudeClient:
         except AwesomeVersionException:
             return False
 
-    @property
-    def _supports_surface(self) -> bool:
-        """Whether the connected add-on accepts the ``surface`` field (>= 1.28.0)."""
-        return self._addon_at_least(ADDON_MIN_SURFACE_VERSION)
+    def accepts(self, field: str, legacy_min_version: str | None = None) -> bool:
+        """Whether the add-on accepts optional request field ``field``.
+
+        The add-on rejects a request with a key it does not know (400), so an
+        optional field is only put on the wire when it is accepted. An add-on
+        that reports ``request_fields`` says so itself. One that predates the
+        list is a Claude add-on, and for it the field's first accepting version
+        decides: ``legacy_min_version``, or ``None`` for a field every such
+        add-on accepts.
+        """
+        if self._request_fields is not None:
+            return field in self._request_fields
+        return legacy_min_version is None or self._addon_at_least(legacy_min_version)
 
     @property
     def supports_edit_automation(self) -> bool:
-        """Whether the connected add-on accepts ``edit_automation`` (>= 1.36.0)."""
-        return self._addon_at_least(ADDON_MIN_EDIT_VERSION)
+        """Whether the connected add-on accepts ``edit_automation``."""
+        return self.accepts(REQUEST_EDIT_AUTOMATION, ADDON_MIN_EDIT_VERSION)
 
-    def note_version(self, version: str | None) -> None:
-        """Record the add-on version last reported by ``/api/status``.
-
-        Gates additive request fields (e.g. ``surface``) that older add-ons would
-        reject, so a field is only put on the wire once the add-on supports it.
-        """
-        self._addon_version = version
+    def note_status(self, status: StatusResult) -> None:
+        """Record what the last ``/api/status`` said about accepted fields."""
+        self._addon_version = status.version
+        self._request_fields = status.request_fields
 
     def note_prompt_timeout(self, prompt_timeout_ms: int | None) -> None:
         """Track the add-on's prompt budget so our wall-clock stays just above it.
@@ -446,8 +480,17 @@ class ClaudeClient:
             )
 
     async def async_get_status(self) -> StatusResult:
-        """Fetch add-on readiness/versions (contract §3)."""
+        """Fetch add-on readiness/versions (contract §3).
+
+        Raises :class:`ClaudeEngineMismatchError` when the add-on runs another
+        engine than this client's: nothing it reports is this entry's.
+        """
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
+        engine = data.get(STATUS_ENGINE, LEGACY_ENGINE.key)
+        if engine != self._engine.key:
+            self._foreign_engine = str(engine)
+            raise ClaudeEngineMismatchError(self._foreign_engine)
+        self._foreign_engine = None
         ha_mcp = data.get(STATUS_HA_MCP)
         connected = data.get(STATUS_HA_MCP_CONNECTED)
         chat_health = _parse_chat_health(data.get(STATUS_CHAT_HEALTH))
@@ -458,6 +501,9 @@ class ClaudeClient:
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
             claude_version=data.get(STATUS_CLAUDE_VERSION),
+            engine=engine,
+            engine_version=data.get(STATUS_ENGINE_VERSION),
+            request_fields=_parse_request_fields(data),
             model=data.get(STATUS_MODEL),
             ha_mcp=None if ha_mcp is None else bool(ha_mcp),
             ha_mcp_connected=None if connected is None else bool(connected),
@@ -489,6 +535,17 @@ class ClaudeClient:
             report=data,
         )
 
+    def _put(
+        self,
+        payload: dict[str, object],
+        field: str,
+        value: object,
+        legacy_min_version: str | None = None,
+    ) -> None:
+        """Put optional ``field`` into ``payload`` if it has a value and is accepted."""
+        if value is not None and self.accepts(field, legacy_min_version):
+            payload[field] = value
+
     async def async_prompt(
         self,
         prompt: str,
@@ -509,22 +566,18 @@ class ClaudeClient:
         ``image_entity`` (an Assist-exposed camera) is a read-only visual hint.
         ``language`` (the HA conversation language) lets the add-on localize its
         server-authored messages; additive, ignored by older add-ons.
-        ``surface`` ("voice"/"text") is only sent to add-ons that accept it
-        (>= 1.28.0); older ones reject unknown keys, so it is dropped for them.
+        Each optional field is sent only if the add-on accepts it (see
+        :meth:`accepts`).
         """
         payload: dict[str, object] = {"prompt": prompt, "mode": mode}
-        if conversation_id is not None:
-            payload["conversation_id"] = conversation_id
-        if language is not None:
-            payload[REQUEST_LANGUAGE] = language
-        if surface is not None and self._supports_surface:
-            payload[REQUEST_SURFACE] = surface
+        self._put(payload, REQUEST_CONVERSATION_ID, conversation_id)
+        self._put(payload, REQUEST_LANGUAGE, language)
+        self._put(payload, REQUEST_SURFACE, surface, ADDON_MIN_SURFACE_VERSION)
         if mode == MODE_WRITE:
-            payload["intents"] = intents or []
-            if confirmation is not None:
-                payload["confirmation"] = confirmation
-        elif image_entity is not None:
-            payload[REQUEST_IMAGE_ENTITY] = image_entity
+            self._put(payload, REQUEST_INTENTS, intents or [])
+            self._put(payload, REQUEST_CONFIRMATION, confirmation)
+        else:
+            self._put(payload, REQUEST_IMAGE_ENTITY, image_entity)
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller
@@ -556,28 +609,24 @@ class ClaudeClient:
         Content-Type — so a single ``PromptResult`` is yielded and no deltas.
         Streaming is read-only (contract §2). The last item is always the
         authoritative ``PromptResult`` (its proposal drives auto/confirm).
-        ``edit_automation`` (the current config of an automation to modify) is only
-        sent to add-ons that accept it (>= 1.36.0).
+        ``edit_automation`` is the current config of an automation to modify.
+        Each optional field is sent only if the add-on accepts it (see
+        :meth:`accepts`).
         """
-        payload: dict[str, object] = {
-            "prompt": prompt,
-            "mode": MODE_READ,
-            REQUEST_STREAM: True,
-        }
-        if conversation_id is not None:
-            payload["conversation_id"] = conversation_id
-        if image_entity is not None:
-            payload[REQUEST_IMAGE_ENTITY] = image_entity
-        if language is not None:
-            payload[REQUEST_LANGUAGE] = language
-        if surface is not None and self._supports_surface:
-            payload[REQUEST_SURFACE] = surface
-        if edit_automation is not None and self.supports_edit_automation:
-            payload[REQUEST_EDIT_AUTOMATION] = edit_automation
+        payload: dict[str, object] = {"prompt": prompt, "mode": MODE_READ}
+        self._put(payload, REQUEST_STREAM, True)
+        self._put(payload, REQUEST_CONVERSATION_ID, conversation_id)
+        self._put(payload, REQUEST_IMAGE_ENTITY, image_entity)
+        self._put(payload, REQUEST_LANGUAGE, language)
+        self._put(payload, REQUEST_SURFACE, surface, ADDON_MIN_SURFACE_VERSION)
+        self._put(
+            payload, REQUEST_EDIT_AUTOMATION, edit_automation, ADDON_MIN_EDIT_VERSION
+        )
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller
 
+        self._ensure_identity(API_PROMPT)
         url = f"{self._base_url}{API_PROMPT}"
         try:
             async with (
@@ -600,6 +649,17 @@ class ClaudeClient:
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
 
+    def _ensure_identity(self, path: str) -> None:
+        """Refuse every request but the status check to another engine's add-on.
+
+        Once a status poll has found another engine, nothing else is sent to the
+        add-on (no prompt, no write, no usage read) until a poll finds this
+        client's engine again. Every caller of the client is covered here, not
+        only the ones that look at the status coordinator.
+        """
+        if self._foreign_engine is not None and path != API_STATUS:
+            raise ClaudeEngineMismatchError(self._foreign_engine)
+
     async def _request(
         self,
         method: str,
@@ -610,6 +670,7 @@ class ClaudeClient:
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Perform one request, mapping transport/HTTP failures to typed errors."""
+        self._ensure_identity(path)
         url = f"{self._base_url}{path}"
         try:
             async with (
@@ -836,6 +897,21 @@ def _epoch_ms(raw: Any) -> int | None:
     except OverflowError, OSError, ValueError:
         return None
     return value
+
+
+def _parse_request_fields(data: dict[str, Any]) -> frozenset[str] | None:
+    """Read ``request_fields``; ``None`` only when the add-on does not report it.
+
+    A value that is not a list of strings accepts nothing: sending a field the
+    add-on may reject would fail the request, while withholding one only loses
+    that field's refinement.
+    """
+    if STATUS_REQUEST_FIELDS not in data:
+        return None
+    raw = data[STATUS_REQUEST_FIELDS]
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        return frozenset()
+    return frozenset(raw)
 
 
 def _non_negative_int(raw: Any) -> int | None:

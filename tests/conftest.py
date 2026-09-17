@@ -11,8 +11,10 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
+from custom_components.claude_ha.api import ClaudeClient, StatusResult
 from custom_components.claude_ha.const import (
     CONF_ADDON_SLUG,
+    CONF_ENGINE,
     CONF_HOST,
     CONF_PORT,
     CONF_TOKEN,
@@ -28,13 +30,33 @@ TEST_TOKEN = "s3cr3t-bearer-token"
 TEST_SLUG = "abcd1234_claude-code"
 TEST_BASE_URL = f"http://{TEST_HOST}:{TEST_PORT}"
 
-STATUS_PAYLOAD = {
+# What an add-on that predates the engine fields reports.
+LEGACY_STATUS_PAYLOAD = {
     "ready": True,
     "version": "1.14.0",
     "claude_version": "2.0.1",
     "model": "claude-sonnet-4-6",
     "ha_mcp": True,
     "ha_mcp_connected": True,
+}
+# Every request field the add-on's POST /api/prompt accepts.
+REQUEST_FIELDS = [
+    "prompt",
+    "mode",
+    "conversation_id",
+    "intents",
+    "confirmation",
+    "image_entity",
+    "stream",
+    "language",
+    "surface",
+    "edit_automation",
+]
+STATUS_PAYLOAD = {
+    **LEGACY_STATUS_PAYLOAD,
+    "engine": "claude",
+    "engine_version": "2.0.1",
+    "request_fields": REQUEST_FIELDS,
 }
 ACCOUNT_LIMITS_PAYLOAD = {
     "fetched_at": "2026-09-14T14:02:11Z",
@@ -121,12 +143,34 @@ def mock_config_entry() -> MockConfigEntry:
         domain=DOMAIN,
         title="Claude Code",
         unique_id=TEST_SLUG,
+        version=1,
+        minor_version=2,
         data={
             CONF_HOST: TEST_HOST,
             CONF_PORT: TEST_PORT,
             CONF_TOKEN: TEST_TOKEN,
             CONF_ADDON_SLUG: TEST_SLUG,
+            CONF_ENGINE: "claude",
         },
+    )
+
+
+def note_status(
+    client: ClaudeClient,
+    version: str | None,
+    request_fields: frozenset[str] | None = None,
+) -> None:
+    """Tell ``client`` what a status poll reported about accepted fields."""
+    client.note_status(
+        StatusResult(
+            ready=True,
+            version=version,
+            claude_version=None,
+            model=None,
+            ha_mcp=None,
+            ha_mcp_connected=None,
+            request_fields=request_fields,
+        )
     )
 
 
