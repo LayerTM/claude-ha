@@ -1,12 +1,13 @@
 <div align="center">
 
-<img src="custom_components/claude_ha/brand/logo.png" alt="Claude for Home Assistant" width="380">
+<img src="custom_components/claude_ha/brand/icon@2x.png" alt="AI Agent" width="160">
 
 # Claude for Home Assistant
 
 **Chat with Claude from Home Assistant Assist, and call it from your automations** —
 powered by the companion Claude Code add-on running on your own hardware.
-Requires **Home Assistant OS or Supervised**.
+Requires **Home Assistant OS or Supervised**. Home Assistant lists the
+integration as **AI Agent**.
 
 <!-- release & platform -->
 [![release](https://img.shields.io/github/v/release/LayerTM/claude-ha?sort=semver&display_name=tag&color=41BDF5)](https://github.com/LayerTM/claude-ha/releases)
@@ -102,13 +103,12 @@ yet, it offers to add it.
 
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=LayerTM&repository=claude-ha&category=integration)
 
-1. Click **Open in HACS** above and install **Claude**. (Accept the prompt if
+1. Click **Open in HACS** above and install **AI Agent**. (Accept the prompt if
    HACS asks to add the repository first.) You can also search HACS for
-   `claude-ha` — search for *Claude* alone and you'll get several
-   similarly-named integrations, while `claude-ha` matches only this one.
+   `claude-ha`, which matches only this integration.
 2. Restart Home Assistant.
 3. Install the Claude Code add-on. Once it starts, Home Assistant offers to set
-   up the **Claude** integration automatically — accept it. No configuration
+   up the **AI Agent** integration automatically — accept it. No configuration
    needed.
 
 Neither route working? Add `LayerTM/claude-ha` as a **custom repository**
@@ -125,10 +125,15 @@ Copy `custom_components/claude_ha` into your Home Assistant
 Setup is zero-touch: when the Claude Code add-on starts it advertises its host,
 port and a freshly generated token through Supervisor discovery, and Home
 Assistant surfaces a one-click setup. You can also add it from **Settings →
-Devices & services → Add integration → Claude**; it will find, install and start
+Devices & services → Add integration → AI Agent**; it will find, install and start
 the add-on for you. There are no options to fill in. If more than one Claude
 Code add-on is installed (for example a store build and a local build), setup
 asks which one to use; each one can be set up as its own entry.
+
+Each entry remembers which AI engine its add-on runs and checks it on every
+status poll. If the add-on ever reports a different engine, the entry goes
+unavailable and a repair explains why; nothing is sent to it until the engines
+match again.
 
 ## Usage
 
@@ -266,7 +271,7 @@ the device's main controls by default.
   chat content. Needs add-on ≥ 1.39.0, and stays unavailable while proactive
   alerts are off or have not run yet.
 - **Status** (`sensor.claude_code_status`) — `ready` / `initializing`, with the
-  add-on version, Claude version, active model, whether a scoped HA MCP is
+  add-on version, Claude version, the engine and its version, active model, whether a scoped HA MCP is
   configured and reachable, a `health` summary and the count of entities exposed
   to Assist as attributes.
 - **Chat health** (`sensor.claude_code_chat_health`) — a rolling summary of recent
@@ -448,6 +453,9 @@ add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
   stopped for 10 minutes. The integration does not start the add-on on its own:
   the repair offers to start it, or start it from the add-on page. Home Assistant
   retries setup automatically once it runs.
+- **"The add-on runs a different AI engine".** The entry was set up for one
+  engine and its add-on now reports another. Restore the add-on the entry was
+  set up for, or delete the entry and add the add-on again.
 - **Setup keeps retrying.** Check that the add-on is installed, started and
   healthy; the status endpoint must be reachable on the internal network.
 - **Diagnostics.** Download diagnostics from the integration's device page (the

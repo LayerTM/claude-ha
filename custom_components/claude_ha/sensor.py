@@ -23,6 +23,8 @@ from .const import (
     LIMIT_KIND_WEEKLY_ALL,
     LIMIT_KIND_WEEKLY_SCOPED,
     STATUS_CLAUDE_VERSION,
+    STATUS_ENGINE,
+    STATUS_ENGINE_VERSION,
     STATUS_HA_MCP,
     STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
@@ -228,12 +230,7 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
         self._attr_options = [STATE_READY, STATE_INITIALIZING]
         entry = coordinator.config_entry
         self._attr_unique_id = f"{entry.entry_id}_status"
-        status = coordinator.data
-        self._attr_device_info = build_device_info(
-            entry,
-            claude_version=status.claude_version if status else None,
-            model=status.model if status else None,
-        )
+        self._attr_device_info = build_device_info(entry, coordinator.data)
 
     @property
     def native_value(self) -> str:
@@ -248,6 +245,8 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
         return {
             STATUS_VERSION: data.version,
             STATUS_CLAUDE_VERSION: data.claude_version,
+            STATUS_ENGINE: data.engine,
+            STATUS_ENGINE_VERSION: data.engine_version,
             STATUS_MODEL: data.model,
             STATUS_HA_MCP: data.ha_mcp,
             STATUS_HA_MCP_CONNECTED: data.ha_mcp_connected,

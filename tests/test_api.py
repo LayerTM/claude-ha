@@ -26,16 +26,19 @@ from custom_components.claude_ha.const import (
     MODE_WRITE,
     REQUEST_TIMEOUT,
 )
+from custom_components.claude_ha.engines import CLAUDE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.json import json_bytes
 from homeassistant.util import dt as dt_util
 
-from .conftest import STATUS_PAYLOAD, TEST_BASE_URL, TEST_TOKEN
+from .conftest import STATUS_PAYLOAD, TEST_BASE_URL, TEST_TOKEN, note_status
 
 
 def _client(hass: HomeAssistant) -> ClaudeClient:
-    return ClaudeClient(async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN)
+    return ClaudeClient(
+        async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN, engine=CLAUDE
+    )
 
 
 @pytest.mark.parametrize(
@@ -60,7 +63,7 @@ async def test_surface_gated_on_addon_version(
         json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
     )
     client = _client(hass)
-    client.note_version(version)
+    note_status(client, version)
 
     await client.async_prompt("hi", surface="voice")
 
@@ -85,7 +88,7 @@ async def test_supports_edit_automation_version_gate(
 ) -> None:
     """`edit_automation` is only offered to add-ons >= 1.36.0."""
     client = _client(hass)
-    client.note_version(version)
+    note_status(client, version)
     assert client.supports_edit_automation is supported
 
 

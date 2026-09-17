@@ -1,0 +1,78 @@
+{
+  "entities": [
+    [
+      "",
+      "conversation.claude_code",
+      null,
+      null
+    ],
+    [
+      "_alerts_active",
+      "binary_sensor.claude_code_active_alerts",
+      "Active alerts",
+      "alerts_active"
+    ],
+    [
+      "_budget",
+      "sensor.claude_code_daily_budget_spend",
+      "Daily budget spend",
+      "budget"
+    ],
+    [
+      "_chat_health",
+      "sensor.claude_code_chat_health",
+      "Chat health",
+      "chat_health"
+    ],
+    [
+      "_check_health",
+      "button.claude_code_check_claude_health",
+      "Check Claude health",
+      "check_health"
+    ],
+    [
+      "_prompt_api_cost",
+      "sensor.claude_code_prompt_api_cost",
+      "Prompt API cost",
+      "prompt_api_cost"
+    ],
+    [
+      "_session_limit",
+      "sensor.claude_code_session_limit",
+      "Session limit",
+      "session_limit"
+    ],
+    [
+      "_status",
+      "sensor.claude_code_status",
+      "Status",
+      "status"
+    ],
+    [
+      "_usage",
+      "sensor.claude_code_token_usage_today",
+      "Token usage today",
+      "usage"
+    ],
+    [
+      "_weekly_limit",
+      "sensor.claude_code_weekly_limit",
+      "Weekly limit",
+      "weekly_limit"
+    ],
+    [
+      "_weekly_limit_fable",
+      "sensor.claude_code_weekly_limit_fable",
+      "Weekly limit (Fable)",
+      "weekly_limit_model"
+    ]
+  ],
+  "device": [
+    "Claude Code",
+    "Anthropic",
+    "Claude Code add-on",
+    null
+  ],
+  "title": "Claude Code",
+  "source": "registry of an entry set up by release 1.10.0 (minor version 1, status without engine fields)"
+}

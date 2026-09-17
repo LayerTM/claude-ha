@@ -23,8 +23,8 @@ from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import chat_session, entity_registry as er, intent, llm
 
 from .conftest import (
+    LEGACY_STATUS_PAYLOAD,
     PROMPT_PAYLOAD,
-    STATUS_PAYLOAD,
     TEST_BASE_URL,
     USAGE_PAYLOAD,
     setup_integration,
@@ -357,9 +357,10 @@ def test_render_proposal_variants(
 
 
 def _mock_status(aioclient_mock: AiohttpClientMocker, version: str) -> None:
-    """Register /api/status (with a chosen add-on version) and /api/usage."""
+    """Register a pre-request_fields /api/status of ``version``, and /api/usage."""
     aioclient_mock.get(
-        f"{TEST_BASE_URL}/api/status", json={**STATUS_PAYLOAD, "version": version}
+        f"{TEST_BASE_URL}/api/status",
+        json={**LEGACY_STATUS_PAYLOAD, "version": version},
     )
     aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
 
@@ -926,10 +927,10 @@ async def test_modify_reports_an_unreadable_store(
 async def test_modify_not_intercepted_on_old_addon(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
     """A pre-1.36.0 add-on makes a modify a normal read (no edit_automation)."""
+    _mock_status(aioclient_mock, "1.14.0")
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={
@@ -939,7 +940,7 @@ async def test_modify_not_intercepted_on_old_addon(
             "truncated": False,
         },
     )
-    await setup_integration(hass, mock_config_entry)  # default status = 1.14.0
+    await setup_integration(hass, mock_config_entry)
     hass.states.async_set(
         "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
     )

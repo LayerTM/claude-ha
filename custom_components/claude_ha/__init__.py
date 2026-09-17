@@ -1,4 +1,4 @@
-"""The Claude for Home Assistant integration."""
+"""The AI Agent integration: Home Assistant's side of a companion add-on."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from homeassistant.components.hassio import (
 )
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.hassio import is_hassio
@@ -28,13 +28,17 @@ from .confirm import async_setup_confirm
 from .const import (
     CONF_ADDON_SLUG,
     CONF_CAMERA_VISION,
+    CONF_ENGINE,
     CONF_HOST,
     CONF_PORT,
     CONF_TOKEN,
+    CONFIG_ENTRY_MINOR_VERSION,
     DOMAIN,
     HEALTH_ISSUES,
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
+    ISSUE_ENGINE_MISMATCH,
+    LOGGER,
 )
 from .coordinator import (
     ClaudeAccountLimitsCoordinator,
@@ -43,6 +47,7 @@ from .coordinator import (
     ClaudeStatusCoordinator,
     ClaudeUsageCoordinator,
 )
+from .engines import LEGACY_ENGINE, engine_for_entry
 from .frontend import (
     async_ensure_card_resource,
     async_register_card,
@@ -74,8 +79,35 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
+    """Migrate an entry to the current config-entry version.
+
+    1.1 -> 1.2 stores the engine; every 1.1 entry was made for a Claude add-on.
+    Home Assistant refuses a newer major version before calling this, and a
+    newer minor version of major 1 needs nothing from here.
+    """
+    if entry.minor_version < CONFIG_ENTRY_MINOR_VERSION:
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_ENGINE: LEGACY_ENGINE.key},
+            minor_version=CONFIG_ENTRY_MINOR_VERSION,
+        )
+        LOGGER.debug(
+            "Migrated entry %s to version 1.%s",
+            entry.entry_id,
+            CONFIG_ENTRY_MINOR_VERSION,
+        )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
-    """Set up Claude from a config entry."""
+    """Set up an entry: its add-on, its client, its coordinators, its platforms."""
+    engine = engine_for_entry(entry)
+    if engine is None:
+        # Made by a newer version that knows more engines than this one.
+        raise ConfigEntryError(
+            translation_domain=DOMAIN, translation_key="unsupported_engine"
+        )
     await async_ensure_card_resource(hass)
     # The add-on is Supervisor-managed only on a Supervisor install with a slug.
     slug: str | None = entry.data.get(CONF_ADDON_SLUG) if is_hassio(hass) else None
@@ -86,6 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
         async_get_clientsession(hass),
         base_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
         token=entry.data[CONF_TOKEN],
+        engine=engine,
     )
     watch = (
         get_addon_watch(hass, entry.entry_id, slug)
@@ -140,7 +173,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> b
     """Unload a config entry and its platforms."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        async_clear_issues(hass, entry.entry_id, *HEALTH_ISSUES)
+        async_clear_issues(hass, entry.entry_id, *HEALTH_ISSUES, ISSUE_ENGINE_MISMATCH)
     return unloaded
 
 
@@ -152,6 +185,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> N
         *HEALTH_ISSUES,
         ISSUE_ADDON_NOT_INSTALLED,
         ISSUE_ADDON_NOT_RUNNING,
+        ISSUE_ENGINE_MISMATCH,
     )
     async_drop_addon_watch(hass, entry.entry_id)
     await async_remove_card_resource(hass, entry.entry_id)

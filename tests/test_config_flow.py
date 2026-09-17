@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.claude_ha.const import (
     CONF_ADDON_SLUG,
+    CONF_ENGINE,
     CONF_HOST,
     CONF_PORT,
     CONF_TOKEN,
@@ -105,8 +106,10 @@ async def test_user_flow_addon_running(
         CONF_PORT: TEST_PORT,
         CONF_TOKEN: TEST_TOKEN,
         CONF_ADDON_SLUG: TEST_SLUG,
+        CONF_ENGINE: "claude",
     }
     assert result["result"].unique_id == TEST_SLUG
+    assert result["result"].minor_version == 2
 
 
 async def test_user_flow_addon_required(
@@ -345,15 +348,15 @@ async def test_discovery_flow(
     assert result["result"].unique_id == TEST_SLUG
 
 
-async def test_discovery_not_claude_addon(hass: HomeAssistant) -> None:
-    """Discovery of an unrelated add-on aborts."""
+async def test_discovery_unsupported_addon(hass: HomeAssistant) -> None:
+    """Discovery of an add-on no engine owns aborts."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
         context={"source": SOURCE_HASSIO},
         data=_discovery_info(slug="other_addon"),
     )
     assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "not_claude_addon"
+    assert result["reason"] == "unsupported_addon"
 
 
 async def test_discovery_updates_existing_entry(

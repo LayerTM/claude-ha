@@ -1,7 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Claude for Home Assistant">
-  <rect width="256" height="256" rx="58" fill="#D97757"/>
-  <g fill="none" stroke="#F7F3EC" stroke-width="17" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="86,94 152,128 86,162"/>
-    <line x1="98" y1="176" x2="170" y2="176"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <radialGradient id="glow_light">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="128" cy="128" r="112" fill="url(#glow_light)" />
+  <path d="M 128 40 L 208 80 L 128 120 L 48 80 Z" fill="#94a3b8" />
+  <path d="M 48 80 L 128 120 L 128 200 L 48 160 Z" fill="#475569" />
+  <path d="M 208 80 L 128 120 L 128 200 L 208 160 Z" fill="#1e293b" />
+  <polyline points="48 120, 96 144, 96 180" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <polyline points="208 120, 160 144, 160 180" fill="none" stroke="#16a34a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <polyline points="88 60, 128 80, 168 60" fill="none" stroke="#86efac" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
 </svg>

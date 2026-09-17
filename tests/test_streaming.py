@@ -19,12 +19,13 @@ from custom_components.claude_ha.api import (
     StreamDelta,
 )
 from custom_components.claude_ha.const import DOMAIN
+from custom_components.claude_ha.engines import CLAUDE
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import entity_registry as er, intent
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .conftest import TEST_BASE_URL, TEST_TOKEN, setup_integration
+from .conftest import TEST_BASE_URL, TEST_TOKEN, note_status, setup_integration
 
 _URL = f"{TEST_BASE_URL}/api/prompt"
 _NDJSON = {"Content-Type": "application/x-ndjson"}
@@ -35,7 +36,9 @@ def _ndjson(*objs: dict[str, Any]) -> str:
 
 
 def _client(hass: HomeAssistant) -> ClaudeClient:
-    return ClaudeClient(async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN)
+    return ClaudeClient(
+        async_get_clientsession(hass), TEST_BASE_URL, TEST_TOKEN, engine=CLAUDE
+    )
 
 
 async def _collect(
@@ -317,7 +320,7 @@ async def test_stream_sends_edit_automation_when_supported(
         _URL, text=_ndjson({"type": "done", "text": "ok"}), headers=_NDJSON
     )
     client = _client(hass)
-    client.note_version("1.36.0")
+    note_status(client, "1.36.0")
 
     await _collect(
         client.async_prompt_stream("change it", edit_automation={"alias": "X"})
@@ -334,7 +337,7 @@ async def test_stream_omits_edit_automation_when_unsupported(
         _URL, text=_ndjson({"type": "done", "text": "ok"}), headers=_NDJSON
     )
     client = _client(hass)
-    client.note_version("1.35.0")
+    note_status(client, "1.35.0")
 
     await _collect(
         client.async_prompt_stream("change it", edit_automation={"alias": "X"})

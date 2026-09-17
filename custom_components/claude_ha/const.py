@@ -9,18 +9,13 @@ from typing import Final
 DOMAIN: Final = "claude_ha"
 LOGGER: Final = logging.getLogger(__package__)
 
-# The companion add-on's Supervisor slug is repository-prefixed and therefore
-# varies per install (e.g. "abc123de_claude-code", "local_claude-code"), so it
-# is resolved at runtime — from the discovery payload or by matching this
-# suffix against installed/store add-ons — never hardcoded.
-ADDON_SLUG_SUFFIX: Final = "_claude-code"
-ADDON_NAME: Final = "Claude Code"
-
-# Manufacturer/model shown on the HA device.
-MANUFACTURER: Final = "Anthropic"
+# Minor version of the config entry. 2: the entry stores CONF_ENGINE.
+CONFIG_ENTRY_MINOR_VERSION: Final = 2
 
 # Config-entry data keys.
 CONF_ADDON_SLUG: Final = "addon_slug"
+# The engine the entry's add-on runs; a key of ``engines.ENGINES``.
+CONF_ENGINE: Final = "engine"
 CONF_HOST: Final = "host"
 CONF_PORT: Final = "port"
 CONF_TOKEN: Final = "token"
@@ -88,6 +83,11 @@ PROPOSAL_INTENTS: Final = "intents"
 # writes it.
 RESP_AUTOMATION: Final = "automation"
 
+# POST /api/prompt request keys every add-on accepts (besides "prompt"/"mode").
+REQUEST_CONVERSATION_ID: Final = "conversation_id"
+REQUEST_INTENTS: Final = "intents"
+REQUEST_CONFIRMATION: Final = "confirmation"
+
 # Streaming read (add-on >= 1.17.0): opt-in via this request field; the add-on
 # answers application/x-ndjson (one JSON object per line) or, when it can't
 # stream, a normal JSON body — the client branches on the response Content-Type.
@@ -115,8 +115,9 @@ REQUEST_LANGUAGE: Final = "language"
 REQUEST_SURFACE: Final = "surface"
 SURFACE_VOICE: Final = "voice"
 SURFACE_TEXT: Final = "text"
-# First add-on version that accepts REQUEST_SURFACE (see above — the client
-# send-gates the field on this version so older add-ons never see an unknown key).
+# First add-on version that accepts REQUEST_SURFACE. Used only for an add-on that
+# does not report STATUS_REQUEST_FIELDS (see below); request fields added from now
+# on are gated by that list alone and get no version here.
 ADDON_MIN_SURFACE_VERSION: Final = "1.28.0"
 # Optional current config of the automation the user asked to modify (add-on >=
 # 1.36.0). When present, the add-on tells the model to edit THIS config per the
@@ -129,6 +130,14 @@ ADDON_MIN_EDIT_VERSION: Final = "1.36.0"
 STATUS_READY: Final = "ready"
 STATUS_VERSION: Final = "version"
 STATUS_CLAUDE_VERSION: Final = "claude_version"
+# The engine the add-on runs (a key of ``engines.ENGINES``) and that engine's CLI
+# version. Absent on add-ons that predate them, which all run Claude.
+STATUS_ENGINE: Final = "engine"
+STATUS_ENGINE_VERSION: Final = "engine_version"
+# Every request field POST /api/prompt accepts, from the same allowlist the add-on
+# validates against. An empty list means none. Absent on add-ons that predate it:
+# for those the ADDON_MIN_*_VERSION rules above say what is accepted.
+STATUS_REQUEST_FIELDS: Final = "request_fields"
 STATUS_MODEL: Final = "model"
 STATUS_HA_MCP: Final = "ha_mcp"
 # Whether the LAST chat read actually reached the HA MCP server (add-on >= 1.14.0;
@@ -295,6 +304,8 @@ EVENT_ACTION_EXECUTED: Final = f"{DOMAIN}_action_executed"
 # --- Repair issues ----------------------------------------------------------
 ISSUE_ADDON_NOT_RUNNING: Final = "addon_not_running"
 ISSUE_ADDON_NOT_INSTALLED: Final = "addon_not_installed"
+# The add-on reports a different engine than the entry was created for.
+ISSUE_ENGINE_MISMATCH: Final = "engine_mismatch"
 # Health-check issues: the chat can reach the add-on but can't see/act on the home.
 ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
 ISSUE_NO_HA_TOKEN: Final = "no_ha_token"
