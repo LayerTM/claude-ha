@@ -901,7 +901,11 @@ async def test_modify_reports_an_unreadable_store(
     _mock_status(aioclient_mock, "1.36.0")  # gate on
 
     async def _unreadable(_hass: HomeAssistant, _cid: str) -> dict:
-        raise ClaudeError("automations.yaml holds dict rather than a list")
+        raise ClaudeError(
+            "automations.yaml holds dict rather than a list",
+            translation_key="automation_store_not_list",
+            translation_placeholders={"path": "automations.yaml"},
+        )
 
     monkeypatch.setattr(
         "custom_components.claude_ha.conversation.async_read_automation_config",
@@ -921,7 +925,10 @@ async def test_modify_reports_an_unreadable_store(
     )
 
     assert result.response.error_code is intent.IntentResponseErrorCode.UNKNOWN
-    assert "rather than a list" in result.response.speech["plain"]["speech"]
+    assert result.response.speech["plain"]["speech"] == (
+        "automations.yaml doesn't hold a list of automations, so editing it would "
+        "discard what's there; nothing was changed."
+    )
 
 
 async def test_modify_not_intercepted_on_old_addon(

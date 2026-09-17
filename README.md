@@ -479,6 +479,7 @@ ruff format --check custom_components tests scripts
 mypy custom_components/claude_ha
 pytest --cov=custom_components.claude_ha --cov-report=term-missing
 python scripts/secret_scan.py .
+docker run --rm -v "$PWD":/github/workspace ghcr.io/home-assistant/hassfest
 ```
 
 CI runs hassfest, HACS validation, ruff, mypy, the test suite (100% coverage) and
