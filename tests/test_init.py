@@ -21,6 +21,7 @@ from custom_components.claude_ha.const import (
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
     ISSUE_NO_HA_TOKEN,
+    ISSUE_USAGE_HISTORY_RESET,
 )
 from custom_components.claude_ha.issues import async_raise_issue, entry_issue_id
 from homeassistant.components.hassio import AddonState
@@ -84,7 +85,12 @@ async def test_remove_clears_every_issue_of_the_entry(
 ) -> None:
     """A removed entry leaves no repair of its own behind, add-on ones included."""
     await setup_integration(hass, mock_config_entry)
-    kinds = (*HEALTH_ISSUES, ISSUE_ADDON_NOT_INSTALLED, ISSUE_ADDON_NOT_RUNNING)
+    kinds = (
+        *HEALTH_ISSUES,
+        ISSUE_ADDON_NOT_INSTALLED,
+        ISSUE_ADDON_NOT_RUNNING,
+        ISSUE_USAGE_HISTORY_RESET,
+    )
     for kind in kinds:
         async_raise_issue(
             hass, mock_config_entry.entry_id, kind, severity=ir.IssueSeverity.ERROR

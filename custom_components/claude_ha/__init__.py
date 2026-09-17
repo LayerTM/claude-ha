@@ -38,6 +38,7 @@ from .const import (
     ISSUE_ADDON_NOT_INSTALLED,
     ISSUE_ADDON_NOT_RUNNING,
     ISSUE_ENGINE_MISMATCH,
+    ISSUE_USAGE_HISTORY_RESET,
     LOGGER,
 )
 from .coordinator import (
@@ -186,6 +187,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> N
         ISSUE_ADDON_NOT_INSTALLED,
         ISSUE_ADDON_NOT_RUNNING,
         ISSUE_ENGINE_MISMATCH,
+        ISSUE_USAGE_HISTORY_RESET,
     )
     async_drop_addon_watch(hass, entry.entry_id)
     await async_remove_card_resource(hass, entry.entry_id)

@@ -364,6 +364,10 @@
     "camera_vision_no_cameras": {
       "title": "Camera vision is on, but no cameras are exposed to Assist",
       "description": "You turned on 'Let Claude look at cameras', but no camera is exposed to Assist, so Claude can never see one — Home Assistant hides cameras from Assist by default as security devices. Expose the camera(s) you want Claude to see under Settings → Voice assistants → Expose (the high-resolution channel of each camera), then check again."
+    },
+    "usage_history_reset": {
+      "title": "Usage history was reset",
+      "description": "The add-on lost its usage history and could not recover it; the token and cost totals shown here now count from {history_since}. Nothing you did caused this."
     }
   }
 }
