@@ -300,6 +300,21 @@
     "automation_delete_failed": {
       "message": "Couldn't delete the automation."
     },
+    "request_field_rejected": {
+      "message": "The add-on rejected the request field {field}."
+    },
+    "request_too_large": {
+      "message": "The request is too large for the add-on. The maximum size is {max_bytes} bytes."
+    },
+    "confirmation_required": {
+      "message": "This action needs your explicit confirmation before it runs."
+    },
+    "write_unavailable": {
+      "message": "The add-on can't make changes because it has no Home Assistant token. Set one in the add-on options."
+    },
+    "addon_timeout": {
+      "message": "The add-on took too long to answer. Try again."
+    },
     "voice_addon_failed": {
       "message": "Failed to set up the {addon} add-on: {error}"
     }

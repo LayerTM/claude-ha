@@ -64,9 +64,11 @@ INTENT_RISK: Final = "risk"
 RISK_LOW: Final = "low"
 RISK_SENSITIVE: Final = "sensitive"
 
-# Prompt-server hard cap on prompt size (bytes) — mirrored client-side so callers
-# get a clean validation error instead of a 413.
-PROMPT_MAX_BYTES: Final = 8192
+# Error answer keys of the prompt server (core API 3): a stable ``code``, the
+# request ``field`` at fault and the exceeded ``limit_bytes``, when they apply.
+ERROR_CODE: Final = "code"
+ERROR_FIELD: Final = "field"
+ERROR_LIMIT_BYTES: Final = "limit_bytes"
 
 # POST /api/prompt 200-response keys.
 RESP_TEXT: Final = "text"
@@ -158,6 +160,9 @@ STATUS_CHAT_HEALTH: Final = "chat_health"
 # The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
 # its wall-clock just above this so the add-on's graceful timeout answer always lands.
 STATUS_PROMPT_TIMEOUT_MS: Final = "prompt_timeout_ms"
+# The largest prompt POST /api/prompt accepts, in UTF-8 bytes, from the constant the
+# add-on checks against. Absent on add-ons that predate it: no local check then.
+STATUS_PROMPT_MAX_BYTES: Final = "prompt_max_bytes"
 # Daily spend cap (add-on >= 1.21.0): {limit, spent} in USD; limit 0 means unlimited.
 STATUS_BUDGET: Final = "budget"
 # Active proactive-alert set (add-on >= 1.39.0): {active, critical, items} where each
