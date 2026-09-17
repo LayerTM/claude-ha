@@ -15,11 +15,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   needs explicit confirmation; changes being unavailable because the add-on has
   no Home Assistant token; or the add-on taking too long. A timeout or a
   confirmation request is no longer reported as an unreachable add-on or an
-  outdated token. With an add-on that does not report codes, a request that is
-  too large now says so, without a number.
+  outdated token.
 - **Prompts over the add-on's limit are refused before sending.** The limit is
   the one the add-on publishes. An add-on that does not publish one still
   receives the prompt and answers for it.
+
+## [1.11.2] - 2026-09-17
+
+### Fixed
+
+- **A request the add-on refuses as too large says so.** Instead of "rejected
+  as invalid", the reply is that the request is too large for the add-on.
 
 ## [1.11.1] - 2026-09-17
 
@@ -633,7 +639,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.11.2...HEAD
+[1.11.2]: https://github.com/LayerTM/claude-ha/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/LayerTM/claude-ha/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/LayerTM/claude-ha/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/LayerTM/claude-ha/compare/v1.9.2...v1.10.0

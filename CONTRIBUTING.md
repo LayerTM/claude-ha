@@ -20,6 +20,7 @@ Requires Python 3.14 (matching current Home Assistant).
 python3.14 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements_test.txt
+python scripts/install_component_requirements.py   # what HA pins for our dependencies
 pre-commit install        # optional but recommended
 ```
 
