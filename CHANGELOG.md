@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A request the add-on refuses as too large says so.** Instead of "rejected
+  as invalid", the reply is that the request is too large for the add-on.
+
 ## [1.11.1] - 2026-09-17
 
 ### Fixed
