@@ -184,19 +184,19 @@
   },
   "exceptions": {
     "unknown": {
-      "message": "Unexpected error talking to the Claude Code add-on."
+      "message": "Unexpected error talking to the add-on."
     },
     "cannot_connect": {
-      "message": "The Claude Code add-on is not reachable."
+      "message": "The add-on is not reachable."
     },
     "auth_error": {
-      "message": "The Claude Code add-on rejected the request. The shared token may be out of date."
+      "message": "The add-on rejected the request. The shared token may be out of date."
     },
     "rate_limited": {
-      "message": "The Claude Code add-on is busy or rate-limited. Try again shortly."
+      "message": "The add-on is busy or rate-limited. Try again shortly."
     },
     "request_rejected": {
-      "message": "The Claude Code add-on rejected the request as invalid."
+      "message": "The add-on rejected the request as invalid."
     },
     "invalid_config_entry": {
       "message": "Claude configuration {config_entry} not found."
@@ -239,6 +239,66 @@
     },
     "voice_unknown_language": {
       "message": "No default Piper voice is known for the language {language}. Pass a voice via the tts_voice field."
+    },
+    "no_result": {
+      "message": "The add-on returned no answer."
+    },
+    "automation_action_not_allowed": {
+      "message": "The drafted automation uses an action type ({action}) that isn't permitted for an automation created from chat; not created."
+    },
+    "automation_action_unrecognized": {
+      "message": "The drafted automation has an unrecognized action; not created."
+    },
+    "automation_templated_block": {
+      "message": "The drafted automation has a templated '{block}' block, which can't be verified as safe; not created."
+    },
+    "automation_broad_target": {
+      "message": "The drafted automation targets a device or area rather than specific entities, which can't be bounded to safe domains; not created."
+    },
+    "automation_templated_entities": {
+      "message": "The drafted automation has a templated 'entities' map, which can't be verified as safe; not created."
+    },
+    "automation_templated_service": {
+      "message": "The drafted automation uses a templated action name, which can't be verified as safe; not created."
+    },
+    "automation_service_not_allowed": {
+      "message": "The drafted automation calls {service}, which isn't allowed for an automation created from chat; not created."
+    },
+    "automation_templated_entity": {
+      "message": "The drafted automation targets a templated entity, which can't be verified as safe; not created."
+    },
+    "automation_entity_unrecognized": {
+      "message": "The drafted automation has an unrecognized entity target; not created."
+    },
+    "automation_entity_not_allowed": {
+      "message": "The drafted automation targets {entity}, which isn't a specific entity in an allowed domain; not created."
+    },
+    "automation_store_not_list": {
+      "message": "{path} doesn't hold a list of automations, so editing it would discard what's there; nothing was changed."
+    },
+    "automation_reload_failed_changed": {
+      "message": "Couldn't reload automations, and {path} was changed by something else meanwhile; it has been left as it now is."
+    },
+    "automation_reload_failed_kept": {
+      "message": "Couldn't reload automations, and {path} could not be put back; it still holds the change."
+    },
+    "automation_reload_failed": {
+      "message": "Couldn't reload automations; the change was undone."
+    },
+    "automation_blueprint": {
+      "message": "Blueprint-based automations can't be managed this way; not saved."
+    },
+    "automation_invalid": {
+      "message": "The automation isn't valid; not saved."
+    },
+    "automation_save_failed": {
+      "message": "Couldn't save the automation."
+    },
+    "automation_gone": {
+      "message": "That automation no longer exists; nothing deleted."
+    },
+    "automation_delete_failed": {
+      "message": "Couldn't delete the automation."
     },
     "voice_addon_failed": {
       "message": "Failed to set up the {addon} add-on: {error}"

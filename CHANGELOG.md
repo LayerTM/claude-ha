@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chat errors are shown as their message, not as internal text.** When a
+  chat turn fails, the reply is the error's translated message in the
+  conversation's language (English where no translation exists), never the
+  technical text of the failure. A refused automation still says why, naming
+  the action or entity involved. Error messages no longer name a specific AI
+  engine.
+
 ## [1.11.0] - 2026-09-17
 
 ### Added

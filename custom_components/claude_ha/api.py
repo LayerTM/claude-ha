@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterable, AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from http import HTTPStatus
@@ -20,7 +21,9 @@ from typing import Any, Final, NoReturn
 from aiohttp import ClientError, ClientSession
 from awesomeversion import AwesomeVersion, AwesomeVersionException
 
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import translation
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -86,21 +89,53 @@ from .engines import LEGACY_ENGINE, Engine
 
 
 class ClaudeError(HomeAssistantError):
-    """Base error for the Claude add-on client.
+    """An error of this integration that a user may be shown.
 
-    Subclasses carry a ``translation_key`` so they render through the
-    integration's ``exceptions`` strings when surfaced to the user.
+    What a user reads is always the translation of ``translation_key`` (the
+    class default, or one given for the raise), filled with
+    ``translation_placeholders``. ``message`` is detail for the log only: it
+    is what ``str()`` returns, and it is never shown in chat.
     """
 
     translation_key = "unknown"
 
-    def __init__(self, message: str | None = None) -> None:
-        """Init with a translated message key, keeping raw detail for the log."""
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        translation_key: str | None = None,
+        translation_placeholders: dict[str, str] | None = None,
+    ) -> None:
+        """Init with log detail and the translation a user is shown."""
         super().__init__(
-            message,
+            *(() if message is None else (message,)),
             translation_domain=DOMAIN,
-            translation_key=self.translation_key,
+            translation_key=translation_key or self.translation_key,
+            translation_placeholders=translation_placeholders,
         )
+
+
+async def async_error_message(
+    hass: HomeAssistant, language: str, err: ClaudeError
+) -> str:
+    """Return what ``err`` says to a user, in ``language``.
+
+    Home Assistant falls back to English for a language without a translation.
+    A key or placeholder that cannot be rendered gives the generic message
+    rather than a raw key or template.
+    """
+    translations = await translation.async_get_translations(
+        hass, language, "exceptions", {DOMAIN}
+    )
+    template = translations.get(_exception_key(err.translation_key))
+    if template is not None:
+        with suppress(KeyError, IndexError, ValueError):
+            return template.format(**(err.translation_placeholders or {}))
+    return translations[_exception_key(ClaudeError.translation_key)]
+
+
+def _exception_key(translation_key: str | None) -> str:
+    return f"component.{DOMAIN}.exceptions.{translation_key}.message"
 
 
 class ClaudeConnectionError(ClaudeError):

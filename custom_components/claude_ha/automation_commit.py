@@ -185,7 +185,9 @@ def _walk_actions(actions: list[Any]) -> None:
         elif kind not in _SAFE_LEAF_ACTIONS:
             raise ClaudeError(
                 f"The drafted automation uses an action type ('{kind}') that isn't "
-                "permitted for a Claude-created automation; not created."
+                "permitted for an automation created from chat; not created.",
+                translation_key="automation_action_not_allowed",
+                translation_placeholders={"action": str(kind)},
             )
 
 
@@ -195,7 +197,8 @@ def _script_action_kind(action: dict[str, Any]) -> str:
         return determine_script_action(action)
     except ValueError as err:
         raise ClaudeError(
-            "The drafted automation has an unrecognized action; not created."
+            "The drafted automation has an unrecognized action; not created.",
+            translation_key="automation_action_unrecognized",
         ) from err
 
 
@@ -237,7 +240,9 @@ def _check_call_service(action: dict[str, Any]) -> None:
         if not isinstance(block, dict):
             raise ClaudeError(
                 f"The drafted automation has a templated '{key}' block, which can't "
-                "be verified as safe; not created."
+                "be verified as safe; not created.",
+                translation_key="automation_templated_block",
+                translation_placeholders={"block": str(key)},
             )
         _reject_broad_selectors(block)
         if ATTR_ENTITY_ID in block:
@@ -252,7 +257,8 @@ def _reject_broad_selectors(container: dict[str, Any]) -> None:
     if any(key in container for key in _TARGET_SELECTOR_KEYS):
         raise ClaudeError(
             "The drafted automation targets a device or area rather than specific "
-            "entities, which can't be bounded to safe domains; not created."
+            "entities, which can't be bounded to safe domains; not created.",
+            translation_key="automation_broad_target",
         )
 
 
@@ -267,7 +273,8 @@ def _collect_scene_entity_refs(block: dict[str, Any], refs: list[Any]) -> None:
         if not isinstance(state_map, dict):
             raise ClaudeError(
                 "The drafted automation has a templated 'entities' map, which can't "
-                "be verified as safe; not created."
+                "be verified as safe; not created.",
+                translation_key="automation_templated_entities",
             )
         refs.extend(state_map.keys())  # entity_id KEYS only (states are values)
     for key in _ENTITY_DATA_LIST_KEYS:
@@ -284,14 +291,17 @@ def _check_service_name(action: dict[str, Any]) -> None:
         if _is_templated(name):
             raise ClaudeError(
                 "The drafted automation uses a templated service name, which can't "
-                "be verified as safe; not created."
+                "be verified as safe; not created.",
+                translation_key="automation_templated_service",
             )
         service = str(name)
         domain, _, obj = service.partition(".")
         if not obj or domain not in _ALLOWED_DOMAINS or service in _DENIED_SERVICES:
             raise ClaudeError(
-                f"The drafted automation calls '{service}', which isn't allowed for a "
-                "Claude-created automation; not created."
+                f"The drafted automation calls '{service}', which isn't allowed for an "
+                "automation created from chat; not created.",
+                translation_key="automation_service_not_allowed",
+                translation_placeholders={"service": service},
             )
 
 
@@ -304,7 +314,8 @@ def _check_entity_ref(value: Any) -> None:
     if _is_templated(value):
         raise ClaudeError(
             "The drafted automation targets a templated entity, which can't be "
-            "verified as safe; not created."
+            "verified as safe; not created.",
+            translation_key="automation_templated_entity",
         )
     tokens: list[str] = []
     if isinstance(value, str):
@@ -314,17 +325,20 @@ def _check_entity_ref(value: Any) -> None:
             if _is_templated(element):
                 raise ClaudeError(
                     "The drafted automation targets a templated entity, which can't "
-                    "be verified as safe; not created."
+                    "be verified as safe; not created.",
+                    translation_key="automation_templated_entity",
                 )
             if not isinstance(element, str):
                 raise ClaudeError(
                     "The drafted automation has an unrecognized entity target; "
-                    "not created."
+                    "not created.",
+                    translation_key="automation_entity_unrecognized",
                 )
             tokens.extend(element.split(","))
     else:
         raise ClaudeError(
-            "The drafted automation has an unrecognized entity target; not created."
+            "The drafted automation has an unrecognized entity target; not created.",
+            translation_key="automation_entity_unrecognized",
         )
     for token in tokens:
         entity = token.strip()
@@ -332,7 +346,9 @@ def _check_entity_ref(value: Any) -> None:
         if entity == ENTITY_MATCH_ALL or not obj or domain not in _ALLOWED_DOMAINS:
             raise ClaudeError(
                 f"The drafted automation targets '{entity}', which isn't a specific "
-                "entity in an allowed domain; not created."
+                "entity in an allowed domain; not created.",
+                translation_key="automation_entity_not_allowed",
+                translation_placeholders={"entity": entity},
             )
 
 
@@ -365,7 +381,9 @@ def _load_store(path: str) -> tuple[bytes | None, list[Any]]:
         raise ClaudeError(
             f"{AUTOMATION_CONFIG_PATH} holds {type(data).__name__} rather than a list "
             "of automations, so editing it would discard what's there; nothing was "
-            "changed."
+            "changed.",
+            translation_key="automation_store_not_list",
+            translation_placeholders={"path": AUTOMATION_CONFIG_PATH},
         )
     return snapshot, data
 
@@ -433,16 +451,23 @@ async def _reload_or_restore(
             raise ClaudeError(
                 f"Couldn't reload automations ({err}), and {AUTOMATION_CONFIG_PATH} "
                 "was changed by something else while that happened — it has been "
-                "left as it now is."
+                "left as it now is.",
+                translation_key="automation_reload_failed_changed",
+                translation_placeholders={"path": AUTOMATION_CONFIG_PATH},
             ) from err
         # WriteError is what Home Assistant's atomic writer raises; it is a
         # HomeAssistantError rather than an OSError, so both are caught here.
         except (HomeAssistantError, OSError) as restore_err:
             raise ClaudeError(
                 f"Couldn't reload automations ({err}), and {AUTOMATION_CONFIG_PATH} "
-                f"could not be put back ({restore_err}) — it still holds the change."
+                f"could not be put back ({restore_err}) — it still holds the change.",
+                translation_key="automation_reload_failed_kept",
+                translation_placeholders={"path": AUTOMATION_CONFIG_PATH},
             ) from restore_err
-        raise ClaudeError(f"Couldn't reload automations: {err}") from err
+        raise ClaudeError(
+            f"Couldn't reload automations: {err}",
+            translation_key="automation_reload_failed",
+        ) from err
 
 
 async def _validate_and_check(
@@ -457,16 +482,25 @@ async def _validate_and_check(
     # action allowlist can't see (or bound) them — refuse it outright.
     if "use_blueprint" in config:
         raise ClaudeError(
-            "Blueprint-based automations can't be managed this way; not saved."
+            "Blueprint-based automations can't be managed this way; not saved.",
+            translation_key="automation_blueprint",
         )
     try:
         validated = await async_validate_config_item(hass, config_key, config)
     except (vol.Invalid, HomeAssistantError) as err:
-        raise ClaudeError(f"The automation isn't valid: {err}") from err
+        raise ClaudeError(
+            f"The automation isn't valid: {err}", translation_key="automation_invalid"
+        ) from err
     except Exception as err:  # never surface a raw traceback to chat
-        raise ClaudeError("The automation could not be validated; not saved.") from err
+        raise ClaudeError(
+            "The automation could not be validated; not saved.",
+            translation_key="automation_invalid",
+        ) from err
     if validated is None:
-        raise ClaudeError("The automation could not be validated; not saved.")
+        raise ClaudeError(
+            "The automation could not be validated; not saved.",
+            translation_key="automation_invalid",
+        )
     _enforce_action_policy(validated)
 
 
@@ -496,7 +530,10 @@ async def _persist_automation(
         except ClaudeError:
             raise  # already a clean, user-facing message
         except (HomeAssistantError, OSError) as err:
-            raise ClaudeError(f"Couldn't save the automation: {err}") from err
+            raise ClaudeError(
+                f"Couldn't save the automation: {err}",
+                translation_key="automation_save_failed",
+            ) from err
         await _reload_or_restore(hass, path, snapshot, written, config_id)
     return alias
 
@@ -650,12 +687,18 @@ async def async_delete_automation(hass: HomeAssistant, config_id: str) -> None:
                 if not (isinstance(item, dict) and item.get(CONF_ID) == config_id)
             ]
             if len(remaining) == len(current):
-                raise ClaudeError("That automation no longer exists; nothing deleted.")
+                raise ClaudeError(
+                    "That automation no longer exists; nothing deleted.",
+                    translation_key="automation_gone",
+                )
             written = await hass.async_add_executor_job(_write_store, path, remaining)
         except ClaudeError:
             raise  # already a clean, user-facing message
         except (HomeAssistantError, OSError) as err:
-            raise ClaudeError(f"Couldn't delete the automation: {err}") from err
+            raise ClaudeError(
+                f"Couldn't delete the automation: {err}",
+                translation_key="automation_delete_failed",
+            ) from err
         # Reload first, so a failure leaves both the file AND the registry as they
         # were; only once the automation is really gone is its entity orphaned.
         await _reload_or_restore(hass, path, snapshot, written, config_id)

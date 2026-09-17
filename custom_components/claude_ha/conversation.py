@@ -22,7 +22,13 @@ from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .api import ClaudeError, PromptResult, Proposal, StreamDelta
+from .api import (
+    ClaudeError,
+    PromptResult,
+    Proposal,
+    StreamDelta,
+    async_error_message,
+)
 from .automation_commit import (
     async_commit_automation,
     async_delete_automation,
@@ -37,6 +43,7 @@ from .const import (
     CONF_CRITICAL_ENTITIES,
     CONFIRMATION_AUTO,
     CONFIRMATION_CONFIRMED,
+    LOGGER,
     MODE_WRITE,
     SURFACE_TEXT,
     SURFACE_VOICE,
@@ -308,7 +315,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 user_input, chat_log, text, conv_id, caller, image_entity
             )
         except ClaudeError as err:
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
 
         # The model drafted an automation. Show it and hold it for a yes/no confirm;
         # the confirmed commit re-validates + allow-lists + writes it in-process.
@@ -421,7 +428,9 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
         result = captured.get("result")
         if result is None:
-            raise ClaudeError("The add-on returned no result")
+            raise ClaudeError(
+                "The add-on returned no result", translation_key="no_result"
+            )
         return result, streamed
 
     def _answer_reply(
@@ -472,7 +481,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         try:
             await async_commit_automation(self.coordinator.hass, automation)
         except ClaudeError as err:
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
         return self._reply(user_input, chat_log, f"Created automation: {summary}")
 
     async def _handle_modify_request(
@@ -502,7 +511,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             current = await async_read_automation_config(hass, target.config_id)
         except ClaudeError as err:
             # An unreadable store says why; it must not read as "no such automation".
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
         if current is None:
             return self._reply(
                 user_input, chat_log, "I couldn't read that automation's configuration."
@@ -518,7 +527,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 edit_automation=current,
             )
         except ClaudeError as err:
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
         if result.automation is None:
             # The model didn't return an updated config (e.g. it declined) — just
             # show its answer; nothing is held for confirmation.
@@ -551,7 +560,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         try:
             await async_update_automation(self.coordinator.hass, automation, target_id)
         except ClaudeError as err:
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
         return self._reply(user_input, chat_log, f"Updated automation: {summary}")
 
     async def _resolve_pending(
@@ -643,7 +652,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         try:
             await async_delete_automation(self.coordinator.hass, config_id)
         except ClaudeError as err:
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
         return self._reply(user_input, chat_log, f"Deleted automation: {summary}")
 
     async def _async_write(
@@ -667,7 +676,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 surface=_surface(user_input),
             )
         except ClaudeError as err:
-            return self._error(user_input, chat_log, err)
+            return await self._error(user_input, chat_log, err)
         return self._reply(user_input, chat_log, f"Done: {summary}")
 
     def _reply(
@@ -704,17 +713,21 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             continue_conversation=chat_log.continue_conversation,
         )
 
-    def _error(
+    async def _error(
         self,
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
-        err: Exception,
+        err: ClaudeError,
     ) -> conversation.ConversationResult:
-        """Build an error response without raising."""
+        """Answer with the error's translation in the conversation's language.
+
+        The exception's own text is detail for the log and is never spoken.
+        """
+        LOGGER.debug("Chat turn failed (%s): %s", err.translation_key, err)
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_error(
             intent.IntentResponseErrorCode.UNKNOWN,
-            str(err) or "Error talking to Claude.",
+            await async_error_message(self.hass, user_input.language, err),
         )
         return conversation.ConversationResult(
             response=response, conversation_id=chat_log.conversation_id
