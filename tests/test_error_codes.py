@@ -200,7 +200,7 @@ async def test_coded_answers_name_their_error(
             413,
             {"error": "prompt too large (max 8 KB)"},
             ClaudeRequestError,
-            "request_rejected",
+            "request_too_large_unsized",
         ),
         (400, None, ClaudeRequestError, "request_rejected"),
         (
@@ -218,18 +218,23 @@ async def test_coded_answers_name_their_error(
             "request_rejected",
         ),
         # A code without the value its message needs.
-        (413, {"code": "prompt_too_large"}, ClaudeRequestError, "request_rejected"),
+        (
+            413,
+            {"code": "prompt_too_large"},
+            ClaudeRequestError,
+            "request_too_large_unsized",
+        ),
         (
             413,
             {"code": "body_too_large", "limit_bytes": 0},
             ClaudeRequestError,
-            "request_rejected",
+            "request_too_large_unsized",
         ),
         (
             413,
             {"code": "body_too_large", "limit_bytes": "big"},
             ClaudeRequestError,
-            "request_rejected",
+            "request_too_large_unsized",
         ),
         (400, {"code": "unknown_field"}, ClaudeRequestError, "request_rejected"),
         (
@@ -352,7 +357,10 @@ async def test_without_a_published_limit_the_addon_decides(
         async for _ in client.async_prompt_stream("x" * 9000):
             pass  # pragma: no cover - refused before the first item
 
-    assert err.value.translation_key == "request_rejected"
+    assert err.value.translation_key == "request_too_large_unsized"
+    assert await async_error_message(hass, "en", err.value) == (
+        "The request is too large for the add-on."
+    )
     assert [call[0] for call in aioclient_mock.mock_calls].count("POST") == 1
 
 
@@ -423,14 +431,16 @@ async def test_stream_error_event_uses_its_code(
     assert err.value.translation_key == key
 
 
-@pytest.mark.parametrize("status", [502, 504])
-async def test_gateway_timeouts_without_a_code_say_so(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, status: int
+@pytest.mark.parametrize(
+    ("status", "key"), [(504, "addon_timeout"), (502, "cannot_connect")]
+)
+async def test_uncoded_gateway_answers(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, status: int, key: str
 ) -> None:
-    """An uncoded 502/504 is still a timeout, not an unreachable add-on."""
+    """An uncoded 504 is a timeout; a 502 means the add-on is not reachable."""
     aioclient_mock.post(_PROMPT_URL, status=status)
 
     with pytest.raises(ClaudeConnectionError) as err:
         await _client(hass).async_prompt("hi")
 
-    assert err.value.translation_key == "addon_timeout"
+    assert err.value.translation_key == key

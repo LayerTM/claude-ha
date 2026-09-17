@@ -15,7 +15,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   needs explicit confirmation; changes being unavailable because the add-on has
   no Home Assistant token; or the add-on taking too long. A timeout or a
   confirmation request is no longer reported as an unreachable add-on or an
-  outdated token.
+  outdated token. With an add-on that does not report codes, a request that is
+  too large now says so, without a number.
 - **Prompts over the add-on's limit are refused before sending.** The limit is
   the one the add-on publishes. An add-on that does not publish one still
   receives the prompt and answers for it.

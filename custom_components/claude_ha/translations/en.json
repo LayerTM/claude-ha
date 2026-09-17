@@ -306,6 +306,9 @@
     "request_too_large": {
       "message": "The request is too large for the add-on. The maximum size is {max_bytes} bytes."
     },
+    "request_too_large_unsized": {
+      "message": "The request is too large for the add-on."
+    },
     "confirmation_required": {
       "message": "This action needs your explicit confirmation before it runs."
     },

@@ -1162,8 +1162,16 @@ def _status_error(status: int) -> ClaudeError:
         return ClaudeRateLimitError()
     if status == HTTPStatus.NOT_FOUND:
         return ClaudeNotFoundError()
-    if status in (HTTPStatus.REQUEST_ENTITY_TOO_LARGE, HTTPStatus.BAD_REQUEST):
+    if status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
+        # Too large, but without a code the answer does not say which limit.
+        return ClaudeRequestError(
+            f"HTTP {status}", translation_key="request_too_large_unsized"
+        )
+    if status == HTTPStatus.BAD_REQUEST:
         return ClaudeRequestError()
-    if status in (HTTPStatus.GATEWAY_TIMEOUT, HTTPStatus.BAD_GATEWAY):
+    if status == HTTPStatus.GATEWAY_TIMEOUT:
         return ClaudeConnectionError(f"HTTP {status}", translation_key="addon_timeout")
+    if status == HTTPStatus.BAD_GATEWAY:
+        # What a proxy answers while the add-on is down or restarting.
+        return ClaudeConnectionError(f"HTTP {status}")
     return ClaudeError()
