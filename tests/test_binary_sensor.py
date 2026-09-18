@@ -38,9 +38,9 @@ async def test_alerts_binary_sensor_on(
     """An active alert set turns the sensor on and surfaces counts + items."""
     items = [
         {
-            "key": "offline:device_tracker.ucg_fiber",
+            "key": "offline:device_tracker.router",
             "critical": True,
-            "line": "Offline: UCG Fiber",
+            "line": "Offline: Router",
         },
         {
             "key": "co2:sensor.bedroom_co2",
