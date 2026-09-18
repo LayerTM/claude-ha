@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The add-on discovery confirmation dialog rendered a translation error
+  instead of its text.** Since 1.13.0 that dialog's title and description use
+  both `{engine}` and `{addon}`, but the config flow only filled in `{addon}`,
+  so anyone completing discovery for any agent saw a raw
+  `Translation [formatjs Error: MISSING_VALUE] ...` string instead of "Do you
+  want to set up Codex using the discovered Codex add-on?". The flow still
+  completed if you clicked through; only the confirmation text was broken.
+
 ## [1.13.0] - 2026-09-18
 
 ### Added

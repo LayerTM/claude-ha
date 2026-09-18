@@ -553,8 +553,9 @@ async def test_discovery_flow(
     assert result["type"] is FlowResultType.FORM
     # Discovery already knows the slug: no "which agent?" step is ever shown.
     assert result["step_id"] == "hassio_confirm"
-    # The confirm description uses {addon}; guard that the placeholder is filled.
+    # The confirm title/description use {engine} and {addon}; guard both are filled.
     assert result["description_placeholders"]["addon"]
+    assert result["description_placeholders"]["engine"]
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.CREATE_ENTRY
