@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.claude_ha import voice
 from custom_components.claude_ha.const import DOMAIN
+from custom_components.claude_ha.engines import engine_for_entry
 from custom_components.claude_ha.voice import (
     ASSIST_PIPELINE_DATA,
     PIPER_ADDON_SLUG,
@@ -195,11 +196,13 @@ async def test_service_setup_voice_success(
 ) -> None:
     """The service resolves the Claude agent and returns the setup result."""
     await setup_integration(hass, mock_config_entry)
+    captured: dict[str, Any] = {}
 
     async def _fake_pipeline(
-        _hass: HomeAssistant, conv_id: str, **_: Any
+        _hass: HomeAssistant, conv_id: str, **kwargs: Any
     ) -> VoiceSetupResult:
         assert conv_id.startswith("conversation.")
+        captured.update(kwargs)
         return VoiceSetupResult("stt.whisper", "tts.piper", "pipeline-1")
 
     monkeypatch.setattr(
@@ -217,6 +220,10 @@ async def test_service_setup_voice_success(
     assert response["created_pipeline"] is True
     assert response["pipeline_id"] == "pipeline-1"
     assert response["tts_voice"] == "uk_UA-ukrainian_tts-medium"
+    # The default pipeline name uses the entry's own engine name, not a literal.
+    engine = engine_for_entry(mock_config_entry)
+    assert engine is not None
+    assert captured["pipeline_name"] == f"{engine.name} (uk)"
 
 
 async def test_service_setup_voice_unknown_language(

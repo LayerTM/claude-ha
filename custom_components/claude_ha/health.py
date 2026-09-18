@@ -32,6 +32,8 @@ from .const import (
     MCP_UNREACHABLE_DEBOUNCE_POLLS,
     MODE_READ,
 )
+from .coordinator import ClaudeConfigEntry
+from .engines import engine_for_entry
 from .issues import async_clear_issues, async_raise_issue
 
 # All health issues, each with its severity and a doc link for the fix.
@@ -177,8 +179,15 @@ def debounce_mcp_unreachable(
 
 
 @callback
-def async_apply(hass: HomeAssistant, entry_id: str, report: HealthReport) -> None:
+def async_apply(
+    hass: HomeAssistant, entry: ClaudeConfigEntry, report: HealthReport
+) -> None:
     """Raise the entry's active health issue and clear its others."""
+    entry_id = entry.entry_id
+    engine = engine_for_entry(entry)
+    assert engine is not None
+    placeholders = {"engine": engine.name, "addon": engine.addon_name}
+
     for issue, (severity, learn_more_url) in _ISSUES.items():
         if issue == report.problem:
             async_raise_issue(
@@ -187,6 +196,7 @@ def async_apply(hass: HomeAssistant, entry_id: str, report: HealthReport) -> Non
                 issue,
                 severity=severity,
                 learn_more_url=learn_more_url,
+                placeholders=placeholders,
             )
         else:
             async_clear_issues(hass, entry_id, issue)
@@ -200,6 +210,7 @@ def async_apply(hass: HomeAssistant, entry_id: str, report: HealthReport) -> Non
             ISSUE_CAMERA_VISION_NO_CAMERAS,
             severity=ir.IssueSeverity.WARNING,
             learn_more_url="https://www.home-assistant.io/voice_control/voice_remote_expose_devices/",
+            placeholders=placeholders,
         )
     else:
         async_clear_issues(hass, entry_id, ISSUE_CAMERA_VISION_NO_CAMERAS)

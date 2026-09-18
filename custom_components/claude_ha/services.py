@@ -45,6 +45,7 @@ from .const import (
     SERVICE_SETUP_VOICE,
 )
 from .coordinator import ClaudeConfigEntry
+from .engines import engine_for_entry
 from .voice import DEFAULT_WHISPER_MODEL, async_setup_voice_pipeline, default_voice
 
 ASK_SCHEMA = vol.Schema(
@@ -202,13 +203,16 @@ async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:
             translation_placeholders={"language": language},
         )
 
+    engine = engine_for_entry(entry)
+    assert engine is not None
     result = await async_setup_voice_pipeline(
         hass,
         conversation_entity_id,
         language=language,
         whisper_model=call.data.get(ATTR_STT_MODEL, DEFAULT_WHISPER_MODEL),
         piper_voice=voice,
-        pipeline_name=call.data.get(ATTR_PIPELINE_NAME) or f"Claude ({language})",
+        pipeline_name=call.data.get(ATTR_PIPELINE_NAME)
+        or f"{engine.name} ({language})",
     )
     return {
         "stt_engine": result.stt_engine,

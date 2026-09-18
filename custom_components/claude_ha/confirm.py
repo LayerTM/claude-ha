@@ -21,6 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import ClaudeError, Proposal
 from .const import DOMAIN, EVENT_ACTION_EXECUTED, LOGGER, MODE_WRITE
+from .engines import engine_for_entry
 
 EVENT_MOBILE_APP_ACTION = "mobile_app_notification_action"
 APPROVE_PREFIX = "CLAUDE_HA_APPROVE_"
@@ -34,7 +35,8 @@ DATA_PENDING_CHAT = f"{DOMAIN}_pending_chat"
 
 PENDING_TTL = timedelta(minutes=10)
 CHAT_PENDING_TTL = timedelta(minutes=2)
-LOGBOOK_NAME = "Claude"
+# Logbook actor name when the proposal's entry no longer exists.
+_UNKNOWN_ENGINE_NAME = "the agent"
 
 
 @dataclass(slots=True)
@@ -104,7 +106,9 @@ async def async_send_proposal_notification(
         expires_at=dt_util.utcnow() + PENDING_TTL,
     )
 
-    message = f"Claude suggests: {proposal.summary or 'a change'}."
+    engine = engine_for_entry(entry)
+    assert engine is not None
+    message = f"{engine.name} suggests: {proposal.summary or 'a change'}."
     targets = sorted({t for item in proposal.intents for t in item.get("targets", [])})
     if targets:
         message += f" Affects: {', '.join(targets)}."
@@ -150,13 +154,20 @@ async def _async_handle_action(hass: HomeAssistant, event: Event) -> None:
         LOGGER.warning("Claude proposal %s is unknown or expired", pid)
         return
 
+    entry = hass.config_entries.async_get_entry(proposal.entry_id)
+    if entry is None:
+        logbook_name = _UNKNOWN_ENGINE_NAME
+    else:
+        engine = engine_for_entry(entry)
+        assert engine is not None
+        logbook_name = engine.name
+
     if not approve:
         logbook.async_log_entry(
-            hass, LOGBOOK_NAME, f"dismissed the proposal: {proposal.summary}", DOMAIN
+            hass, logbook_name, f"dismissed the proposal: {proposal.summary}", DOMAIN
         )
         return
 
-    entry = hass.config_entries.async_get_entry(proposal.entry_id)
     if entry is None or entry.state is not ConfigEntryState.LOADED:
         LOGGER.error("Cannot apply Claude proposal: config entry not loaded")
         return
@@ -172,12 +183,12 @@ async def _async_handle_action(hass: HomeAssistant, event: Event) -> None:
     except ClaudeError as err:
         LOGGER.error("Claude write failed: %s", err)
         logbook.async_log_entry(
-            hass, LOGBOOK_NAME, f"could not apply: {proposal.summary} ({err})", DOMAIN
+            hass, logbook_name, f"could not apply: {proposal.summary} ({err})", DOMAIN
         )
         return
 
     logbook.async_log_entry(
-        hass, LOGBOOK_NAME, f"applied the proposal: {proposal.summary}", DOMAIN
+        hass, logbook_name, f"applied the proposal: {proposal.summary}", DOMAIN
     )
     hass.bus.async_fire(
         EVENT_ACTION_EXECUTED,

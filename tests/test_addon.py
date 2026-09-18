@@ -10,9 +10,21 @@ from custom_components.claude_ha.addon import (
     get_addon_manager,
     get_addon_watch,
 )
+from custom_components.claude_ha.engines import CLAUDE, Engine
 from homeassistant.core import HomeAssistant
 
 from .conftest import TEST_SLUG
+
+OTHER_ENGINE = Engine(
+    key="other",
+    name="Other",
+    addon_name="Other Agent",
+    slug_suffix="_other-agent",
+    manufacturer="Someone",
+    device_model="Other Agent add-on",
+    repository_url="https://github.com/LayerTM/OtherInHA",
+)
+OTHER_SLUG = "xyz_other-agent"
 
 
 def test_get_addon_manager_is_cached(hass: HomeAssistant) -> None:
@@ -40,6 +52,49 @@ async def test_resolve_every_installed_match(hass: HomeAssistant) -> None:
         return_value={TEST_SLUG: {}, "local_claude-code": {}, "other_addon": {}},
     ):
         assert await async_find_addon_slugs(hass) == [TEST_SLUG, "local_claude-code"]
+
+
+def _engine_for_slug(slug: str) -> Engine | None:
+    """Map a slug to one of two engines, for tests that must tell them apart."""
+    if slug.endswith(CLAUDE.slug_suffix):
+        return CLAUDE
+    if slug.endswith(OTHER_ENGINE.slug_suffix):
+        return OTHER_ENGINE
+    return None
+
+
+async def test_resolve_installed_filters_by_engine(hass: HomeAssistant) -> None:
+    """Passing ``engine`` returns only that engine's installed add-ons."""
+    with (
+        patch(
+            "custom_components.claude_ha.addon.get_addons_info",
+            return_value={TEST_SLUG: {}, OTHER_SLUG: {}},
+        ),
+        patch("custom_components.claude_ha.addon.engine_for_slug", _engine_for_slug),
+    ):
+        assert await async_find_addon_slugs(hass, engine=CLAUDE) == [TEST_SLUG]
+        assert await async_find_addon_slugs(hass, engine=OTHER_ENGINE) == [OTHER_SLUG]
+        assert await async_find_addon_slugs(hass) == sorted([TEST_SLUG, OTHER_SLUG])
+
+
+async def test_resolve_store_filters_by_engine(hass: HomeAssistant) -> None:
+    """Passing ``engine`` returns only that engine's store add-ons."""
+    client = MagicMock()
+    client.store.addons_list = _async_return(
+        [
+            MagicMock(slug=TEST_SLUG, installed=False),
+            MagicMock(slug=OTHER_SLUG, installed=False),
+        ]
+    )
+    with (
+        patch("custom_components.claude_ha.addon.get_addons_info", return_value={}),
+        patch(
+            "custom_components.claude_ha.addon.get_supervisor_client",
+            return_value=client,
+        ),
+        patch("custom_components.claude_ha.addon.engine_for_slug", _engine_for_slug),
+    ):
+        assert await async_find_addon_slugs(hass, engine=OTHER_ENGINE) == [OTHER_SLUG]
 
 
 async def test_resolve_every_store_match(hass: HomeAssistant) -> None:

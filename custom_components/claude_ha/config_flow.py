@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from aiohasupervisor.models import StoreAddRepository
 import voluptuous as vol
 
 from homeassistant.components.hassio import (
@@ -12,6 +13,7 @@ from homeassistant.components.hassio import (
     AddonInfo,
     AddonManager,
     AddonState,
+    get_supervisor_client,
 )
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -44,9 +46,10 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
-from .engines import Engine, engine_for_slug
+from .engines import ENGINES, Engine, engine_for_entry, engine_for_slug
 
 ON_SUPERVISOR_SCHEMA = vol.Schema({vol.Required(CONF_USE_ADDON, default=True): bool})
+ADD_REPOSITORY_SCHEMA = vol.Schema({vol.Required("confirm", default=False): bool})
 
 # The add-on slug picked in the "pick_addon" step.
 CONF_ADDON = "addon"
@@ -67,6 +70,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Init flow state."""
         self._addon_slug: str | None = None
+        self._engine_key: str | None = None
         self._discovery: dict[str, Any] | None = None
         self._addon_choices: list[str] = []
         self.install_task: asyncio.Task[None] | None = None
@@ -78,7 +82,102 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle a user-initiated flow. Requires Supervisor + the add-on."""
         if not is_hassio(self.hass):
             return self.async_abort(reason="not_hassio")
+        return await self.async_step_engine()
+
+    async def async_step_engine(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask which AI agent this entry talks to."""
+        if user_input is not None:
+            self._engine_key = user_input[CONF_ENGINE]
+            return await self.async_step_resolve_engine()
+        return self.async_show_form(
+            step_id="engine",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ENGINE): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=engine.key, label=engine.name
+                                )
+                                for engine in ENGINES.values()
+                            ]
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_resolve_engine(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Resolve the chosen engine's add-on slug, then continue the flow."""
+        result = await self._async_resolve_slug()
+        if result is not None:
+            return result
         return await self.async_step_on_supervisor()
+
+    async def _async_resolve_slug(self) -> ConfigFlowResult | None:
+        """Find the chosen engine's add-on slug.
+
+        On success, sets ``self._addon_slug`` and returns ``None`` (the caller
+        proceeds); otherwise returns the step the caller should show instead:
+        a choice between several candidates, or an offer to add the engine's
+        add-on repository when none was found.
+        """
+        assert self._engine_key is not None
+        engine = ENGINES[self._engine_key]
+        slugs = await async_find_addon_slugs(self.hass, engine=engine)
+        if not slugs:
+            return await self.async_step_add_repository()
+        if len(slugs) > 1:
+            configured = self._async_current_ids(include_ignore=False)
+            slugs = [slug for slug in slugs if slug not in configured]
+            if not slugs:
+                return self.async_abort(reason="already_configured")
+            if len(slugs) > 1:
+                self._addon_choices = slugs
+                return await self.async_step_pick_addon()
+        self._addon_slug = slugs[0]
+        return None
+
+    async def async_step_add_repository(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Offer to add the chosen engine's add-on repository to the store."""
+        engine = self._engine
+        if user_input is None:
+            return self.async_show_form(
+                step_id="add_repository",
+                data_schema=ADD_REPOSITORY_SCHEMA,
+                description_placeholders={
+                    "engine": engine.name,
+                    "addon": engine.addon_name,
+                    "repository_url": engine.repository_url,
+                },
+            )
+        if not user_input["confirm"]:
+            return self.async_abort(reason="repository_not_added")
+
+        try:
+            client = get_supervisor_client(self.hass)
+            await client.store.add_repository(
+                StoreAddRepository(repository=engine.repository_url)
+            )
+            await client.store.reload()
+        except Exception as err:  # noqa: BLE001 - Supervisor store may be unavailable
+            LOGGER.error(
+                "Failed to add the %s add-on repository: %s", engine.addon_name, err
+            )
+            return self.async_abort(reason="addon_get_discovery_info_failed")
+
+        result = await self._async_resolve_slug()
+        if result is None:
+            return await self.async_step_on_supervisor()
+        if result["step_id"] == "add_repository":
+            return self.async_abort(reason="addon_not_found")
+        return result
 
     async def async_step_hassio(
         self, discovery_info: HassioServiceInfo
@@ -117,21 +216,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_on_supervisor(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Resolve the add-on and branch on its install/run state."""
-        if self._addon_slug is None:
-            slugs = await async_find_addon_slugs(self.hass)
-            if not slugs:
-                return self.async_abort(reason="addon_not_found")
-            if len(slugs) > 1:
-                configured = self._async_current_ids(include_ignore=False)
-                slugs = [slug for slug in slugs if slug not in configured]
-                if not slugs:
-                    return self.async_abort(reason="already_configured")
-                if len(slugs) > 1:
-                    self._addon_choices = slugs
-                    return await self.async_step_pick_addon()
-            self._addon_slug = slugs[0]
-
+        """Branch on the (already-resolved) add-on's install/run state."""
         if user_input is None:
             return self.async_show_form(
                 step_id="on_supervisor", data_schema=ON_SUPERVISOR_SCHEMA
@@ -276,11 +361,18 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @property
     def _engine(self) -> Engine:
-        """The engine of the add-on this flow sets up (once its slug is known)."""
-        assert self._addon_slug is not None
-        engine = engine_for_slug(self._addon_slug)
-        assert engine is not None
-        return engine
+        """The engine of the add-on this flow sets up.
+
+        Resolved from the add-on slug once it is known; before that (only
+        while ``add_repository`` is showing its form, ahead of a slug) it is
+        the engine chosen in the ``engine`` step.
+        """
+        if self._addon_slug is not None:
+            engine = engine_for_slug(self._addon_slug)
+            assert engine is not None
+            return engine
+        assert self._engine_key is not None
+        return ENGINES[self._engine_key]
 
     @property
     def _addon_manager(self) -> AddonManager:
@@ -333,6 +425,8 @@ class ClaudeOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
+        engine = engine_for_entry(self.config_entry)
+        assert engine is not None
         options = self.config_entry.options
         schema = vol.Schema(
             {
@@ -352,4 +446,8 @@ class ClaudeOptionsFlow(OptionsFlow):
                 ): bool,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            description_placeholders={"engine": engine.name},
+        )

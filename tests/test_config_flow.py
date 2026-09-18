@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -18,6 +18,7 @@ from custom_components.claude_ha.const import (
     CONF_USE_ADDON,
     DOMAIN,
 )
+from custom_components.claude_ha.engines import CLAUDE
 from homeassistant.components.hassio import AddonError, AddonState
 from homeassistant.config_entries import SOURCE_HASSIO, SOURCE_USER
 from homeassistant.core import HomeAssistant
@@ -33,6 +34,8 @@ from .conftest import (
     make_addon_info,
 )
 
+OTHER_SLUG = "local_claude-code"
+
 
 @pytest.fixture
 def mock_on_supervisor() -> Generator[None]:
@@ -47,6 +50,24 @@ def mock_on_supervisor() -> Generator[None]:
         yield
 
 
+async def _select_engine(
+    hass: HomeAssistant, flow_id: str, engine: str = "claude"
+) -> dict[str, Any]:
+    """Submit the engine-picker step."""
+    return await hass.config_entries.flow.async_configure(
+        flow_id, {CONF_ENGINE: engine}
+    )
+
+
+async def _start_and_pick_engine(hass: HomeAssistant) -> dict[str, Any]:
+    """Init a user-initiated flow and get past the engine step."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["step_id"] == "engine"
+    return await _select_engine(hass, result["flow_id"])
+
+
 def _discovery_info(
     token: str = TEST_TOKEN, slug: str = TEST_SLUG
 ) -> HassioServiceInfo:
@@ -56,6 +77,18 @@ def _discovery_info(
         slug=slug,
         uuid="1234",
     )
+
+
+def _store_client(*, add_error: bool = False, reload_error: bool = False) -> MagicMock:
+    """Build a Supervisor client mock with an awaitable store."""
+    client = MagicMock()
+    client.store.add_repository = AsyncMock(
+        side_effect=RuntimeError("boom") if add_error else None
+    )
+    client.store.reload = AsyncMock(
+        side_effect=RuntimeError("boom") if reload_error else None
+    )
+    return client
 
 
 async def test_user_flow_not_hassio(hass: HomeAssistant) -> None:
@@ -68,8 +101,24 @@ async def test_user_flow_not_hassio(hass: HomeAssistant) -> None:
     assert result["reason"] == "not_hassio"
 
 
-async def test_user_flow_addon_not_found(hass: HomeAssistant) -> None:
-    """If the add-on cannot be located, the flow aborts."""
+async def test_user_flow_shows_engine_step_with_one_option(
+    hass: HomeAssistant,
+) -> None:
+    """The user-initiated flow asks which agent first; one row today = one option."""
+    with patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "engine"
+    ((_key, engine_selector),) = result["data_schema"].schema.items()
+    assert engine_selector.config["options"] == [{"value": "claude", "label": "Claude"}]
+
+
+async def test_user_flow_addon_not_found_offers_the_repository(
+    hass: HomeAssistant,
+) -> None:
+    """No slug found for the chosen engine offers to add its repository."""
     with (
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         patch(
@@ -77,11 +126,172 @@ async def test_user_flow_addon_not_found(hass: HomeAssistant) -> None:
             return_value=[],
         ),
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": SOURCE_USER}
+        result = await _start_and_pick_engine(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "add_repository"
+    assert result["description_placeholders"] == {
+        "engine": "Claude",
+        "addon": "Claude Code",
+        "repository_url": CLAUDE.repository_url,
+    }
+
+
+async def test_add_repository_declined_aborts(hass: HomeAssistant) -> None:
+    """Declining to add the repository aborts without touching the Supervisor."""
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[],
+        ),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm": False}
+        )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "repository_not_added"
+
+
+async def test_add_repository_confirmed_and_found_proceeds(
+    hass: HomeAssistant,
+    mock_addon_manager: MagicMock,
+    mock_status: None,
+    mock_setup_entry: MagicMock,
+) -> None:
+    """Confirming adds the repository, reloads the store, and re-resolves."""
+    calls = 0
+
+    async def _find_slugs(_hass: HomeAssistant, engine: Any = None) -> list[str]:
+        nonlocal calls
+        calls += 1
+        return [] if calls == 1 else [TEST_SLUG]
+
+    client = _store_client()
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            side_effect=_find_slugs,
+        ),
+        patch(
+            "custom_components.claude_ha.config_flow.get_supervisor_client",
+            return_value=client,
+        ),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm": True}
+        )
+    assert result["step_id"] == "on_supervisor"
+    client.store.add_repository.assert_called_once()
+    (added,) = client.store.add_repository.call_args[0]
+    assert added.repository == CLAUDE.repository_url
+    client.store.reload.assert_called_once()
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_USE_ADDON: True}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ADDON_SLUG] == TEST_SLUG
+
+
+async def test_add_repository_confirmed_still_empty_aborts(
+    hass: HomeAssistant,
+) -> None:
+    """Still nothing found after adding the repository: addon_not_found."""
+    client = _store_client()
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.claude_ha.config_flow.get_supervisor_client",
+            return_value=client,
+        ),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm": True}
         )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "addon_not_found"
+
+
+async def test_add_repository_confirmed_finds_several_shows_pick_addon(
+    hass: HomeAssistant,
+) -> None:
+    """Adding the repository can surface more than one candidate too."""
+    calls = 0
+
+    async def _find_slugs(_hass: HomeAssistant, engine: Any = None) -> list[str]:
+        nonlocal calls
+        calls += 1
+        return [] if calls == 1 else [TEST_SLUG, OTHER_SLUG]
+
+    client = _store_client()
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            side_effect=_find_slugs,
+        ),
+        patch(
+            "custom_components.claude_ha.config_flow.get_supervisor_client",
+            return_value=client,
+        ),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm": True}
+        )
+    assert result["step_id"] == "pick_addon"
+
+
+async def test_add_repository_supervisor_error_aborts(hass: HomeAssistant) -> None:
+    """A Supervisor error while adding the repository aborts cleanly."""
+    client = _store_client(add_error=True)
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.claude_ha.config_flow.get_supervisor_client",
+            return_value=client,
+        ),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm": True}
+        )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "addon_get_discovery_info_failed"
+
+
+async def test_add_repository_reload_error_aborts(hass: HomeAssistant) -> None:
+    """A Supervisor error while reloading the store aborts cleanly too."""
+    client = _store_client(reload_error=True)
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.claude_ha.config_flow.get_supervisor_client",
+            return_value=client,
+        ),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"confirm": True}
+        )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "addon_get_discovery_info_failed"
 
 
 async def test_user_flow_addon_running(
@@ -91,9 +301,7 @@ async def test_user_flow_addon_running(
     mock_status: None,
 ) -> None:
     """Happy path: the add-on is already running."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "on_supervisor"
 
@@ -116,9 +324,7 @@ async def test_user_flow_addon_required(
     hass: HomeAssistant, mock_on_supervisor: None, mock_addon_manager: MagicMock
 ) -> None:
     """Declining the add-on aborts the flow."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: False}
     )
@@ -131,9 +337,7 @@ async def test_user_flow_addon_info_failed(
 ) -> None:
     """A Supervisor error while reading add-on info aborts."""
     mock_addon_manager.async_get_addon_info.side_effect = AddonError("boom")
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -175,9 +379,7 @@ async def test_user_flow_installs_and_starts(
         AddonState.NOT_INSTALLED
     )
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -199,9 +401,7 @@ async def test_user_flow_starts_stopped_addon(
         AddonState.NOT_RUNNING
     )
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -220,9 +420,7 @@ async def test_user_flow_install_fails(
     )
     mock_addon_manager.async_schedule_install_addon.side_effect = AddonError("nope")
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -241,9 +439,7 @@ async def test_user_flow_start_fails(
     )
     mock_addon_manager.async_schedule_start_addon.side_effect = AddonError("nope")
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -261,9 +457,7 @@ async def test_user_flow_cannot_connect(
 ) -> None:
     """A running add-on that fails the status check aborts."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", status=500)
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -279,9 +473,7 @@ async def test_finish_options_fallback(
 ) -> None:
     """When discovery info is empty, host/port/token come from add-on options."""
     mock_addon_manager.async_get_addon_discovery_info.return_value = {}
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -297,9 +489,7 @@ async def test_finish_discovery_info_failed(
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
     mock_addon_manager.async_get_addon_info.return_value.options.clear()
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -317,9 +507,7 @@ async def test_finish_discovery_info_addon_error(
         AddonError("x"),
     ]
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
@@ -333,11 +521,12 @@ async def test_discovery_flow(
     mock_addon_manager: MagicMock,
     mock_status: None,
 ) -> None:
-    """Add-on discovery leads to a confirm step and entry creation."""
+    """Add-on discovery skips the engine step and leads straight to confirm."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_HASSIO}, data=_discovery_info()
     )
     assert result["type"] is FlowResultType.FORM
+    # Discovery already knows the slug: no "which agent?" step is ever shown.
     assert result["step_id"] == "hassio_confirm"
     # The confirm description uses {addon}; guard that the placeholder is filled.
     assert result["description_placeholders"]["addon"]
@@ -382,17 +571,12 @@ async def test_user_flow_already_configured(
 ) -> None:
     """A second user-initiated setup aborts on the existing unique id."""
     mock_config_entry.add_to_hass(hass)
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: True}
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
-
-
-OTHER_SLUG = "local_claude-code"
 
 
 def _on_supervisor_with(slugs: list[str]) -> Any:
@@ -414,9 +598,7 @@ async def test_user_flow_asks_which_addon(
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": SOURCE_USER}
-        )
+        result = await _start_and_pick_engine(hass)
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "pick_addon"
 
@@ -445,9 +627,7 @@ async def test_user_flow_skips_the_configured_addon(
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": SOURCE_USER}
-        )
+        result = await _start_and_pick_engine(hass)
         assert result["step_id"] == "on_supervisor"
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_USE_ADDON: True}
@@ -466,8 +646,6 @@ async def test_user_flow_every_addon_configured(
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": SOURCE_USER}
-        )
+        result = await _start_and_pick_engine(hass)
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"

@@ -34,6 +34,7 @@ from .conftest import (
     ACCOUNT_LIMITS_PAYLOAD,
     STATUS_PAYLOAD,
     TEST_BASE_URL,
+    TEST_SLUG,
     USAGE_PAYLOAD,
     make_addon_info,
     setup_integration,
@@ -210,12 +211,15 @@ async def test_outage_warns_once_and_raises_repair(
     assert [r.levelno for r in warnings] == [logging.WARNING]
     assert "not been running" in warnings[0].getMessage()
     registry = ir.async_get(hass)
-    assert (
-        registry.async_get_issue(
-            DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
-        )
-        is not None
+    issue = registry.async_get_issue(
+        DOMAIN, entry_issue_id(ISSUE_ADDON_NOT_RUNNING, mock_config_entry.entry_id)
     )
+    assert issue is not None
+    assert issue.translation_placeholders == {
+        "engine": "Claude",
+        "addon": "Claude Code",
+        "addon_slug": TEST_SLUG,
+    }
 
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
     _serve(aioclient_mock, up=True)
