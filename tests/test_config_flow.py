@@ -18,7 +18,7 @@ from custom_components.claude_ha.const import (
     CONF_USE_ADDON,
     DOMAIN,
 )
-from custom_components.claude_ha.engines import CLAUDE
+from custom_components.claude_ha.engines import CLAUDE, CODEX
 from homeassistant.components.hassio import AddonError, AddonState
 from homeassistant.config_entries import SOURCE_HASSIO, SOURCE_USER
 from homeassistant.core import HomeAssistant
@@ -101,10 +101,10 @@ async def test_user_flow_not_hassio(hass: HomeAssistant) -> None:
     assert result["reason"] == "not_hassio"
 
 
-async def test_user_flow_shows_engine_step_with_one_option(
+async def test_user_flow_shows_engine_step_with_every_engine(
     hass: HomeAssistant,
 ) -> None:
-    """The user-initiated flow asks which agent first; one row today = one option."""
+    """The user-initiated flow asks which agent first, one option per engine row."""
     with patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": SOURCE_USER}
@@ -112,7 +112,10 @@ async def test_user_flow_shows_engine_step_with_one_option(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "engine"
     ((_key, engine_selector),) = result["data_schema"].schema.items()
-    assert engine_selector.config["options"] == [{"value": "claude", "label": "Claude"}]
+    assert engine_selector.config["options"] == [
+        {"value": "claude", "label": "Claude"},
+        {"value": "codex", "label": "Codex"},
+    ]
 
 
 async def test_user_flow_addon_not_found_offers_the_repository(
@@ -133,6 +136,28 @@ async def test_user_flow_addon_not_found_offers_the_repository(
         "engine": "Claude",
         "addon": "Claude Code",
         "repository_url": CLAUDE.repository_url,
+    }
+
+
+async def test_user_flow_can_pick_codex(hass: HomeAssistant) -> None:
+    """Picking Codex resolves to Codex's own identity, not Claude's."""
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        patch(
+            "custom_components.claude_ha.config_flow.async_find_addon_slugs",
+            return_value=[],
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        result = await _select_engine(hass, result["flow_id"], "codex")
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "add_repository"
+    assert result["description_placeholders"] == {
+        "engine": "Codex",
+        "addon": "Codex",
+        "repository_url": CODEX.repository_url,
     }
 
 

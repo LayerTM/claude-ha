@@ -87,10 +87,16 @@ there is nothing to type in.
 ## Requirements
 
 - Home Assistant OS or Supervised (the integration manages a Supervisor add-on).
-- The [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA). Home Assistant
-  doesn't ship it, so add its repository URL —
-  `https://github.com/LayerTM/ClaudeInHA` — to your add-on store once, then
-  install the add-on from there.
+- One companion add-on for the AI agent you want to talk to — Home Assistant
+  doesn't ship either, so add the repository URL for the one you want to your
+  add-on store once, then install the add-on from there:
+  - [Claude Code](https://github.com/LayerTM/ClaudeInHA) —
+    `https://github.com/LayerTM/ClaudeInHA`
+  - [Codex](https://github.com/LayerTM/CodexInHA) —
+    `https://github.com/LayerTM/CodexInHA`
+
+  The integration's setup flow can also add the repository for you once you
+  pick which agent to set up (Settings → Devices & services → Add integration).
 
 ## Installation
 
@@ -107,9 +113,9 @@ yet, it offers to add it.
    HACS asks to add the repository first.) You can also search HACS for
    `claude-ha`, which matches only this integration.
 2. Restart Home Assistant.
-3. Install the Claude Code add-on. Once it starts, Home Assistant offers to set
-   up the **AI Agent** integration automatically — accept it. No configuration
-   needed.
+3. Install the Claude Code or Codex add-on. Once it starts, Home Assistant
+   offers to set up the **AI Agent** integration automatically — accept it. No
+   configuration needed.
 
 Neither route working? Add `LayerTM/claude-ha` as a **custom repository**
 (category *Integration*). If HACS replies that the repository already exists in
@@ -122,13 +128,15 @@ Copy `custom_components/claude_ha` into your Home Assistant
 
 ## Configuration
 
-Setup is zero-touch: when the Claude Code add-on starts it advertises its host,
+Setup is zero-touch: when a companion add-on starts it advertises its host,
 port and a freshly generated token through Supervisor discovery, and Home
 Assistant surfaces a one-click setup. You can also add it from **Settings →
-Devices & services → Add integration → AI Agent**; it will find, install and start
-the add-on for you. There are no options to fill in. If more than one Claude
-Code add-on is installed (for example a store build and a local build), setup
-asks which one to use; each one can be set up as its own entry.
+Devices & services → Add integration → AI Agent**, which first asks which
+agent to set up, then finds, installs (offering to add its repository if
+needed) and starts the add-on for you. There are no options to fill in. If
+more than one add-on of the chosen agent is installed (for example a store
+build and a local build), setup asks which one to use; each one can be set up
+as its own entry, one agent per entry.
 
 Each entry remembers which AI engine its add-on runs and checks it on every
 status poll. If the add-on ever reports a different engine, the entry goes

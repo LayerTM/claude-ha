@@ -49,7 +49,19 @@ CLAUDE: Final = Engine(
     repository_url="https://github.com/LayerTM/ClaudeInHA",
 )
 
-ENGINES: Final[Mapping[str, Engine]] = {engine.key: engine for engine in (CLAUDE,)}
+CODEX: Final = Engine(
+    key="codex",
+    name="Codex",
+    addon_name="Codex",
+    slug_suffix="_codex",
+    manufacturer="OpenAI",
+    device_model="Codex add-on",
+    repository_url="https://github.com/LayerTM/CodexInHA",
+)
+
+ENGINES: Final[Mapping[str, Engine]] = {
+    engine.key: engine for engine in (CLAUDE, CODEX)
+}
 
 # The engine of everything that predates the engine field: entries created
 # before it was stored, and add-ons whose /api/status does not report one. Only
