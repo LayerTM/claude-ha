@@ -258,7 +258,10 @@ async def test_discovery_of_an_addon_with_another_engine_aborts(
             uuid="1234",
         ),
     )
-    assert result["description_placeholders"] == {"addon": "Claude Code"}
+    assert result["description_placeholders"] == {
+        "addon": "Claude Code",
+        "engine": "Claude",
+    }
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 

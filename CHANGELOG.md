@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Several setup-flow steps rendered a translation error instead of their
+  text.** Since 1.13.0 the discovery-confirm, manual-setup, and add-on-picker
+  steps' strings use `{engine}` and/or `{addon}`, but the config flow only
+  ever filled in `{addon}` where it filled in anything at all — the manual
+  "set it up using the add-on?" and add-on-picker steps supplied no
+  placeholders whatsoever, and the two install/start progress dialogs missed
+  `{addon}` too. Anyone completing setup for any agent, by any path, saw a raw
+  `Translation [formatjs Error: MISSING_VALUE] ...` string somewhere instead
+  of that step's text. The flow itself still worked; only the shown text was
+  broken.
+
 ## [1.13.0] - 2026-09-18
 
 ### Added

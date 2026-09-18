@@ -152,7 +152,6 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id="add_repository",
                 data_schema=ADD_REPOSITORY_SCHEMA,
                 description_placeholders={
-                    "engine": engine.name,
                     "addon": engine.addon_name,
                     "repository_url": engine.repository_url,
                 },
@@ -206,11 +205,15 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         """Confirm setup of the discovered add-on."""
         if user_input is not None:
             return await self.async_step_on_supervisor({CONF_USE_ADDON: True})
-        # The hassio_confirm description uses {addon}; title_placeholders only
-        # fills the flow title, so the step description needs its own placeholder.
+        # The hassio_confirm title/description use both {engine} and {addon};
+        # title_placeholders only fills the flow title, so the step form needs
+        # both placeholders itself.
         return self.async_show_form(
             step_id="hassio_confirm",
-            description_placeholders={"addon": self._engine.addon_name},
+            description_placeholders={
+                "engine": self._engine.name,
+                "addon": self._engine.addon_name,
+            },
         )
 
     async def async_step_on_supervisor(
@@ -219,7 +222,12 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         """Branch on the (already-resolved) add-on's install/run state."""
         if user_input is None:
             return self.async_show_form(
-                step_id="on_supervisor", data_schema=ON_SUPERVISOR_SCHEMA
+                step_id="on_supervisor",
+                data_schema=ON_SUPERVISOR_SCHEMA,
+                description_placeholders={
+                    "engine": self._engine.name,
+                    "addon": self._engine.addon_name,
+                },
             )
         if not user_input[CONF_USE_ADDON]:
             return self.async_abort(reason="addon_required")
@@ -254,6 +262,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 }
             ),
+            description_placeholders={"addon": self._engine.addon_name},
         )
 
     async def async_step_install_addon(
@@ -267,6 +276,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id="install_addon",
                 progress_action="install_addon",
                 progress_task=self.install_task,
+                description_placeholders={"addon": self._engine.addon_name},
             )
         try:
             await self.install_task
@@ -296,6 +306,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id="start_addon",
                 progress_action="start_addon",
                 progress_task=self.start_task,
+                description_placeholders={"addon": self._engine.addon_name},
             )
         try:
             await self.start_task

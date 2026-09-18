@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
+import re
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -23,6 +24,7 @@ from homeassistant.components.hassio import AddonError, AddonState
 from homeassistant.config_entries import SOURCE_HASSIO, SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import translation
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 
 from .conftest import (
@@ -133,7 +135,6 @@ async def test_user_flow_addon_not_found_offers_the_repository(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "add_repository"
     assert result["description_placeholders"] == {
-        "engine": "Claude",
         "addon": "Claude Code",
         "repository_url": CLAUDE.repository_url,
     }
@@ -155,7 +156,6 @@ async def test_user_flow_can_pick_codex(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "add_repository"
     assert result["description_placeholders"] == {
-        "engine": "Codex",
         "addon": "Codex",
         "repository_url": CODEX.repository_url,
     }
@@ -553,8 +553,9 @@ async def test_discovery_flow(
     assert result["type"] is FlowResultType.FORM
     # Discovery already knows the slug: no "which agent?" step is ever shown.
     assert result["step_id"] == "hassio_confirm"
-    # The confirm description uses {addon}; guard that the placeholder is filled.
+    # The confirm title/description use {engine} and {addon}; guard both are filled.
     assert result["description_placeholders"]["addon"]
+    assert result["description_placeholders"]["engine"]
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -674,3 +675,122 @@ async def test_user_flow_every_addon_configured(
         result = await _start_and_pick_engine(hass)
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+
+def _placeholders_used_in(rendered: Mapping[str, str], *prefixes: str) -> set[str]:
+    """Union of every ``{...}`` name in the rendered strings under ``prefixes``."""
+
+    def _under_a_prefix(full_key: str) -> bool:
+        return any(
+            full_key == prefix or full_key.startswith(f"{prefix}.")
+            for prefix in prefixes
+        )
+
+    found: set[str] = set()
+    for full_key, text in rendered.items():
+        if _under_a_prefix(full_key):
+            found.update(_PLACEHOLDER_RE.findall(text))
+    return found
+
+
+async def test_step_placeholders_match_their_own_strings(
+    hass: HomeAssistant,
+    mock_addon_manager: MagicMock,
+    mock_status: None,
+) -> None:
+    """Every step supplies exactly the placeholders its own strings ask for.
+
+    Regression: 1.13.0 added ``{engine}`` to several step strings (title,
+    description, data, data_description, progress) but updated only one of
+    the steps that render them (``add_repository``). The others -- including
+    ``hassio_confirm``, the one most installs actually see -- kept supplying
+    only ``{addon}``, so Home Assistant's frontend rendered a raw formatjs
+    MISSING_VALUE error instead of the step text. Reading this test's
+    intent: temporarily drop ``"engine"`` from any one step's
+    ``description_placeholders`` in config_flow.py and this test is the one
+    that catches it, without a per-step assertion to remember to add.
+    """
+    rendered = await translation.async_get_translations(
+        hass, "en", "config", {DOMAIN}, config_flow=True
+    )
+
+    def required(step_id: str, *, progress: bool = False) -> set[str]:
+        prefixes = [f"component.claude_ha.config.step.{step_id}"]
+        if progress:
+            prefixes.append(f"component.claude_ha.config.progress.{step_id}")
+        return _placeholders_used_in(rendered, *prefixes)
+
+    def shown(result: dict[str, Any]) -> set[str]:
+        return set(result.get("description_placeholders") or {})
+
+    with patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+    assert result["step_id"] == "engine"
+    assert shown(result) == required("engine")
+
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([]),
+    ):
+        result = await _start_and_pick_engine(hass)
+    assert result["step_id"] == "add_repository"
+    assert shown(result) == required("add_repository")
+
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
+    ):
+        result = await _start_and_pick_engine(hass)
+    assert result["step_id"] == "pick_addon"
+    assert shown(result) == required("pick_addon")
+
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([TEST_SLUG]),
+    ):
+        result = await _start_and_pick_engine(hass)
+    assert result["step_id"] == "on_supervisor"
+    assert shown(result) == required("on_supervisor")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_HASSIO}, data=_discovery_info(slug=TEST_SLUG)
+    )
+    assert result["step_id"] == "hassio_confirm"
+    assert shown(result) == required("hassio_confirm")
+
+    mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
+        AddonState.NOT_INSTALLED
+    )
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([TEST_SLUG]),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_USE_ADDON: True}
+        )
+        assert result["step_id"] == "install_addon"
+        assert shown(result) == required("install_addon", progress=True)
+        result = await _advance_progress(hass, result)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+    mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
+        AddonState.NOT_RUNNING
+    )
+    with (
+        patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
+        _on_supervisor_with([OTHER_SLUG]),
+    ):
+        result = await _start_and_pick_engine(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_USE_ADDON: True}
+        )
+        assert result["step_id"] == "start_addon"
+        assert shown(result) == required("start_addon", progress=True)
+        result = await _advance_progress(hass, result)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
