@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18
+
 ### Fixed
 
 - **Several setup-flow steps rendered a translation error instead of their
