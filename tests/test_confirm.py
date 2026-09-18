@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_mock_service,
@@ -138,6 +139,62 @@ async def test_unknown_action_ignored(
     before = _post_count(aioclient_mock)
     await _fire(hass, "SOME_OTHER_APP_ACTION")
     assert _post_count(aioclient_mock) == before
+
+
+async def test_dismiss_logs_the_engine_name(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dismiss logs the entry's engine name, not a hardcoded brand."""
+    from custom_components.claude_ha import confirm
+
+    calls = []
+    monkeypatch.setattr(
+        confirm.logbook, "async_log_entry", lambda *a, **k: calls.append(a)
+    )
+    await setup_integration(hass, mock_config_entry)
+    notify_calls = await _ask_notify(hass, aioclient_mock)
+    await _fire(hass, _actions(notify_calls[0])[1]["action"])
+
+    assert len(calls) == 1
+    assert calls[0][1] == "Claude"
+    assert "dismissed the proposal" in calls[0][2]
+
+
+async def test_dismiss_falls_back_when_entry_removed(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dismiss for a proposal whose entry no longer exists names no brand."""
+    from datetime import timedelta as _timedelta
+
+    from custom_components.claude_ha import confirm
+    from homeassistant.util import dt as dt_util
+
+    calls = []
+    monkeypatch.setattr(
+        confirm.logbook, "async_log_entry", lambda *a, **k: calls.append(a)
+    )
+    await setup_integration(hass, mock_config_entry)
+    confirm.async_setup_confirm(hass)
+    hass.data[confirm.DATA_PENDING]["deadbeef"] = confirm.PendingProposal(
+        entry_id="no-such-entry",
+        prompt="turn off the heater",
+        intents=[],
+        caller=None,
+        summary="Turn off the heater",
+        expires_at=dt_util.utcnow() + _timedelta(minutes=10),
+    )
+
+    await _fire(hass, f"{confirm.DISMISS_PREFIX}deadbeef")
+
+    assert len(calls) == 1
+    assert calls[0][1] == "the agent"
 
 
 async def test_unknown_pid_ignored(

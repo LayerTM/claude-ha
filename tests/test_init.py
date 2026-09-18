@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
+from custom_components.claude_ha import _async_ensure_addon_running
 from custom_components.claude_ha.const import (
     ADDON_OUTAGE_GRACE,
     DOMAIN,
@@ -27,9 +28,10 @@ from custom_components.claude_ha.issues import async_raise_issue, entry_issue_id
 from homeassistant.components.hassio import AddonState
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 
-from .conftest import TEST_BASE_URL, make_addon_info, setup_integration
+from .conftest import TEST_BASE_URL, TEST_SLUG, make_addon_info, setup_integration
 
 
 async def test_setup_and_unload(
@@ -266,3 +268,59 @@ async def test_setup_addon_info_error(
     with patch("custom_components.claude_ha.is_hassio", return_value=True):
         await setup_integration(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def _assert_ensure_addon_running_names_the_addon(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, translation_key: str
+) -> None:
+    mock_config_entry.add_to_hass(hass)
+    with pytest.raises(ConfigEntryNotReady) as excinfo:
+        await _async_ensure_addon_running(hass, mock_config_entry, TEST_SLUG)
+    assert excinfo.value.translation_key == translation_key
+    assert excinfo.value.translation_placeholders == {"addon": "Claude Code"}
+
+
+async def test_ensure_addon_running_names_addon_when_task_in_progress(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
+) -> None:
+    """A pending Supervisor task names the add-on in the retry reason."""
+    mock_addon_manager.task_in_progress.return_value = True
+    await _assert_ensure_addon_running_names_the_addon(
+        hass, mock_config_entry, "addon_not_ready"
+    )
+
+
+async def test_ensure_addon_running_names_addon_on_info_error(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
+) -> None:
+    """A Supervisor error reading add-on info names the add-on in the reason."""
+    from homeassistant.components.hassio import AddonError
+
+    mock_addon_manager.async_get_addon_info.side_effect = AddonError("boom")
+    await _assert_ensure_addon_running_names_the_addon(
+        hass, mock_config_entry, "addon_info_failed"
+    )
+
+
+async def test_ensure_addon_running_names_addon_when_not_installed(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
+) -> None:
+    """A missing add-on names the add-on in the retry reason."""
+    mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
+        AddonState.NOT_INSTALLED
+    )
+    await _assert_ensure_addon_running_names_the_addon(
+        hass, mock_config_entry, "addon_not_installed"
+    )
+
+
+async def test_ensure_addon_running_names_addon_when_stopped(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
+) -> None:
+    """A stopped add-on names the add-on in the retry reason."""
+    mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
+        AddonState.NOT_RUNNING
+    )
+    await _assert_ensure_addon_running_names_the_addon(
+        hass, mock_config_entry, "addon_not_running"
+    )

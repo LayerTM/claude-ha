@@ -2,19 +2,26 @@
   "config": {
     "flow_title": "{addon}",
     "step": {
-      "on_supervisor": {
-        "title": "Set up Claude",
-        "description": "Claude for Home Assistant runs through the Claude Code add-on. Do you want to set it up using the add-on?",
+      "engine": {
+        "title": "Which AI agent?",
+        "description": "Choose which AI agent this entry will talk to.",
         "data": {
-          "use_addon": "Use the Claude Code add-on"
+          "engine": "AI agent"
+        }
+      },
+      "on_supervisor": {
+        "title": "Set up {engine}",
+        "description": "{engine} for Home Assistant runs through the {addon} add-on. Do you want to set it up using the add-on?",
+        "data": {
+          "use_addon": "Use the {addon} add-on"
         },
         "data_description": {
-          "use_addon": "The add-on runs Claude on your Home Assistant host and is required by this integration."
+          "use_addon": "The add-on runs {engine} on your Home Assistant host and is required by this integration."
         }
       },
       "pick_addon": {
-        "title": "Choose the Claude Code add-on",
-        "description": "More than one Claude Code add-on is available. Choose the one to set up.",
+        "title": "Choose the {addon} add-on",
+        "description": "More than one {addon} add-on is available. Choose the one to set up.",
         "data": {
           "addon": "Add-on"
         },
@@ -22,32 +29,43 @@
           "addon": "The add-on's slug, which starts with the repository it comes from."
         }
       },
+      "add_repository": {
+        "title": "Add the {addon} add-on's repository",
+        "description": "The {addon} add-on was not found in your add-on store. Add its repository ({repository_url}) so it can be installed?",
+        "data": {
+          "confirm": "Add the repository"
+        },
+        "data_description": {
+          "confirm": "Adds {repository_url} to your Supervisor add-on store and refreshes it, then looks for the {addon} add-on again."
+        }
+      },
       "hassio_confirm": {
-        "title": "Set up Claude with the Claude Code add-on",
-        "description": "Do you want to set up Claude using the discovered {addon} add-on?"
+        "title": "Set up {engine} with the {addon} add-on",
+        "description": "Do you want to set up {engine} using the discovered {addon} add-on?"
       },
       "install_addon": {
-        "title": "Installing the Claude Code add-on"
+        "title": "Installing the {addon} add-on"
       },
       "start_addon": {
-        "title": "Starting the Claude Code add-on"
+        "title": "Starting the {addon} add-on"
       }
     },
     "progress": {
-      "install_addon": "Please wait while the Claude Code add-on is installed. This can take several minutes.",
-      "start_addon": "Please wait while the Claude Code add-on starts."
+      "install_addon": "Please wait while the {addon} add-on is installed. This can take several minutes.",
+      "start_addon": "Please wait while the {addon} add-on starts."
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
-      "not_hassio": "This integration requires the Home Assistant Supervisor and the Claude Code add-on.",
+      "not_hassio": "This integration requires the Home Assistant Supervisor and a companion add-on.",
       "unsupported_addon": "The discovered add-on is not one this integration supports.",
       "engine_mismatch": "The add-on runs a different AI engine than expected, so it was not set up.",
-      "addon_not_found": "The Claude Code add-on could not be found. Add its repository and install the add-on, then try again.",
-      "addon_required": "The Claude Code add-on is required to use this integration.",
-      "addon_info_failed": "Failed to get the Claude Code add-on info.",
-      "addon_install_failed": "Failed to install the Claude Code add-on.",
-      "addon_start_failed": "Failed to start the Claude Code add-on.",
-      "addon_get_discovery_info_failed": "Failed to get the Claude Code add-on connection details.",
+      "addon_not_found": "The {addon} add-on could not be found even after adding its repository. Check that {repository_url} is a valid add-on repository and try again.",
+      "repository_not_added": "The {addon} add-on's repository was not added, so it can't be installed automatically here. Add {repository_url} to your add-on store yourself, then try again.",
+      "addon_required": "The {addon} add-on is required to use this integration.",
+      "addon_info_failed": "Failed to get the {addon} add-on info.",
+      "addon_install_failed": "Failed to install the {addon} add-on.",
+      "addon_start_failed": "Failed to start the {addon} add-on.",
+      "addon_get_discovery_info_failed": "Failed to get the {addon} add-on connection details.",
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
     }
   },
@@ -58,12 +76,12 @@
         "data": {
           "auto_execute": "Act automatically on benign requests",
           "critical_entities": "Always confirm these entities",
-          "camera_vision": "Let Claude look at cameras"
+          "camera_vision": "Let {engine} look at cameras"
         },
         "data_description": {
-          "auto_execute": "When on, Claude carries out low-risk requests from chat immediately and only asks you to confirm important ones. When off, every change is confirmed first.",
+          "auto_execute": "When on, {engine} carries out low-risk requests from chat immediately and only asks you to confirm important ones. When off, every change is confirmed first.",
           "critical_entities": "Entities that always require confirmation, on top of the automatic per-action risk checks.",
-          "camera_vision": "When on, a clearly visual question (e.g. 'who's at the door?') may send one snapshot of an Assist-exposed camera to Claude. Off by default; snapshots are more sensitive than state."
+          "camera_vision": "When on, a clearly visual question (e.g. 'who's at the door?') may send one snapshot of an Assist-exposed camera to {engine}. Off by default; snapshots are more sensitive than state."
         }
       }
     }
@@ -220,7 +238,7 @@
       "message": "Intents can only be sent with mode 'write'."
     },
     "addon_not_ready": {
-      "message": "The Claude Code add-on is not ready yet."
+      "message": "The {addon} add-on is not ready yet."
     },
     "engine_mismatch": {
       "message": "The add-on runs a different AI engine than this entry was set up for."
@@ -229,13 +247,13 @@
       "message": "This entry was set up for an AI engine that this version of the integration does not support."
     },
     "addon_info_failed": {
-      "message": "Failed to get the Claude Code add-on info."
+      "message": "Failed to get the {addon} add-on info."
     },
     "addon_not_installed": {
-      "message": "The Claude Code add-on is being installed."
+      "message": "The {addon} add-on is being installed."
     },
     "addon_not_running": {
-      "message": "The Claude Code add-on is not running yet."
+      "message": "The {addon} add-on is not running yet."
     },
     "voice_unknown_language": {
       "message": "No default Piper voice is known for the language {language}. Pass a voice via the tts_voice field."
@@ -325,45 +343,45 @@
   "issues": {
     "engine_mismatch": {
       "title": "The add-on runs a different AI engine",
-      "description": "This entry was set up for one AI engine, but its add-on now reports `{engine}`. The entry stays unavailable until they match: restore the add-on it was set up for, or delete this entry and add the add-on again."
+      "description": "This entry was set up for {engine}, but its add-on now reports `{reported_engine}`. The entry stays unavailable until they match: restore the add-on it was set up for, or delete this entry and add the add-on again."
     },
     "addon_not_running": {
-      "title": "The Claude Code add-on is not running",
+      "title": "The {addon} add-on is not running",
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Start the Claude Code add-on",
-            "description": "The Claude Code add-on is installed but not running, so Claude is unavailable. Do you want to start it now?"
+            "title": "Start the {addon} add-on",
+            "description": "The {addon} add-on is installed but not running, so {engine} is unavailable. Do you want to start it now?"
           }
         },
         "abort": {
-          "start_failed": "Failed to start the Claude Code add-on. Check the add-on logs and try again."
+          "start_failed": "Failed to start the {addon} add-on. Check the add-on logs and try again."
         }
       }
     },
     "addon_not_installed": {
-      "title": "The Claude Code add-on is not installed",
-      "description": "Claude is unavailable because the Claude Code add-on is not installed. Home Assistant is trying to install it; check the add-on for progress."
+      "title": "The {addon} add-on is not installed",
+      "description": "{engine} is unavailable because the {addon} add-on is not installed. Home Assistant is trying to install it; check the add-on for progress."
     },
     "not_logged_in": {
-      "title": "Claude isn't logged in",
-      "description": "The Claude Code add-on is running but Claude isn't authenticated, so chat can't answer. Open the Claude Code add-on and run `claude` to log in (or set an OAuth token in the add-on options), then check again."
+      "title": "{engine} isn't logged in",
+      "description": "The {addon} add-on is running but {engine} isn't authenticated, so chat can't answer. Open the {addon} add-on and run `claude` to log in (or set an OAuth token in the add-on options), then check again."
     },
     "no_ha_token": {
-      "title": "Claude has no token to read your home",
-      "description": "Claude is logged in but has no Home Assistant token, so chat can answer general questions but can't see or control your home. Set the 'Prompt API HA Token' (or 'HA Token') in the Claude Code add-on options, then check again."
+      "title": "{engine} has no token to read your home",
+      "description": "{engine} is logged in but has no Home Assistant token, so chat can answer general questions but can't see or control your home. Set the 'Prompt API HA Token' (or 'HA Token') in the {addon} add-on options, then check again."
     },
     "mcp_unreachable": {
-      "title": "Claude can't reach the Model Context Protocol Server",
-      "description": "Claude has a token but the Model Context Protocol Server integration is missing or unreachable, so chat can't see your home. Add it under Settings → Devices & services → Add integration → Model Context Protocol Server, expose entities to Assist, then check again."
+      "title": "{engine} can't reach the Model Context Protocol Server",
+      "description": "{engine} has a token but the Model Context Protocol Server integration is missing or unreachable, so chat can't see your home. Add it under Settings → Devices & services → Add integration → Model Context Protocol Server, expose entities to Assist, then check again."
     },
     "no_exposed_entities": {
       "title": "No entities are exposed to Assist",
-      "description": "Claude can reach your home but nothing is exposed to Assist, so there is nothing for it to see or control. Expose some entities under Settings → Voice assistants → Expose, then check again."
+      "description": "{engine} can reach your home but nothing is exposed to Assist, so there is nothing for it to see or control. Expose some entities under Settings → Voice assistants → Expose, then check again."
     },
     "camera_vision_no_cameras": {
       "title": "Camera vision is on, but no cameras are exposed to Assist",
-      "description": "You turned on 'Let Claude look at cameras', but no camera is exposed to Assist, so Claude can never see one — Home Assistant hides cameras from Assist by default as security devices. Expose the camera(s) you want Claude to see under Settings → Voice assistants → Expose (the high-resolution channel of each camera), then check again."
+      "description": "You turned on 'Let {engine} look at cameras', but no camera is exposed to Assist, so {engine} can never see one — Home Assistant hides cameras from Assist by default as security devices. Expose the camera(s) you want {engine} to see under Settings → Voice assistants → Expose (the high-resolution channel of each camera), then check again."
     },
     "usage_history_reset": {
       "title": "Usage history was reset",

@@ -189,7 +189,10 @@ async def test_engine_mismatch_raises_then_clears_repair(
     issue = _mismatch_issue(hass, mock_config_entry)
     assert issue is not None
     assert issue.translation_key == ISSUE_ENGINE_MISMATCH
-    assert issue.translation_placeholders == {"engine": "other"}
+    assert issue.translation_placeholders == {
+        "engine": "Claude",
+        "reported_engine": "other",
+    }
     assert issue.severity is ir.IssueSeverity.ERROR
 
     aioclient_mock.clear_requests()

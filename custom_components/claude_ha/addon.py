@@ -57,21 +57,34 @@ def _engine(slug: str) -> Engine:
     return engine
 
 
-async def async_find_addon_slugs(hass: HomeAssistant) -> list[str]:
-    """Return every slug a companion add-on of any engine could have, sorted.
+async def async_find_addon_slugs(
+    hass: HomeAssistant, engine: Engine | None = None
+) -> list[str]:
+    """Return every slug a companion add-on could have, sorted.
+
+    ``engine`` narrows the search to that engine's add-on only; the default
+    ``None`` matches any engine's add-on.
 
     Installed add-ons win (the common case: the user installed the add-on,
     which then advertised itself via discovery); only when none is installed
     is the add-on store searched, so the config flow can offer to install one.
     """
-    installed = _find_installed(hass)
+    installed = _find_installed(hass, engine)
     if installed:
         return installed
-    return await _find_in_store(hass)
+    return await _find_in_store(hass, engine)
+
+
+def _matches(slug: str, engine: Engine | None) -> bool:
+    """Whether ``slug`` is an add-on of ``engine`` (any engine if ``None``)."""
+    found = engine_for_slug(slug)
+    if engine is None:
+        return found is not None
+    return found == engine
 
 
 @callback
-def _find_installed(hass: HomeAssistant) -> list[str]:
+def _find_installed(hass: HomeAssistant, engine: Engine | None = None) -> list[str]:
     """Match the slug suffix against installed add-ons (sync Supervisor cache)."""
     try:
         addons = get_addons_info(hass)
@@ -79,10 +92,12 @@ def _find_installed(hass: HomeAssistant) -> list[str]:
         return []
     if not addons:
         return []
-    return sorted(slug for slug in addons if engine_for_slug(slug) is not None)
+    return sorted(slug for slug in addons if _matches(slug, engine))
 
 
-async def _find_in_store(hass: HomeAssistant) -> list[str]:
+async def _find_in_store(
+    hass: HomeAssistant, engine: Engine | None = None
+) -> list[str]:
     """Match the slug suffix against store add-ons that are not yet installed."""
     client = get_supervisor_client(hass)
     try:
@@ -92,7 +107,7 @@ async def _find_in_store(hass: HomeAssistant) -> list[str]:
     return sorted(
         addon.slug
         for addon in store_addons
-        if not addon.installed and engine_for_slug(addon.slug) is not None
+        if not addon.installed and _matches(addon.slug, engine)
     )
 
 
@@ -120,13 +135,18 @@ def async_create_addon_issue(
     hass: HomeAssistant, entry_id: str, issue: str, slug: str, *, fixable: bool
 ) -> None:
     """Raise one entry's repair issue for its missing/stopped add-on."""
+    engine = _engine(slug)
     async_raise_issue(
         hass,
         entry_id,
         issue,
         severity=ir.IssueSeverity.ERROR,
         fixable=fixable,
-        placeholders={"addon_slug": slug},
+        placeholders={
+            "engine": engine.name,
+            "addon": engine.addon_name,
+            "addon_slug": slug,
+        },
         data={"addon_slug": slug},
     )
 

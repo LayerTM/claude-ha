@@ -48,7 +48,7 @@ from .coordinator import (
     ClaudeStatusCoordinator,
     ClaudeUsageCoordinator,
 )
-from .engines import LEGACY_ENGINE, engine_for_entry
+from .engines import LEGACY_ENGINE, engine_for_entry, engine_for_slug
 from .frontend import (
     async_ensure_card_resource,
     async_register_card,
@@ -164,7 +164,7 @@ def _async_setup_health(
         report, mcp_unreachable_streak = debounce_mcp_unreachable(
             report, mcp_unreachable_streak
         )
-        async_apply_health(hass, entry.entry_id, report)
+        async_apply_health(hass, entry, report)
 
     entry.async_on_unload(status.async_add_listener(_refresh_health))
     _refresh_health()
@@ -203,18 +203,24 @@ async def _async_ensure_addon_running(
     stopped one is left to the Supervisor and reported by the add-on watch.
     Clears the issues once it is running.
     """
+    engine = engine_for_slug(slug)
+    assert engine is not None
     addon: AddonManager = get_addon_manager(hass, slug)
 
     if addon.task_in_progress():
         raise ConfigEntryNotReady(
-            translation_domain=DOMAIN, translation_key="addon_not_ready"
+            translation_domain=DOMAIN,
+            translation_key="addon_not_ready",
+            translation_placeholders={"addon": engine.addon_name},
         )
 
     try:
         info = await addon.async_get_addon_info()
     except AddonError as err:
         raise ConfigEntryNotReady(
-            translation_domain=DOMAIN, translation_key="addon_info_failed"
+            translation_domain=DOMAIN,
+            translation_key="addon_info_failed",
+            translation_placeholders={"addon": engine.addon_name},
         ) from err
 
     if info.state is AddonState.NOT_INSTALLED:
@@ -223,7 +229,9 @@ async def _async_ensure_addon_running(
             hass, entry.entry_id, ISSUE_ADDON_NOT_INSTALLED, slug, fixable=False
         )
         raise ConfigEntryNotReady(
-            translation_domain=DOMAIN, translation_key="addon_not_installed"
+            translation_domain=DOMAIN,
+            translation_key="addon_not_installed",
+            translation_placeholders={"addon": engine.addon_name},
         )
 
     if info.state is not AddonState.RUNNING:
@@ -232,7 +240,9 @@ async def _async_ensure_addon_running(
         # the repair (which offers to start it) only if it stays down.
         get_addon_watch(hass, entry.entry_id, slug).async_down(info.state)
         raise ConfigEntryNotReady(
-            translation_domain=DOMAIN, translation_key="addon_not_running"
+            translation_domain=DOMAIN,
+            translation_key="addon_not_running",
+            translation_placeholders={"addon": engine.addon_name},
         )
 
     async_clear_addon_issues(hass, entry.entry_id)

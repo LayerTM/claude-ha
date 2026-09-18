@@ -35,6 +35,8 @@ class Engine:
     slug_suffix: str
     manufacturer: str
     device_model: str
+    # Public GitHub repo URL: where to point a user who lacks the add-on.
+    repository_url: str
 
 
 CLAUDE: Final = Engine(
@@ -44,6 +46,7 @@ CLAUDE: Final = Engine(
     slug_suffix="_claude-code",
     manufacturer="Anthropic",
     device_model="Claude Code add-on",
+    repository_url="https://github.com/LayerTM/ClaudeInHA",
 )
 
 ENGINES: Final[Mapping[str, Engine]] = {engine.key: engine for engine in (CLAUDE,)}

@@ -33,6 +33,7 @@ from .const import (
     SCAN_INTERVAL,
     USAGE_SCAN_INTERVAL,
 )
+from .engines import engine_for_entry
 from .issues import async_clear_issues, async_raise_issue, entry_issue_id
 
 type ClaudeConfigEntry = ConfigEntry[ClaudeRuntimeData]
@@ -143,12 +144,14 @@ class ClaudeStatusCoordinator(_AddonCoordinator[StatusResult]):
         try:
             status = await self.client.async_get_status()
         except ClaudeEngineMismatchError as err:
+            engine = engine_for_entry(self.config_entry)
+            assert engine is not None
             async_raise_issue(
                 self.hass,
                 entry_id,
                 ISSUE_ENGINE_MISMATCH,
                 severity=ir.IssueSeverity.ERROR,
-                placeholders={"engine": err.reported},
+                placeholders={"engine": engine.name, "reported_engine": err.reported},
             )
             raise
         async_clear_issues(self.hass, entry_id, ISSUE_ENGINE_MISMATCH)
