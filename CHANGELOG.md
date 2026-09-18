@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18
+
 ### Added
 
 - **Codex is now a supported agent, alongside Claude.** The setup flow (Settings
