@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Codex is now a supported agent, alongside Claude.** The setup flow (Settings
+  → Devices & services → Add integration → AI Agent) first asks which agent to
+  set up, and offers to add the chosen agent's add-on repository to your add-on
+  store when it isn't installed yet. Automatic add-on discovery (the zero-touch
+  path most installs use) is unchanged. Each config entry still talks to one
+  add-on running one engine; add both to talk to both.
 - **A lost usage history is announced, once.** If the add-on's usage cache was
   lost and could not be recovered, the usage sensor's `history_reset` and
   `history_since` attributes say so, and a one-time repair notice under

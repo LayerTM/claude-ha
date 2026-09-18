@@ -28,7 +28,7 @@ from custom_components.claude_ha.const import (
     ISSUE_ENGINE_MISMATCH,
     SERVICE_ASK,
 )
-from custom_components.claude_ha.engines import CLAUDE, engine_for_slug
+from custom_components.claude_ha.engines import CLAUDE, CODEX, engine_for_slug
 from custom_components.claude_ha.entity import build_device_info
 from custom_components.claude_ha.issues import entry_issue_id
 from homeassistant.components import conversation
@@ -438,8 +438,11 @@ async def test_write_sends_only_accepted_fields(
     [
         (TEST_SLUG, CLAUDE),
         ("local_claude-code", CLAUDE),
+        ("abcd1234_codex", CODEX),
+        ("local_codex", CODEX),
         ("abcd1234_other-agent", None),
         ("claude-code", None),
+        ("codex", None),
     ],
 )
 def test_engine_for_slug(slug: str, engine: object) -> None:
