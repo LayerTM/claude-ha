@@ -378,7 +378,7 @@ class Budget:
 class AlertItem:
     """One active proactive-alert anomaly from ``/api/status`` (add-on >= 1.39.0).
 
-    ``line`` is the user's own home-entity string (e.g. "Offline: UCG Fiber"); it is
+    ``line`` is the user's own home-entity string (e.g. "Offline: Router"); it is
     home data the user already sees in HA, NOT chat content.
     """
 

@@ -640,7 +640,7 @@ async def test_status_parses_alerts(
                     {
                         "key": "offline:device_tracker.router",
                         "critical": True,
-                        "line": "Offline: UCG Fiber",
+                        "line": "Offline: Router",
                     },
                     {
                         "key": "co2:sensor.bedroom_co2",
@@ -658,7 +658,7 @@ async def test_status_parses_alerts(
     assert len(status.alerts.items) == 2
     assert status.alerts.items[0].key == "offline:device_tracker.router"
     assert status.alerts.items[0].critical is True
-    assert status.alerts.items[0].line == "Offline: UCG Fiber"
+    assert status.alerts.items[0].line == "Offline: Router"
     assert status.alerts.items[1].critical is False
 
 
