@@ -8,13 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **The add-on discovery confirmation dialog rendered a translation error
-  instead of its text.** Since 1.13.0 that dialog's title and description use
-  both `{engine}` and `{addon}`, but the config flow only filled in `{addon}`,
-  so anyone completing discovery for any agent saw a raw
-  `Translation [formatjs Error: MISSING_VALUE] ...` string instead of "Do you
-  want to set up Codex using the discovered Codex add-on?". The flow still
-  completed if you clicked through; only the confirmation text was broken.
+- **Several setup-flow steps rendered a translation error instead of their
+  text.** Since 1.13.0 the discovery-confirm, manual-setup, and add-on-picker
+  steps' strings use `{engine}` and/or `{addon}`, but the config flow only
+  ever filled in `{addon}` where it filled in anything at all — the manual
+  "set it up using the add-on?" and add-on-picker steps supplied no
+  placeholders whatsoever, and the two install/start progress dialogs missed
+  `{addon}` too. Anyone completing setup for any agent, by any path, saw a raw
+  `Translation [formatjs Error: MISSING_VALUE] ...` string somewhere instead
+  of that step's text. The flow itself still worked; only the shown text was
+  broken.
 
 ## [1.13.0] - 2026-09-18
 
