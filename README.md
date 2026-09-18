@@ -304,7 +304,10 @@ the device's main controls by default.
 - **Token usage today** (`sensor.claude_code_token_usage_today`) — today's input +
   output tokens (unit `tokens`), with the full usage report (per-period and
   per-model token totals, message counts) as attributes. Polled slowly (~5 min;
-  the add-on caches it).
+  the add-on caches it). If the add-on's usage history was lost and could not be
+  recovered, the report carries `history_reset` and `history_since`, and a
+  one-time repair notice under Settings → Repairs names the day totals now count
+  from.
 - **Prompt API cost** (`sensor.claude_code_prompt_api_cost`) — the total prompt-API
   cost in USD (interactive-console use is measured in tokens, not dollars). The
   usage/cost sensors need the Claude Code add-on ≥ 1.7.0 and stay unavailable

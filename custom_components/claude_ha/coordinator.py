@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -28,11 +28,12 @@ from .const import (
     ADDON_RESTART_RETRY,
     DOMAIN,
     ISSUE_ENGINE_MISMATCH,
+    ISSUE_USAGE_HISTORY_RESET,
     LOGGER,
     SCAN_INTERVAL,
     USAGE_SCAN_INTERVAL,
 )
-from .issues import async_clear_issues, async_raise_issue
+from .issues import async_clear_issues, async_raise_issue, entry_issue_id
 
 type ClaudeConfigEntry = ConfigEntry[ClaudeRuntimeData]
 
@@ -158,6 +159,44 @@ class ClaudeStatusCoordinator(_AddonCoordinator[StatusResult]):
         return status
 
 
+def _async_note_history_reset(
+    hass: HomeAssistant, entry_id: str, report: dict[str, Any]
+) -> None:
+    """Raise ISSUE_USAGE_HISTORY_RESET once per distinct ``history_since``.
+
+    ``history_reset`` never reverts to false once the add-on sets it, so a
+    plain level check would re-raise on every poll. The issue registry's own
+    stored ``history_since`` is the only "already told" state this needs, and
+    the issue must be persistent for that memory to survive a real restart
+    (a non-persistent one comes back with ``data=None``): unchanged means
+    stay quiet, and a later, different reset recreates the issue so a user
+    who dismissed the earlier one still sees the new one.
+    """
+    if not report.get("history_reset"):
+        return
+    history_since = report.get("history_since")
+    if history_since is None:
+        return
+    issue_id = entry_issue_id(ISSUE_USAGE_HISTORY_RESET, entry_id)
+    existing = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    if (
+        existing is not None
+        and existing.data is not None
+        and existing.data.get("history_since") == history_since
+    ):
+        return
+    async_clear_issues(hass, entry_id, ISSUE_USAGE_HISTORY_RESET)
+    async_raise_issue(
+        hass,
+        entry_id,
+        ISSUE_USAGE_HISTORY_RESET,
+        severity=ir.IssueSeverity.WARNING,
+        persistent=True,
+        placeholders={"history_since": history_since},
+        data={"history_since": history_since},
+    )
+
+
 class ClaudeUsageCoordinator(_AddonCoordinator[UsageResult]):
     """Polls the add-on's ``/api/usage`` endpoint (slow; cached by the add-on)."""
 
@@ -180,8 +219,10 @@ class ClaudeUsageCoordinator(_AddonCoordinator[UsageResult]):
         )
 
     async def _async_fetch(self) -> UsageResult:
-        """Fetch the latest usage report."""
-        return await self.client.async_get_usage()
+        """Fetch the latest usage report, flagging a lost history once."""
+        result = await self.client.async_get_usage()
+        _async_note_history_reset(self.hass, self.config_entry.entry_id, result.report)
+        return result
 
 
 class ClaudeAccountLimitsCoordinator(_AddonCoordinator[AccountLimitsResult]):

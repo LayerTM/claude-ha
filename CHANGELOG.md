@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **A lost usage history is announced, once.** If the add-on's usage cache was
+  lost and could not be recovered, the usage sensor's `history_reset` and
+  `history_since` attributes say so, and a one-time repair notice under
+  Settings → Repairs tells the day totals now count from. A later, separate
+  loss raises the notice again even if the earlier one was dismissed.
+
 ## [1.12.0] - 2026-09-17
 
 ### Changed

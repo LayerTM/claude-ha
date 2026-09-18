@@ -311,6 +311,9 @@ ISSUE_ADDON_NOT_RUNNING: Final = "addon_not_running"
 ISSUE_ADDON_NOT_INSTALLED: Final = "addon_not_installed"
 # The add-on reports a different engine than the entry was created for.
 ISSUE_ENGINE_MISMATCH: Final = "engine_mismatch"
+# The add-on's usage history was reset (its cache lost or unreadable); raised
+# once per distinct ``history_since`` so a later reset re-notifies.
+ISSUE_USAGE_HISTORY_RESET: Final = "usage_history_reset"
 # Health-check issues: the chat can reach the add-on but can't see/act on the home.
 ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
 ISSUE_NO_HA_TOKEN: Final = "no_ha_token"
