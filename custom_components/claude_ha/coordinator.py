@@ -166,10 +166,11 @@ def _async_note_history_reset(
 
     ``history_reset`` never reverts to false once the add-on sets it, so a
     plain level check would re-raise on every poll. The issue registry's own
-    stored ``history_since`` is the only "already told" state this needs: it
-    persists across restarts by itself, unchanged means stay quiet, and a
-    later, different reset recreates the issue so a user who dismissed the
-    earlier one still sees the new one.
+    stored ``history_since`` is the only "already told" state this needs, and
+    the issue must be persistent for that memory to survive a real restart
+    (a non-persistent one comes back with ``data=None``): unchanged means
+    stay quiet, and a later, different reset recreates the issue so a user
+    who dismissed the earlier one still sees the new one.
     """
     if not report.get("history_reset"):
         return
@@ -190,6 +191,7 @@ def _async_note_history_reset(
         entry_id,
         ISSUE_USAGE_HISTORY_RESET,
         severity=ir.IssueSeverity.WARNING,
+        persistent=True,
         placeholders={"history_since": history_since},
         data={"history_since": history_since},
     )

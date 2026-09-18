@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, flush_store
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.const import DOMAIN, ISSUE_USAGE_HISTORY_RESET
@@ -36,6 +36,20 @@ async def _poll_usage(
     aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=payload)
     await entry.runtime_data.usage.async_refresh()
     await hass.async_block_till_done()
+
+
+async def _simulate_ha_restart(hass: HomeAssistant) -> None:
+    """Round-trip the issue registry through storage, like a real HA restart.
+
+    A plain entry reload never touches the registry's store, so it cannot
+    tell a persistent issue's stored ``data`` apart from a non-persistent
+    one's ``data=None`` on reload — only a real save/load does.
+    """
+    registry = ir.async_get(hass)
+    await flush_store(registry._store)
+    ir.async_get.cache_clear()
+    del hass.data[ir.DATA_REGISTRY]
+    await ir.async_load(hass)
 
 
 async def test_no_notification_while_history_reset_is_false(
@@ -124,13 +138,18 @@ async def test_a_new_history_since_notifies_again(
     assert issue.translation_placeholders == {"history_since": "2026-09-10"}
 
 
-async def test_reset_notice_survives_a_reload(
+async def test_reset_notice_survives_an_entry_reload(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
     mock_status: None,
 ) -> None:
-    """Unloading and reloading the entry keeps the already-raised repair."""
+    """Unloading and reloading the entry keeps the already-raised repair.
+
+    The issue registry itself stays live in memory across an entry reload
+    (it never round-trips through storage), so this does not exercise the
+    persistence path — see ``test_reset_notice_survives_a_real_restart``.
+    """
     await setup_integration(hass, mock_config_entry)
     reset_payload = {
         **USAGE_PAYLOAD,
@@ -151,3 +170,42 @@ async def test_reset_notice_survives_a_reload(
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
     assert _issue(hass, mock_config_entry) is not None
+
+
+async def test_reset_notice_survives_a_real_restart(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    mock_status: None,
+) -> None:
+    """A real restart (registry reloaded from storage) does not re-notify.
+
+    ``history_reset`` stays true forever, so if the dedup key vanished on
+    restart the very next poll would treat an ordinary restart as a brand
+    new loss and recreate the issue. It must not.
+    """
+    await setup_integration(hass, mock_config_entry)
+    reset_payload = {
+        **USAGE_PAYLOAD,
+        "history_reset": True,
+        "history_since": "2026-09-01",
+    }
+    await _poll_usage(hass, mock_config_entry, aioclient_mock, reset_payload)
+    issue = _issue(hass, mock_config_entry)
+    assert issue is not None
+    created = issue.created
+
+    await _simulate_ha_restart(hass)
+    restored = _issue(hass, mock_config_entry)
+    assert restored is not None
+    assert restored.data == {
+        "issue": ISSUE_USAGE_HISTORY_RESET,
+        "entry_id": mock_config_entry.entry_id,
+        "history_since": "2026-09-01",
+    }
+
+    await _poll_usage(hass, mock_config_entry, aioclient_mock, reset_payload)
+
+    issue = _issue(hass, mock_config_entry)
+    assert issue is not None
+    assert issue.created == created  # not recreated by the same, old reset

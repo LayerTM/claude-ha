@@ -32,16 +32,25 @@ def async_raise_issue(
     *,
     severity: ir.IssueSeverity,
     fixable: bool = False,
+    persistent: bool = False,
     learn_more_url: str | None = None,
     placeholders: dict[str, str] | None = None,
     data: dict[str, str | int | float | None] | None = None,
 ) -> None:
-    """Raise issue kind ``issue`` for one entry."""
+    """Raise issue kind ``issue`` for one entry.
+
+    ``persistent`` survives a real Home Assistant restart (its ``data`` and
+    the rest of its fields are written to storage); the default does not — a
+    restart restores it with ``data=None``, fine for a level check re-derived
+    from live state every poll, wrong for an issue whose own ``data`` is the
+    only memory of something that already happened.
+    """
     ir.async_create_issue(
         hass,
         DOMAIN,
         entry_issue_id(issue, entry_id),
         is_fixable=fixable,
+        is_persistent=persistent,
         severity=severity,
         translation_key=issue,
         translation_placeholders=placeholders,
