@@ -110,6 +110,76 @@ async def test_stream_done_carries_proposal(
     assert result.proposal.intents[0]["targets"] == ["switch.heater"]
 
 
+def _done(text: str, summary: str | None = None) -> dict[str, Any]:
+    proposal = None if summary is None else {"summary": summary, "intents": []}
+    return {
+        "type": "done",
+        "text": text,
+        "proposal": proposal,
+        "tools_used": [],
+        "truncated": False,
+    }
+
+
+async def test_stream_joins_a_surrogate_pair_split_across_deltas(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An emoji split between two deltas arrives whole in the second one."""
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson(
+            {"type": "delta", "text": "Sunny \ud83c"},
+            {"type": "delta", "text": "\udf24 today."},
+            _done("Sunny \U0001f324 today."),
+        ),
+        headers=_NDJSON,
+    )
+    chunks = await _collect(_client(hass).async_prompt_stream("weather?"))
+
+    deltas = [c.text for c in chunks if isinstance(c, StreamDelta)]
+    assert deltas == ["Sunny ", "\U0001f324 today."]
+    for text in deltas:
+        text.encode("utf-8")
+
+
+async def test_stream_flushes_a_held_half_before_the_result(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A first half no delta completes is replaced, not dropped or kept raw."""
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson({"type": "delta", "text": "Sunny \ud83c"}, _done("Sunny")),
+        headers=_NDJSON,
+    )
+    chunks = await _collect(_client(hass).async_prompt_stream("weather?"))
+
+    deltas = [c.text for c in chunks if isinstance(c, StreamDelta)]
+    assert deltas == ["Sunny ", "�"]
+    assert isinstance(chunks[-1], PromptResult)
+
+
+async def test_stream_replaces_lone_surrogates_in_every_text(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Lone halves inside a delta, the result and a proposal become U+FFFD."""
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson(
+            {"type": "delta", "text": "a\udf24b"},
+            _done("a\udf24b \ud83c", summary="Turn \udf24 on"),
+        ),
+        headers=_NDJSON,
+    )
+    chunks = await _collect(_client(hass).async_prompt_stream("q"))
+
+    assert [c.text for c in chunks if isinstance(c, StreamDelta)] == ["a�b"]
+    result = chunks[-1]
+    assert isinstance(result, PromptResult)
+    assert result.text == "a�b �"
+    assert result.proposal is not None
+    assert result.proposal.summary == "Turn � on"
+
+
 async def test_stream_json_fallback(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
@@ -344,3 +414,26 @@ async def test_stream_omits_edit_automation_when_unsupported(
     )
 
     assert "edit_automation" not in aioclient_mock.mock_calls[-1][2]
+
+
+async def test_conversation_reply_with_split_emoji_is_valid_utf8(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An emoji split across deltas reaches the reply whole and encodable."""
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson(
+            {"type": "delta", "text": "Sunny \ud83c"},
+            {"type": "delta", "text": "\udf24 today."},
+            _done("Sunny \U0001f324 today."),
+        ),
+        headers=_NDJSON,
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await _say(hass, mock_config_entry, "weather?")
+    assert _speech(result) == "Sunny \U0001f324 today."
+    _speech(result).encode("utf-8")
