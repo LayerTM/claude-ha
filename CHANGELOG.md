@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-09-24
+
 ### Fixed
 
 - **An emoji in a streamed reply could break Home Assistant's state API until
@@ -687,7 +689,10 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.13.2...HEAD
+[1.13.2]: https://github.com/LayerTM/claude-ha/compare/v1.13.1...v1.13.2
+[1.13.1]: https://github.com/LayerTM/claude-ha/compare/v1.13.0...v1.13.1
+[1.13.0]: https://github.com/LayerTM/claude-ha/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/LayerTM/claude-ha/compare/v1.11.2...v1.12.0
 [1.11.2]: https://github.com/LayerTM/claude-ha/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/LayerTM/claude-ha/compare/v1.11.0...v1.11.1
