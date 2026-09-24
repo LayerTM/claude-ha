@@ -1,7 +1,7 @@
 # Pinned to the current Home Assistant release that
-# pytest-homeassistant-custom-component tracks (HA 2026.9.2 on Python 3.14).
+# pytest-homeassistant-custom-component tracks (HA 2026.9.3 on Python 3.14).
 # Its homeassistant pin decides every component requirement below it.
-pytest-homeassistant-custom-component==0.13.365
+pytest-homeassistant-custom-component==0.13.366
 
 # The requirements of the Home Assistant components this integration depends on
 # (conversation, frontend, ...) are not listed here: Home Assistant pins them in
