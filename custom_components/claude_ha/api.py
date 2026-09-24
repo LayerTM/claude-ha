@@ -16,6 +16,7 @@ from datetime import datetime
 from http import HTTPStatus
 import json
 import math
+import re
 from typing import Any, Final, NoReturn
 
 from aiohttp import ClientError, ClientResponse, ClientSession
@@ -1040,8 +1041,37 @@ def _non_negative_int(raw: Any) -> int | None:
     return value if value <= _MAX_JSON_INT else None
 
 
+# UTF-16 surrogates: JSON's ``\uXXXX`` escapes can carry them, and Python keeps
+# each one as its own code point instead of pairing them.
+_SURROGATES: Final = re.compile("[\ud800-\udfff]")
+
+
+def _valid_unicode(text: str) -> str:
+    """Return ``text`` with surrogate pairs joined and lone surrogates replaced.
+
+    A string holding a surrogate cannot be encoded as UTF-8; once one reaches
+    the state machine, every state dump and ``/api/states`` call fails. A pair
+    becomes the character it encodes; a lone half becomes U+FFFD.
+    """
+    if _SURROGATES.search(text) is None:
+        return text
+    return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+
+
+def _valid_json(value: Any) -> Any:
+    """Return decoded JSON with every string in it (keys too) made valid Unicode."""
+    if isinstance(value, str):
+        return _valid_unicode(value)
+    if isinstance(value, list):
+        return [_valid_json(item) for item in value]
+    if isinstance(value, dict):
+        return {_valid_json(key): _valid_json(item) for key, item in value.items()}
+    return value
+
+
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
     """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object."""
+    data = _valid_json(data)
     proposal_raw = data.get(RESP_PROPOSAL)
     proposal: Proposal | None = None
     if isinstance(proposal_raw, dict):
@@ -1063,7 +1093,13 @@ def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
 async def _iter_ndjson(
     stream: AsyncIterable[bytes],
 ) -> AsyncIterator[StreamDelta | PromptResult]:
-    """Yield deltas then the final result from an NDJSON stream (contract §2)."""
+    """Yield deltas then the final result from an NDJSON stream (contract §2).
+
+    A delta may end in the first half of a surrogate pair whose second half
+    opens the next delta; that half is held back and joined to the next one, so
+    every yielded text is valid Unicode on its own and so is their join.
+    """
+    held = ""
     async for raw in stream:
         line = raw.strip()
         if not line:
@@ -1074,11 +1110,18 @@ async def _iter_ndjson(
             raise ClaudeConnectionError("Malformed stream from the add-on") from err
         kind = event.get(STREAM_KIND)
         if kind == STREAM_KIND_DELTA:
-            yield StreamDelta(str(event.get(RESP_TEXT, "")))
+            text = held + str(event.get(RESP_TEXT, ""))
+            held = ""
+            if text and "\ud800" <= text[-1] <= "\udbff":
+                text, held = text[:-1], text[-1]
+            yield StreamDelta(_valid_unicode(text))
         elif kind == STREAM_KIND_DONE:
+            if held:
+                yield StreamDelta(_valid_unicode(held))
             yield _parse_prompt_result(event)
             return
         elif kind == STREAM_KIND_ERROR:
+            event = _valid_json(event)
             raise _coded_error(event) or ClaudeConnectionError(
                 str(event.get(STREAM_ERROR, "stream error"))
             )

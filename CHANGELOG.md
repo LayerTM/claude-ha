@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **An emoji in a streamed reply could break Home Assistant's state API until
+  a restart.** The add-on can split an emoji between two stream chunks, as the
+  two halves of a UTF-16 surrogate pair. Each half then reached the reply as a
+  character of its own, and a string holding one cannot be encoded as UTF-8.
+  Once such a reply landed in an entity's state or attributes (for example
+  through a template sensor), every `/api/states` call and every state-restore
+  save failed with `surrogates not allowed` until Home Assistant restarted.
+  The integration now holds back a trailing half until the next chunk
+  completes it. Every string in the add-on's answer (the streamed chunks, the
+  final reply, a proposal and its targets, an automation draft, an error
+  message) has its pairs joined, and any lone half left gets U+FFFD in its
+  place.
+
 ## [1.13.1] - 2026-09-18
 
 ### Fixed
