@@ -1058,19 +1058,31 @@ def _valid_unicode(text: str) -> str:
     return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
 
 
+def _valid_json(value: Any) -> Any:
+    """Return decoded JSON with every string in it (keys too) made valid Unicode."""
+    if isinstance(value, str):
+        return _valid_unicode(value)
+    if isinstance(value, list):
+        return [_valid_json(item) for item in value]
+    if isinstance(value, dict):
+        return {_valid_json(key): _valid_json(item) for key, item in value.items()}
+    return value
+
+
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
     """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object."""
+    data = _valid_json(data)
     proposal_raw = data.get(RESP_PROPOSAL)
     proposal: Proposal | None = None
     if isinstance(proposal_raw, dict):
         proposal = Proposal(
-            summary=_valid_unicode(str(proposal_raw.get(PROPOSAL_SUMMARY, ""))),
+            summary=str(proposal_raw.get(PROPOSAL_SUMMARY, "")),
             intents=list(proposal_raw.get(PROPOSAL_INTENTS, []) or []),
         )
     automation_raw = data.get(RESP_AUTOMATION)
     automation = automation_raw if isinstance(automation_raw, dict) else None
     return PromptResult(
-        text=_valid_unicode(str(data.get(RESP_TEXT, ""))),
+        text=str(data.get(RESP_TEXT, "")),
         proposal=proposal,
         tools_used=list(data.get(RESP_TOOLS_USED, []) or []),
         truncated=bool(data.get(RESP_TRUNCATED, False)),
@@ -1109,6 +1121,7 @@ async def _iter_ndjson(
             yield _parse_prompt_result(event)
             return
         elif kind == STREAM_KIND_ERROR:
+            event = _valid_json(event)
             raise _coded_error(event) or ClaudeConnectionError(
                 str(event.get(STREAM_ERROR, "stream error"))
             )

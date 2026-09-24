@@ -16,8 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   through a template sensor), every `/api/states` call and every state-restore
   save failed with `surrogates not allowed` until Home Assistant restarted.
   The integration now holds back a trailing half until the next chunk
-  completes it. Any text from the add-on (a streamed chunk, the final reply,
-  a proposal summary) that still carries a lone half gets U+FFFD in its place.
+  completes it. Every string in the add-on's answer (the streamed chunks, the
+  final reply, a proposal and its targets, an automation draft, an error
+  message) has its pairs joined, and any lone half left gets U+FFFD in its
+  place.
 
 ## [1.13.1] - 2026-09-18
 

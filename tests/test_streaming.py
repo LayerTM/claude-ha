@@ -154,7 +154,7 @@ async def test_stream_flushes_a_held_half_before_the_result(
     chunks = await _collect(_client(hass).async_prompt_stream("weather?"))
 
     deltas = [c.text for c in chunks if isinstance(c, StreamDelta)]
-    assert deltas == ["Sunny ", "�"]
+    assert deltas == ["Sunny ", "\ufffd"]
     assert isinstance(chunks[-1], PromptResult)
 
 
@@ -172,12 +172,41 @@ async def test_stream_replaces_lone_surrogates_in_every_text(
     )
     chunks = await _collect(_client(hass).async_prompt_stream("q"))
 
-    assert [c.text for c in chunks if isinstance(c, StreamDelta)] == ["a�b"]
+    assert [c.text for c in chunks if isinstance(c, StreamDelta)] == ["a\ufffdb"]
     result = chunks[-1]
     assert isinstance(result, PromptResult)
-    assert result.text == "a�b �"
+    assert result.text == "a\ufffdb \ufffd"
     assert result.proposal is not None
-    assert result.proposal.summary == "Turn � on"
+    assert result.proposal.summary == "Turn \ufffd on"
+
+
+async def test_stream_cleans_every_string_in_the_answer(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Intents, tools, an automation draft and an error are all valid Unicode."""
+    done = _done("ok", summary="s")
+    done["proposal"]["intents"] = [{"intent": "HassTurnOn", "targets": ["x\ud83c"]}]
+    done["tools_used"] = ["tool\udf24"]
+    done["automation"] = {"alias": "\U0001f324 \udf24", "k\ud83c": [1, None]}
+    aioclient_mock.post(_URL, text=_ndjson(done), headers=_NDJSON)
+    chunks = await _collect(_client(hass).async_prompt_stream("q"))
+
+    result = chunks[-1]
+    assert isinstance(result, PromptResult)
+    assert result.proposal is not None
+    assert result.proposal.intents == [{"intent": "HassTurnOn", "targets": ["x\ufffd"]}]
+    assert result.tools_used == ["tool\ufffd"]
+    assert result.automation == {"alias": "\U0001f324 \ufffd", "k\ufffd": [1, None]}
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson({"type": "error", "error": "broke \ud83c"}),
+        headers=_NDJSON,
+    )
+    with pytest.raises(ClaudeError) as err:
+        await _collect(_client(hass).async_prompt_stream("q"))
+    assert str(err.value) == "broke \ufffd"
 
 
 async def test_stream_json_fallback(
