@@ -1,7 +1,7 @@
 # Pinned to the current Home Assistant release that
-# pytest-homeassistant-custom-component tracks (HA 2026.9.3 on Python 3.14).
+# pytest-homeassistant-custom-component tracks (HA 2026.9.4 on Python 3.14).
 # Its homeassistant pin decides every component requirement below it.
-pytest-homeassistant-custom-component==0.13.366
+pytest-homeassistant-custom-component==0.13.367
 
 # The requirements of the Home Assistant components this integration depends on
 # (conversation, frontend, ...) are not listed here: Home Assistant pins them in
@@ -12,7 +12,7 @@ pytest-homeassistant-custom-component==0.13.366
 # written down: CI installs it from here, the pre-commit hook runs whatever ruff
 # the environment has, and CI fails if a second pin reappears (see
 # .github/workflows/lint.yml).
-ruff==0.16.8
+ruff==0.16.9
 mypy==2.3.1
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
 types-PyYAML==6.0.12.20260906
