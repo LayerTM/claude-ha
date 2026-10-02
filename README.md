@@ -31,6 +31,7 @@ integration as **AI Agent**.
 [![tests](https://github.com/LayerTM/claude-ha/actions/workflows/tests.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/tests.yml)
 [![secret-scan](https://github.com/LayerTM/claude-ha/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/secret-scan.yml)
 [![hygiene](https://github.com/LayerTM/claude-ha/actions/workflows/hygiene.yml/badge.svg)](https://github.com/LayerTM/claude-ha/actions/workflows/hygiene.yml)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/layertme)
 
 </div>
 
