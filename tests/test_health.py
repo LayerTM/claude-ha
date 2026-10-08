@@ -8,7 +8,11 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.claude_ha import health
-from custom_components.claude_ha.api import ClaudeConnectionError, StatusResult
+from custom_components.claude_ha.api import (
+    AuthState,
+    ClaudeConnectionError,
+    StatusResult,
+)
 from custom_components.claude_ha.const import (
     CONF_ENGINE,
     DOMAIN,
@@ -17,6 +21,7 @@ from custom_components.claude_ha.const import (
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_NO_HA_TOKEN,
     ISSUE_NOT_LOGGED_IN,
+    ISSUE_SIGNIN_EXPIRED,
     MCP_SERVER_DOMAIN,
 )
 from custom_components.claude_ha.issues import entry_issue_id
@@ -355,6 +360,90 @@ async def test_camera_vision_not_inert_when_exposure_store_unready(
     assert (
         health.evaluate(hass, _status(), camera_vision=True).camera_vision_inert
         is False
+    )
+
+
+@pytest.mark.parametrize(
+    ("auth", "expired"),
+    [
+        (None, None),  # older add-on: no evidence, no repair
+        (AuthState(state="unknown"), None),  # explicit "no evidence yet" either
+        (AuthState(state="something-new"), None),  # an open token this version misses
+        (AuthState(state="ok"), False),
+        (AuthState(state="expired"), True),
+    ],
+)
+async def test_evaluate_signin_expired(
+    hass: HomeAssistant,
+    expose: Callable[[bool], None],
+    auth: AuthState | None,
+    expired: bool | None,
+) -> None:
+    """The auth block decides signin_expired, independently of the health problem."""
+    _healthy(hass)
+    expose(True)
+    assert health.evaluate(hass, _status(auth=auth)).signin_expired is expired
+
+
+async def test_evaluate_signin_expired_status_none(hass: HomeAssistant) -> None:
+    """No status at all (transport failure) is also no evidence."""
+    assert health.evaluate(hass, None).signin_expired is None
+
+
+async def test_apply_raises_signin_expired(hass: HomeAssistant) -> None:
+    """signin_expired=True raises the issue, with the engine/add-on placeholders."""
+    registry = ir.async_get(hass)
+    health.async_apply(
+        hass,
+        _entry(ENTRY_ID),
+        health.HealthReport(None, 1, True, True, signin_expired=True),
+    )
+    issue = registry.async_get_issue(
+        DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, ENTRY_ID)
+    )
+    assert issue is not None
+    assert issue.translation_placeholders == {
+        "engine": "Claude",
+        "addon": "Claude Code",
+    }
+
+
+async def test_apply_clears_signin_expired_on_ok(hass: HomeAssistant) -> None:
+    """signin_expired=False (status says "ok") clears a previously-raised issue."""
+    registry = ir.async_get(hass)
+    entry = _entry(ENTRY_ID)
+    health.async_apply(
+        hass, entry, health.HealthReport(None, 1, True, True, signin_expired=True)
+    )
+    health.async_apply(
+        hass, entry, health.HealthReport(None, 1, True, True, signin_expired=False)
+    )
+    assert (
+        registry.async_get_issue(DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, ENTRY_ID))
+        is None
+    )
+
+
+async def test_apply_leaves_signin_expired_alone_when_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """signin_expired=None (unknown, or an old add-on) touches neither call.
+
+    This is the regression this three-valued field exists to prevent: a run
+    that raised the issue from conversation.py must survive the next status
+    poll of an add-on that says nothing about auth at all.
+    """
+    registry = ir.async_get(hass)
+    entry = _entry(ENTRY_ID)
+    health.async_apply(
+        hass, entry, health.HealthReport(None, 1, True, True, signin_expired=True)
+    )
+    health.async_apply(
+        hass, entry, health.HealthReport(None, 1, True, True, signin_expired=None)
+    )
+    assert (
+        registry.async_get_issue(DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, ENTRY_ID))
+        is not None
     )
 
 

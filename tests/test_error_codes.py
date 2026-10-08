@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.claude_ha.api import (
     _ERROR_CODES,
     ClaudeAuthError,
+    ClaudeAuthExpiredError,
     ClaudeClient,
     ClaudeConnectionError,
     ClaudeError,
@@ -55,6 +56,7 @@ _CORE_CODES = {
     "prompt_too_large",
     "confirmation_required",
     "rate_limited",
+    "auth_expired",
     "write_unavailable",
     "busy",
     "timeout",
@@ -153,6 +155,14 @@ def test_every_core_code_is_mapped() -> None:
             {"error": "busy", "code": "busy"},
             ClaudeRateLimitError,
             "The add-on is busy or rate-limited. Try again shortly.",
+        ),
+        (
+            503,
+            {"error": "OAuth session expired", "code": "auth_expired"},
+            ClaudeAuthExpiredError,
+            "Claude's sign-in has expired. Sign in again (`/login`) in the "
+            "add-on's console, or set a `claude setup-token` token as its "
+            "OAuth Token option so it survives idle spells.",
         ),
         (
             504,
@@ -289,6 +299,60 @@ async def test_streamed_read_uses_the_code_too(
             pass  # pragma: no cover - refused before the first item
 
     assert err.value.translation_placeholders == {"field": "x"}
+
+
+async def test_degraded_read_names_an_expired_signin(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A 200 read whose body carries reason "auth-expired" raises the typed error.
+
+    Still a 200: the add-on cannot retry a dead sign-in into success, so it
+    answers rather than failing the transport. The reason is read before the
+    rest of the body, so the add-on's own apology text in ``text`` never
+    reaches the caller.
+    """
+    aioclient_mock.post(
+        _PROMPT_URL,
+        json={
+            "text": "Sorry — I couldn't finish that response.",
+            "reason": "auth-expired",
+            "proposal": None,
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+
+    with pytest.raises(ClaudeAuthExpiredError) as err:
+        await _client(hass).async_prompt("hi")
+
+    assert await async_error_message(hass, "en", err.value) == (
+        "Claude's sign-in has expired. Sign in again (`/login`) in the "
+        "add-on's console, or set a `claude setup-token` token as its "
+        "OAuth Token option so it survives idle spells."
+    )
+
+
+async def test_streamed_degraded_read_names_an_expired_signin(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The same reason, read off the streaming `done` line instead of a 200 body."""
+    done = {
+        "type": "done",
+        "text": "Sorry — I couldn't finish that response.",
+        "reason": "auth-expired",
+        "proposal": None,
+        "tools_used": [],
+        "truncated": False,
+    }
+    aioclient_mock.post(
+        _PROMPT_URL,
+        text=json.dumps(done) + "\n",
+        headers={"Content-Type": "application/x-ndjson"},
+    )
+
+    with pytest.raises(ClaudeAuthExpiredError):
+        async for _ in _client(hass).async_prompt_stream("hi"):
+            pass  # pragma: no cover - fails before the first delta
 
 
 @pytest.mark.parametrize(

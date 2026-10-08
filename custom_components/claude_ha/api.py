@@ -34,6 +34,8 @@ from .const import (
     API_PROMPT,
     API_STATUS,
     API_USAGE,
+    AUTH_SINCE,
+    AUTH_STATE,
     CHAT_HEALTH_OUTAGE_RUN,
     CHAT_HEALTH_STALE_FAILURE_S,
     CONTENT_TYPE_NDJSON,
@@ -55,6 +57,7 @@ from .const import (
     MODE_WRITE,
     PROPOSAL_INTENTS,
     PROPOSAL_SUMMARY,
+    REASON_AUTH_EXPIRED,
     REQUEST_CONFIRMATION,
     REQUEST_CONVERSATION_ID,
     REQUEST_EDIT_AUTOMATION,
@@ -66,10 +69,12 @@ from .const import (
     REQUEST_TIMEOUT,
     RESP_AUTOMATION,
     RESP_PROPOSAL,
+    RESP_REASON,
     RESP_TEXT,
     RESP_TOOLS_USED,
     RESP_TRUNCATED,
     STATUS_ALERTS,
+    STATUS_AUTH,
     STATUS_BUDGET,
     STATUS_CHAT_HEALTH,
     STATUS_CLAUDE_VERSION,
@@ -179,6 +184,19 @@ class ClaudeAuthError(ClaudeError):
     """The shared bearer token was rejected (401) or the source was blocked (403)."""
 
     translation_key = "auth_error"
+
+
+class ClaudeAuthExpiredError(ClaudeError):
+    """The engine's own sign-in to its model provider is no longer accepted.
+
+    Distinct from :class:`ClaudeAuthError`, which is the bearer token between
+    this integration and the add-on. Never retried — a human must sign in
+    again — and raised from either wire shape the add-on uses for it: a
+    degraded read's ``reason`` (handled in :func:`_parse_prompt_result`) or a
+    write's coded error (handled through ``_ERROR_CODES`` below).
+    """
+
+    translation_key = "auth_expired"
 
 
 class ClaudeRateLimitError(ClaudeError):
@@ -402,6 +420,21 @@ class Alerts:
     items: list[AlertItem]
 
 
+@dataclass(slots=True, frozen=True)
+class AuthState:
+    """The engine's sign-in state, from the status block's ``auth``.
+
+    ``state`` is an open token (today "ok"/"expired"/"unknown") read as-is, the
+    same policy as :data:`AccountLimit.kind` — an add-on sending a state this
+    version does not recognise is still carried rather than dropped, it simply
+    matches neither raise nor clear below. ``since`` is when it became true, or
+    ``None`` when the add-on doesn't stamp it.
+    """
+
+    state: str
+    since: datetime | None = None
+
+
 @dataclass(slots=True)
 class StatusResult:
     """Parsed 200 response of ``GET /api/status``."""
@@ -423,6 +456,8 @@ class StatusResult:
     prompt_timeout_ms: int | None = None
     budget: Budget | None = None
     alerts: Alerts | None = None
+    # ``None``: the add-on predates it, or sends nothing readable -> unknown, no repair.
+    auth: AuthState | None = None
 
 
 @dataclass(slots=True)
@@ -572,6 +607,7 @@ class ClaudeClient:
         prompt_timeout_ms = _non_negative_int(data.get(STATUS_PROMPT_TIMEOUT_MS))
         budget = _parse_budget(data.get(STATUS_BUDGET))
         alerts = _parse_alerts(data.get(STATUS_ALERTS))
+        auth = _parse_auth(data.get(STATUS_AUTH))
         return StatusResult(
             ready=bool(data.get(STATUS_READY, False)),
             version=data.get(STATUS_VERSION),
@@ -587,6 +623,7 @@ class ClaudeClient:
             prompt_timeout_ms=prompt_timeout_ms,
             budget=budget,
             alerts=alerts,
+            auth=auth,
         )
 
     async def async_get_usage(self) -> UsageResult:
@@ -915,6 +952,22 @@ def _parse_alerts(raw: Any) -> Alerts | None:
     )
 
 
+def _parse_auth(raw: Any) -> AuthState | None:
+    """Build an ``AuthState`` from the status block, or ``None`` if it says nothing.
+
+    Unlike the counters above, there is no wrong default to avoid inventing: a
+    missing or unreadable ``state`` means exactly "no evidence", which is the
+    same thing an absent block means, so both collapse to the same ``None`` —
+    the one case that raises no repair and clears none either.
+    """
+    if not isinstance(raw, dict):
+        return None
+    state = raw.get(AUTH_STATE)
+    if not isinstance(state, str) or not state:
+        return None
+    return AuthState(state=state, since=_parse_instant(raw.get(AUTH_SINCE)))
+
+
 def _non_negative_amount(raw: Any) -> float | None:
     """Coerce a contract amount to a float, or ``None`` when it says nothing.
 
@@ -1070,8 +1123,18 @@ def _valid_json(value: Any) -> Any:
 
 
 def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
-    """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object."""
+    """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object.
+
+    A read is still answered 200 (or ``done``) when the engine's sign-in has
+    expired — the add-on cannot retry it into success, so it reports the
+    outcome rather than failing the transport. ``reason`` carries that outcome
+    the same way ``chat_health.last_reason`` does; this is the one place a
+    read is checked for it, so every caller gets the same typed error instead
+    of the add-on's own apology text.
+    """
     data = _valid_json(data)
+    if data.get(RESP_REASON) == REASON_AUTH_EXPIRED:
+        raise ClaudeAuthExpiredError(f"run ended reason={REASON_AUTH_EXPIRED}")
     proposal_raw = data.get(RESP_PROPOSAL)
     proposal: Proposal | None = None
     if isinstance(proposal_raw, dict):
@@ -1145,6 +1208,7 @@ _ERROR_CODES: Final[Mapping[str, tuple[type[ClaudeError], str]]] = {
     "confirmation_required": (ClaudeRequestError, "confirmation_required"),
     "rate_limited": (ClaudeRateLimitError, "rate_limited"),
     "busy": (ClaudeRateLimitError, "rate_limited"),
+    "auth_expired": (ClaudeAuthExpiredError, "auth_expired"),
     "write_unavailable": (ClaudeError, "write_unavailable"),
     "timeout": (ClaudeConnectionError, "addon_timeout"),
     "internal": (ClaudeError, "unknown"),

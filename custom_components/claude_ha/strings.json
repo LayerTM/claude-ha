@@ -210,6 +210,9 @@
     "auth_error": {
       "message": "The add-on rejected the request. The shared token may be out of date."
     },
+    "auth_expired": {
+      "message": "Claude's sign-in has expired. Sign in again (`/login`) in the add-on's console, or set a `claude setup-token` token as its OAuth Token option so it survives idle spells."
+    },
     "rate_limited": {
       "message": "The add-on is busy or rate-limited. Try again shortly."
     },
@@ -366,6 +369,10 @@
     "not_logged_in": {
       "title": "{engine} isn't logged in",
       "description": "The {addon} add-on is running but {engine} isn't authenticated, so chat can't answer. Open the {addon} add-on and run `claude` to log in (or set an OAuth token in the add-on options), then check again."
+    },
+    "signin_expired": {
+      "title": "{engine}'s sign-in has expired",
+      "description": "{engine}'s sign-in to its model provider has expired, so chat can't answer until it's renewed. Open the {addon} add-on's console and run `/login` (or set a `claude setup-token` token as its OAuth Token option, which survives idle spells), then check again."
     },
     "no_ha_token": {
       "title": "{engine} has no token to read your home",

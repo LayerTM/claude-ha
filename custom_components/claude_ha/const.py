@@ -84,6 +84,12 @@ PROPOSAL_INTENTS: Final = "intents"
 # later capability that re-validates and writes it in-process — the add-on never
 # writes it.
 RESP_AUTOMATION: Final = "automation"
+# Optional reason token on a degraded read's 200 body (or its streaming `done`
+# line): the same token ``chat_health.last_reason`` uses. A sign-in the engine
+# no longer accepts is "auth-expired" — never retried (one engine call, not
+# two). Absent on an add-on that predates it.
+RESP_REASON: Final = "reason"
+REASON_AUTH_EXPIRED: Final = "auth-expired"
 
 # POST /api/prompt request keys every add-on accepts (besides "prompt"/"mode").
 REQUEST_CONVERSATION_ID: Final = "conversation_id"
@@ -170,6 +176,16 @@ STATUS_BUDGET: Final = "budget"
 # on older add-ons (the alerts binary sensor is then unavailable). items/line carry
 # the user's OWN home entity names and readings — home data, not chat content.
 STATUS_ALERTS: Final = "alerts"
+# The engine's sign-in state: {state: "ok"|"expired"|"unknown", since}. Computed
+# by the add-on without a model call and persisted across its restarts; "since" is
+# ISO-8601 or null. Absent on an add-on that predates it -> treat as unknown (no
+# repair raised from it).
+STATUS_AUTH: Final = "auth"
+AUTH_STATE: Final = "state"
+AUTH_SINCE: Final = "since"
+AUTH_STATE_OK: Final = "ok"
+AUTH_STATE_EXPIRED: Final = "expired"
+AUTH_STATE_UNKNOWN: Final = "unknown"
 
 # GET /api/account_limits 200-response keys (account-wide rate-limit utilisation).
 # These figures are the ACCOUNT's, across every machine and session signed in to it
@@ -322,6 +338,12 @@ ISSUE_NO_EXPOSED_ENTITIES: Final = "no_exposed_entities"
 # Camera vision is on but no camera is exposed to Assist, so the feature is inert
 # (HA hides cameras from Assist by default as security devices). Independent advisory.
 ISSUE_CAMERA_VISION_NO_CAMERAS: Final = "camera_vision_no_cameras"
+# The engine's sign-in to its model provider has expired (distinct from
+# ISSUE_NOT_LOGGED_IN, which is the add-on's OWN bearer token to this
+# integration). Raised the moment a run reports it, or from the status poll;
+# cleared once the add-on reports the sign-in state ok again. Independent
+# advisory, like the camera one above.
+ISSUE_SIGNIN_EXPIRED: Final = "signin_expired"
 # Health issues cleared together on unload.
 HEALTH_ISSUES: Final = (
     ISSUE_NOT_LOGGED_IN,
@@ -329,6 +351,7 @@ HEALTH_ISSUES: Final = (
     ISSUE_MCP_UNREACHABLE,
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_CAMERA_VISION_NO_CAMERAS,
+    ISSUE_SIGNIN_EXPIRED,
 )
 
 # The Model Context Protocol Server integration Claude reads the home through.

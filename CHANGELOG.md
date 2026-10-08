@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **A repair and a clear chat reply for an expired Claude sign-in.** The
+  shared subscription token's refresh window is short, so an add-on asked
+  only rarely could lose its sign-in between chats with no visible cause: chat
+  just answered "couldn't finish that response" and nothing in Home Assistant
+  said to sign in again. Needs an add-on new enough to name the failure; an
+  older one still falls back to the generic answer. A current add-on now
+  raises **"Claude's sign-in has expired"** (a persistent repair naming the
+  fix) the moment a chat turn hits it, or from the next status poll,
+  whichever is first, and clears it once signed in again; Assist answers with
+  the same fix instead of the generic apology; the chat-health sensor's
+  `last_reason` attribute can now also read `auth-expired`.
+
 ## [1.13.2] - 2026-09-24
 
 ### Fixed
