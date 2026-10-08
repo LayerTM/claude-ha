@@ -679,6 +679,55 @@ async def test_status_alerts_absent_or_null_is_none(
     assert status.alerts is None
 
 
+async def test_status_parses_auth(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An auth block parses into AuthState, "since" included."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "auth": {"state": "expired", "since": "2026-10-08T12:00:00+00:00"},
+        },
+    )
+    status = await _client(hass).async_get_status()
+    assert status.auth is not None
+    assert status.auth.state == "expired"
+    assert status.auth.since == dt_util.parse_datetime("2026-10-08T12:00:00+00:00")
+
+
+@pytest.mark.parametrize("auth", [None, "not-a-dict", 42, {}, {"state": ""}])
+async def test_status_auth_absent_or_unreadable_is_none(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, auth: object
+) -> None:
+    """No block, a non-dict, or a missing/empty state all read as no evidence.
+
+    An add-on that predates ``auth`` sends no key at all; this collapses every
+    one of those shapes to the same ``None`` a legacy add-on produces, so the
+    health check's "unknown = no repair" never has to tell them apart.
+    """
+    body: dict[str, object] = {"ready": True}
+    if auth is not None:
+        body["auth"] = auth
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=body)
+    status = await _client(hass).async_get_status()
+    assert status.auth is None
+
+
+async def test_status_auth_state_ok_has_no_since_requirement(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A recognised state with no "since" (or an unrecognised state) still parses."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={"ready": True, "auth": {"state": "ok"}},
+    )
+    status = await _client(hass).async_get_status()
+    assert status.auth is not None
+    assert status.auth.state == "ok"
+    assert status.auth.since is None
+
+
 async def test_status_alerts_skips_malformed_items(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

@@ -21,12 +21,15 @@ from homeassistant.helpers import issue_registry as ir
 from .api import ClaudeClient, ClaudeError, StatusResult
 from .const import (
     ASSIST_ASSISTANT,
+    AUTH_STATE_EXPIRED,
+    AUTH_STATE_OK,
     HEALTH_PROBE_PROMPT,
     ISSUE_CAMERA_VISION_NO_CAMERAS,
     ISSUE_MCP_UNREACHABLE,
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_NO_HA_TOKEN,
     ISSUE_NOT_LOGGED_IN,
+    ISSUE_SIGNIN_EXPIRED,
     LOGGER,
     MCP_SERVER_DOMAIN,
     MCP_UNREACHABLE_DEBOUNCE_POLLS,
@@ -66,6 +69,12 @@ class HealthReport:
     mcp_server_loaded: bool
     ha_mcp_connected: bool | None
     camera_vision_inert: bool = False
+    # Independent of ``problem``, and three-valued rather than a plain flag:
+    # True raises the issue, False (status says "ok") clears it, and None ("unknown"
+    # or an add-on that predates the field) leaves it exactly as it is — a
+    # run-reported expiry (raised from conversation.py, faster than a poll) must
+    # survive an old add-on's status poll that says nothing about auth at all.
+    signin_expired: bool | None = None
 
 
 @callback
@@ -134,12 +143,27 @@ def evaluate(
         and _exposed_camera_count(hass) == 0
     )
 
+    # Three-valued per HealthReport's doc: only an explicit "expired"/"ok" from
+    # the add-on ever touches the issue here; "unknown", an unrecognised token
+    # or no block at all (``None``) leaves whatever conversation.py already set.
+    auth = status.auth if status is not None else None
+    signin_expired: bool | None
+    if auth is None:
+        signin_expired = None
+    elif auth.state == AUTH_STATE_EXPIRED:
+        signin_expired = True
+    elif auth.state == AUTH_STATE_OK:
+        signin_expired = False
+    else:
+        signin_expired = None
+
     return HealthReport(
         problem=problem,
         exposed_to_assist=exposed,
         mcp_server_loaded=mcp_loaded,
         ha_mcp_connected=connected,
         camera_vision_inert=camera_vision_inert,
+        signin_expired=signin_expired,
     )
 
 
@@ -214,6 +238,21 @@ def async_apply(
         )
     else:
         async_clear_issues(hass, entry_id, ISSUE_CAMERA_VISION_NO_CAMERAS)
+
+    # Independent of the single-problem set, and of camera vision: see
+    # HealthReport.signin_expired for why ``None`` touches neither call.
+    if report.signin_expired is True:
+        async_raise_issue(
+            hass,
+            entry_id,
+            ISSUE_SIGNIN_EXPIRED,
+            severity=ir.IssueSeverity.ERROR,
+            persistent=True,
+            learn_more_url="https://github.com/LayerTM/claude-ha#health-checks",
+            placeholders=placeholders,
+        )
+    elif report.signin_expired is False:
+        async_clear_issues(hass, entry_id, ISSUE_SIGNIN_EXPIRED)
 
 
 async def async_probe(hass: HomeAssistant, client: ClaudeClient) -> None:

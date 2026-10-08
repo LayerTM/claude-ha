@@ -398,6 +398,14 @@ raises a repair with the exact fix when it finds:
 - the **Model Context Protocol Server** integration is missing or unreachable;
 - nothing is exposed to Assist (so there's nothing to see or control).
 
+Separately, **Claude's sign-in has expired** is raised the moment a chat turn
+hits it, or from the next status poll, whichever comes first — the shared
+subscription token's refresh window is short, so an add-on asked only rarely
+can lose it between chats. The repair and the chat reply both point at the
+fix: sign in again (`/login`) in the add-on's console, or set a
+`claude setup-token` token as its OAuth Token option, which survives idle
+spells. It clears once the add-on reports the sign-in is good again.
+
 These checks cost nothing (they read the status poll, not Claude). Press the
 **Check Claude health** button (`button.claude_code_check_claude_health`) to run a
 deeper probe — a tiny read that confirms
@@ -468,6 +476,10 @@ add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
 - **"The add-on runs a different AI engine".** The entry was set up for one
   engine and its add-on now reports another. Restore the add-on the entry was
   set up for, or delete the entry and add the add-on again.
+- **Chat suddenly only says it couldn't finish, with no reason given.** The
+  add-on hasn't told this integration why yet (an older add-on reports every
+  failed model call the same generic way). Update the add-on; a current one
+  names an expired sign-in specifically and raises the repair above instead.
 - **A request is refused with a reason.** "The request is too large" means the
   prompt or request exceeds the add-on's size limit (shown when the add-on
   publishes one); shorten it. "Can't make changes because it has no Home

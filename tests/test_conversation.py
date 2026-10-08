@@ -8,8 +8,16 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.claude_ha.api import ClaudeError, Proposal
-from custom_components.claude_ha.const import DOMAIN, HEADER_CALLER
+from custom_components.claude_ha.api import (
+    ClaudeAuthExpiredError,
+    ClaudeError,
+    Proposal,
+)
+from custom_components.claude_ha.const import (
+    DOMAIN,
+    HEADER_CALLER,
+    ISSUE_SIGNIN_EXPIRED,
+)
 from custom_components.claude_ha.conversation import (
     _delete_query,
     _modify_query,
@@ -17,10 +25,17 @@ from custom_components.claude_ha.conversation import (
     _render_proposal,
     _spoken_confirm,
 )
+from custom_components.claude_ha.issues import entry_issue_id
 from homeassistant.components import conversation
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.helpers import chat_session, entity_registry as er, intent, llm
+from homeassistant.helpers import (
+    chat_session,
+    entity_registry as er,
+    intent,
+    issue_registry as ir,
+    llm,
+)
 
 from .conftest import (
     LEGACY_STATUS_PAYLOAD,
@@ -283,6 +298,58 @@ async def test_conversation_error(
         agent_id=_agent_id(hass, mock_config_entry),
     )
     assert result.response.response_type is intent.IntentResponseType.ERROR
+    # Negative control: a failure that isn't an expired sign-in never raises it.
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, mock_config_entry.entry_id)
+        )
+        is None
+    )
+
+
+async def test_conversation_names_an_expired_signin_and_raises_the_repair(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A degraded read that ended auth-expired gets the sign-in sentence, and a repair.
+
+    Not the add-on's own "couldn't finish that response" apology: the reason
+    the wire carries is read before anything else in the body.
+    """
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "Sorry — I couldn't finish that response.",
+            "reason": "auth-expired",
+            "proposal": None,
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "how warm is the living room?",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+    speech = result.response.speech["plain"]["speech"]
+    assert "sign-in has expired" in speech
+    assert "couldn't finish" not in speech
+    issue = ir.async_get(hass).async_get_issue(
+        DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, mock_config_entry.entry_id)
+    )
+    assert issue is not None
+    assert issue.translation_placeholders == {
+        "engine": "Claude",
+        "addon": "Claude Code",
+    }
 
 
 async def test_conversation_propagates_id_and_caller(
@@ -810,6 +877,45 @@ async def test_delete_commit_failure_is_a_clean_error(
     )
     result = await _delete_turn(hass, mock_config_entry, "yes", first.conversation_id)
     assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+async def test_write_path_auth_expired_raises_the_repair_too(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A write-side failure (not just a read) also names the sign-in and repairs it.
+
+    ``_error`` is the single funnel every write call site in this module
+    returns through, so one representative write (a confirmed delete) stands
+    in for all of them.
+    """
+    await setup_integration(hass, mock_config_entry)
+    hass.states.async_set(
+        "automation.m", "on", {"id": "id-m", "friendly_name": "Morning Lights"}
+    )
+
+    async def _expired(_hass: HomeAssistant, _config_id: str) -> None:
+        raise ClaudeAuthExpiredError("session expired")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.conversation.async_delete_automation", _expired
+    )
+
+    first = await _delete_turn(
+        hass, mock_config_entry, "delete my morning lights automation"
+    )
+    result = await _delete_turn(hass, mock_config_entry, "yes", first.conversation_id)
+
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+    assert "sign-in has expired" in result.response.speech["plain"]["speech"]
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, mock_config_entry.entry_id)
+        )
+        is not None
+    )
 
 
 def test_modify_query_detects_and_extracts_target() -> None:

@@ -18,11 +18,12 @@ import yaml
 from homeassistant.components import conversation
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import intent
+from homeassistant.helpers import intent, issue_registry as ir
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .api import (
+    ClaudeAuthExpiredError,
     ClaudeError,
     PromptResult,
     Proposal,
@@ -43,13 +44,16 @@ from .const import (
     CONF_CRITICAL_ENTITIES,
     CONFIRMATION_AUTO,
     CONFIRMATION_CONFIRMED,
+    ISSUE_SIGNIN_EXPIRED,
     LOGGER,
     MODE_WRITE,
     SURFACE_TEXT,
     SURFACE_VOICE,
 )
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
+from .engines import engine_for_entry
 from .entity import build_device_info
+from .issues import async_raise_issue
 from .risk import is_auto_ok
 from .vision import resolve_camera
 
@@ -721,9 +725,25 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
     ) -> conversation.ConversationResult:
         """Answer with the error's translation in the conversation's language.
 
-        The exception's own text is detail for the log and is never spoken.
+        The exception's own text is detail for the log and is never spoken. An
+        expired sign-in also raises the repair here, right from the failing
+        turn — faster than waiting for the next status poll (which raises the
+        same issue independently; see :mod:`.health`).
         """
         LOGGER.debug("Chat turn failed (%s): %s", err.translation_key, err)
+        if isinstance(err, ClaudeAuthExpiredError):
+            entry = self.coordinator.config_entry
+            engine = engine_for_entry(entry)
+            assert engine is not None
+            async_raise_issue(
+                self.hass,
+                entry.entry_id,
+                ISSUE_SIGNIN_EXPIRED,
+                severity=ir.IssueSeverity.ERROR,
+                persistent=True,
+                learn_more_url="https://github.com/LayerTM/claude-ha#health-checks",
+                placeholders={"engine": engine.name, "addon": engine.addon_name},
+            )
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_error(
             intent.IntentResponseErrorCode.UNKNOWN,

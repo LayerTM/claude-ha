@@ -234,6 +234,32 @@ async def test_chat_health_sensor_degraded(
     assert state.attributes["last_reason"] == "model-error"
 
 
+async def test_chat_health_sensor_passes_through_auth_expired_reason(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """The reason token is read as-is; "auth-expired" is no different."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status",
+        json={
+            "ready": True,
+            "chat_health": {
+                "recent": 8,
+                "degraded": 2,
+                "recovered": 1,
+                "last_reason": "auth-expired",
+            },
+        },
+    )
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
+    assert state is not None
+    assert state.attributes["last_reason"] == "auth-expired"
+
+
 def _ms_ago(hours: float) -> int:
     """Epoch ms that many hours before now, on the clock the sensor reads."""
     return int((dt_util.utcnow() - timedelta(hours=hours)).timestamp() * 1000)
