@@ -12,7 +12,7 @@ from custom_components.claude_ha import schema
 
 def test_prefers_probatio() -> None:
     """Home Assistant 2026.9+ validates with probatio, so the shim exposes it."""
-    import probatio
+    probatio = pytest.importorskip("probatio")
 
     assert schema.vol is probatio
 

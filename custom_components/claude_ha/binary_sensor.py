@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.components.binary_sensor.const import BinarySensorDeviceClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .entity import build_device_info
+
+if TYPE_CHECKING:
+    # Defined in .const from HA 2026.10 (typed there, not re-exported); older
+    # releases only provide it on the package, which still re-exports it at runtime.
+    from homeassistant.components.binary_sensor.const import BinarySensorDeviceClass
+else:
+    from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 
 # Read-only entity fed by the status coordinator; no outbound writes to serialize.
 PARALLEL_UPDATES = 0

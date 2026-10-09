@@ -33,3 +33,35 @@ jobs:
             --cov=custom_components.claude_ha \
             --cov-report=term-missing \
             --cov-fail-under=100
+
+  # The oldest Home Assistant hacs.json promises. `test` above only sees the
+  # newest, so an import or API that older releases lack would pass it.
+  test-minimum-ha:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements_min_ha.txt
+          python scripts/install_component_requirements.py
+      - name: Home Assistant is hacs.json's minimum
+        run: |
+          python - <<'PY'
+          import json
+          from homeassistant.const import __version__
+
+          minimum = json.load(open("hacs.json"))["homeassistant"]
+          if __version__ != minimum:
+              raise SystemExit(
+                  f"installed Home Assistant {__version__}, hacs.json promises "
+                  f"{minimum}: update requirements_min_ha.txt"
+              )
+          PY
+      # Typing and 100% coverage are measured on `test` (newest release); code
+      # that branches on the Home Assistant version cannot all run on one.
+      - name: pytest
+        run: pytest
