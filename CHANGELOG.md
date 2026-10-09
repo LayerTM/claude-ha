@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A Codex add-on's expired sign-in pointed at Claude's fix.** The repair
+  issue and the chat reply for an expired or missing sign-in named `/login`
+  and `claude setup-token` regardless of which add-on raised them, which sent
+  a Codex user a fix that cannot work for Codex. Each engine's own renewal
+  commands (from its add-on's docs) are now a property of the engine, and
+  every sign-in string reads them through a placeholder instead of naming an
+  engine's command directly.
+
 ### Added
 
 - **A repair and a clear chat reply for an expired Claude sign-in.** The

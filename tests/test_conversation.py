@@ -25,6 +25,7 @@ from custom_components.claude_ha.conversation import (
     _render_proposal,
     _spoken_confirm,
 )
+from custom_components.claude_ha.engines import CLAUDE
 from custom_components.claude_ha.issues import entry_issue_id
 from homeassistant.components import conversation
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
@@ -346,10 +347,7 @@ async def test_conversation_names_an_expired_signin_and_raises_the_repair(
         DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, mock_config_entry.entry_id)
     )
     assert issue is not None
-    assert issue.translation_placeholders == {
-        "engine": "Claude",
-        "addon": "Claude Code",
-    }
+    assert issue.translation_placeholders == CLAUDE.placeholders
 
 
 async def test_conversation_propagates_id_and_caller(
@@ -897,7 +895,11 @@ async def test_write_path_auth_expired_raises_the_repair_too(
     )
 
     async def _expired(_hass: HomeAssistant, _config_id: str) -> None:
-        raise ClaudeAuthExpiredError("session expired")
+        # The real write path only ever gets this from the client, which
+        # already names its own engine (api.py raises it with placeholders).
+        raise ClaudeAuthExpiredError(
+            "session expired", translation_placeholders=CLAUDE.placeholders
+        )
 
     monkeypatch.setattr(
         "custom_components.claude_ha.conversation.async_delete_automation", _expired

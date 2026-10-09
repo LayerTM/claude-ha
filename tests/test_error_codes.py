@@ -160,9 +160,9 @@ def test_every_core_code_is_mapped() -> None:
             503,
             {"error": "OAuth session expired", "code": "auth_expired"},
             ClaudeAuthExpiredError,
-            "Claude's sign-in has expired. Sign in again (`/login`) in the "
-            "add-on's console, or set a `claude setup-token` token as its "
-            "OAuth Token option so it survives idle spells.",
+            "Claude's sign-in has expired. Sign in again: run `/login` in "
+            "the add-on's console, or set a `claude setup-token` token as "
+            "its OAuth Token option so it survives idle spells.",
         ),
         (
             504,
@@ -326,7 +326,7 @@ async def test_degraded_read_names_an_expired_signin(
         await _client(hass).async_prompt("hi")
 
     assert await async_error_message(hass, "en", err.value) == (
-        "Claude's sign-in has expired. Sign in again (`/login`) in the "
+        "Claude's sign-in has expired. Sign in again: run `/login` in the "
         "add-on's console, or set a `claude setup-token` token as its "
         "OAuth Token option so it survives idle spells."
     )

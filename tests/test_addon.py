@@ -23,6 +23,8 @@ OTHER_ENGINE = Engine(
     manufacturer="Someone",
     device_model="Other Agent add-on",
     repository_url="https://github.com/LayerTM/OtherInHA",
+    login_fix="run its own login command",
+    durable_login="set its own durable token",
 )
 OTHER_SLUG = "xyz_other-agent"
 

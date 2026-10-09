@@ -742,7 +742,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 severity=ir.IssueSeverity.ERROR,
                 persistent=True,
                 learn_more_url="https://github.com/LayerTM/claude-ha#health-checks",
-                placeholders={"engine": engine.name, "addon": engine.addon_name},
+                placeholders=engine.placeholders,
             )
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_error(

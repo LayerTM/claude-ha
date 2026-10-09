@@ -210,7 +210,7 @@ def async_apply(
     entry_id = entry.entry_id
     engine = engine_for_entry(entry)
     assert engine is not None
-    placeholders = {"engine": engine.name, "addon": engine.addon_name}
+    placeholders = engine.placeholders
 
     for issue, (severity, learn_more_url) in _ISSUES.items():
         if issue == report.problem:

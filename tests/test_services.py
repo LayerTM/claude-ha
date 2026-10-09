@@ -11,10 +11,16 @@ from custom_components.claude_ha.const import (
     ATTR_INTENTS,
     ATTR_MODE,
     ATTR_PROMPT,
+    CONF_ADDON_SLUG,
+    CONF_ENGINE,
+    CONF_HOST,
+    CONF_PORT,
+    CONF_TOKEN,
     DOMAIN,
     MODE_WRITE,
     SERVICE_ASK,
 )
+from custom_components.claude_ha.engines import CLAUDE, CODEX, Engine
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
@@ -23,6 +29,8 @@ from .conftest import (
     PROMPT_PAYLOAD,
     STATUS_PAYLOAD,
     TEST_BASE_URL,
+    TEST_PORT,
+    TEST_TOKEN,
     USAGE_PAYLOAD,
     setup_integration,
 )
@@ -259,6 +267,72 @@ async def test_ask_add_on_error(
             blocking=True,
             return_response=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("engine", "host", "slug"),
+    [
+        (CLAUDE, "abcd1234-claude-code", "abcd1234_claude-code"),
+        (CODEX, "abcd1234-codex", "abcd1234_codex"),
+    ],
+)
+async def test_ask_auth_expired_names_the_entrys_own_engine(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    engine: Engine,
+    host: str,
+    slug: str,
+) -> None:
+    """A service call that hits auth_expired names this entry's own engine.
+
+    Unlike chat (``conversation.py``'s ``_error``), the service path has no
+    funnel that adds engine facts — ``ClaudeError`` surfaces as-is, so the
+    facts must already be on the raised error (the client's own engine, read
+    at the raise site in ``api.py``).
+    """
+    base_url = f"http://{host}:{TEST_PORT}"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=engine.addon_name,
+        unique_id=slug,
+        version=1,
+        minor_version=2,
+        data={
+            CONF_HOST: host,
+            CONF_PORT: TEST_PORT,
+            CONF_TOKEN: TEST_TOKEN,
+            CONF_ADDON_SLUG: slug,
+            CONF_ENGINE: engine.key,
+        },
+    )
+    aioclient_mock.get(
+        f"{base_url}/api/status", json={**STATUS_PAYLOAD, "engine": engine.key}
+    )
+    aioclient_mock.get(f"{base_url}/api/usage", json=USAGE_PAYLOAD)
+    aioclient_mock.get(f"{base_url}/api/account_limits", json=ACCOUNT_LIMITS_PAYLOAD)
+    aioclient_mock.post(
+        f"{base_url}/api/prompt",
+        json={
+            "text": "Sorry — I couldn't finish that response.",
+            "reason": "auth-expired",
+            "proposal": None,
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await setup_integration(hass, entry)
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASK,
+            {ATTR_PROMPT: "hi"},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert err.value.translation_key == "auth_expired"
+    assert err.value.translation_placeholders == engine.placeholders
 
 
 async def test_ask_with_two_entries_needs_a_choice(
