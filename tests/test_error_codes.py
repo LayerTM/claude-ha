@@ -41,15 +41,6 @@ from .conftest import (
 _STATUS_URL = f"{TEST_BASE_URL}/api/status"
 _PROMPT_URL = f"{TEST_BASE_URL}/api/prompt"
 
-# What conversation.py adds for an auth_expired error; harmless extras for
-# every other code's message, which doesn't reference them.
-_CLAUDE_PLACEHOLDERS = {
-    "engine": CLAUDE.name,
-    "addon": CLAUDE.addon_name,
-    "login_fix": CLAUDE.login_fix,
-    "durable_login": CLAUDE.durable_login,
-}
-
 # The codes the add-on's prompt server answers with (core API 3), as its
 # documentation lists them. A code added there needs a row here and in the table.
 _CORE_CODES = {
@@ -208,10 +199,7 @@ async def test_coded_answers_name_their_error(
         await _client(hass).async_prompt("hi")
 
     assert type(err.value) is error
-    assert (
-        await async_error_message(hass, "en", err.value, _CLAUDE_PLACEHOLDERS)
-        == message
-    )
+    assert await async_error_message(hass, "en", err.value) == message
 
 
 @pytest.mark.parametrize(
@@ -337,7 +325,7 @@ async def test_degraded_read_names_an_expired_signin(
     with pytest.raises(ClaudeAuthExpiredError) as err:
         await _client(hass).async_prompt("hi")
 
-    assert await async_error_message(hass, "en", err.value, _CLAUDE_PLACEHOLDERS) == (
+    assert await async_error_message(hass, "en", err.value) == (
         "Claude's sign-in has expired. Sign in again: run `/login` in the "
         "add-on's console, or set a `claude setup-token` token as its "
         "OAuth Token option so it survives idle spells."

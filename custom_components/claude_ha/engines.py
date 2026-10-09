@@ -45,6 +45,16 @@ class Engine:
     # The durable alternative to login_fix (survives idle spells), same shape.
     durable_login: str
 
+    @property
+    def placeholders(self) -> dict[str, str]:
+        """This engine's facts, for every string a sign-in problem fills in."""
+        return {
+            "engine": self.name,
+            "addon": self.addon_name,
+            "login_fix": self.login_fix,
+            "durable_login": self.durable_login,
+        }
+
 
 CLAUDE: Final = Engine(
     key="claude",

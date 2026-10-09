@@ -316,12 +316,7 @@ async def test_apply_placeholders_name_the_engine_and_addon(
         DOMAIN, entry_issue_id(ISSUE_NO_HA_TOKEN, ENTRY_ID)
     )
     assert issue is not None
-    assert issue.translation_placeholders == {
-        "engine": "Claude",
-        "addon": "Claude Code",
-        "login_fix": CLAUDE.login_fix,
-        "durable_login": CLAUDE.durable_login,
-    }
+    assert issue.translation_placeholders == CLAUDE.placeholders
 
 
 async def test_apply_leaves_other_entries_issues_alone(hass: HomeAssistant) -> None:
@@ -405,12 +400,7 @@ async def test_apply_raises_signin_expired(hass: HomeAssistant) -> None:
         DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, ENTRY_ID)
     )
     assert issue is not None
-    assert issue.translation_placeholders == {
-        "engine": "Claude",
-        "addon": "Claude Code",
-        "login_fix": CLAUDE.login_fix,
-        "durable_login": CLAUDE.durable_login,
-    }
+    assert issue.translation_placeholders == CLAUDE.placeholders
 
 
 async def test_apply_clears_signin_expired_on_ok(hass: HomeAssistant) -> None:

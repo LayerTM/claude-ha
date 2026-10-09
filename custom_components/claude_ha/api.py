@@ -131,20 +131,14 @@ class ClaudeError(HomeAssistantError):
 
 
 async def async_error_message(
-    hass: HomeAssistant,
-    language: str,
-    err: ClaudeError,
-    placeholders: dict[str, str] | None = None,
+    hass: HomeAssistant, language: str, err: ClaudeError
 ) -> str:
     """Return what ``err`` says to a user, in ``language``; never raises.
 
-    ``placeholders`` fills in facts the raise site didn't have (e.g. the
-    entry's engine), under ``err.translation_placeholders`` where both name
-    the same key. Home Assistant falls back to English for a language without
-    a translation. A key or placeholder that cannot be rendered gives the
-    generic message, and translations that cannot be loaded at all give
-    :data:`GENERIC_ERROR_MESSAGE`, so a failure is never answered with a raw
-    key, a template or a traceback.
+    Home Assistant falls back to English for a language without a translation.
+    A key or placeholder that cannot be rendered gives the generic message, and
+    translations that cannot be loaded at all give :data:`GENERIC_ERROR_MESSAGE`,
+    so a failure is never answered with a raw key, a template or a traceback.
     """
     try:
         translations = await translation.async_get_translations(
@@ -155,9 +149,8 @@ async def async_error_message(
         return GENERIC_ERROR_MESSAGE
     template = translations.get(_exception_key(err.translation_key))
     if template is not None:
-        merged = {**(placeholders or {}), **(err.translation_placeholders or {})}
         with suppress(KeyError, IndexError, ValueError):
-            return template.format(**merged)
+            return template.format(**(err.translation_placeholders or {}))
     return translations.get(
         _exception_key(ClaudeError.translation_key), GENERIC_ERROR_MESSAGE
     )
@@ -710,7 +703,7 @@ class ClaudeClient:
             headers=headers,
             timeout_s=self._read_timeout,
         )
-        return _parse_prompt_result(data)
+        return _parse_prompt_result(data, self._engine)
 
     async def async_prompt_stream(
         self,
@@ -758,13 +751,13 @@ class ClaudeClient:
                 ) as resp,
             ):
                 if resp.status >= HTTPStatus.BAD_REQUEST:
-                    await _raise_for_answer(resp)
+                    await _raise_for_answer(resp, self._engine)
                 content_type = resp.headers.get("Content-Type", "")
                 if CONTENT_TYPE_NDJSON not in content_type:
                     data = await resp.json(content_type=None) or {}
-                    yield _parse_prompt_result(data)
+                    yield _parse_prompt_result(data, self._engine)
                     return
-                async for chunk in _iter_ndjson(resp.content):
+                async for chunk in _iter_ndjson(resp.content, self._engine):
                     yield chunk
         except TimeoutError as err:
             raise ClaudeConnectionError("Timed out talking to the add-on") from err
@@ -805,7 +798,7 @@ class ClaudeClient:
                 ) as resp,
             ):
                 if resp.status >= HTTPStatus.BAD_REQUEST:
-                    await _raise_for_answer(resp)
+                    await _raise_for_answer(resp, self._engine)
                 return await resp.json(content_type=None) or {}
         except TimeoutError as err:
             raise ClaudeConnectionError("Timed out talking to the add-on") from err
@@ -1129,7 +1122,7 @@ def _valid_json(value: Any) -> Any:
     return value
 
 
-def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
+def _parse_prompt_result(data: dict[str, Any], engine: Engine) -> PromptResult:
     """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object.
 
     A read is still answered 200 (or ``done``) when the engine's sign-in has
@@ -1137,11 +1130,15 @@ def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
     outcome rather than failing the transport. ``reason`` carries that outcome
     the same way ``chat_health.last_reason`` does; this is the one place a
     read is checked for it, so every caller gets the same typed error instead
-    of the add-on's own apology text.
+    of the add-on's own apology text. ``engine`` is the caller's own, so the
+    raised error already names its own sign-in fix.
     """
     data = _valid_json(data)
     if data.get(RESP_REASON) == REASON_AUTH_EXPIRED:
-        raise ClaudeAuthExpiredError(f"run ended reason={REASON_AUTH_EXPIRED}")
+        raise ClaudeAuthExpiredError(
+            f"run ended reason={REASON_AUTH_EXPIRED}",
+            translation_placeholders=engine.placeholders,
+        )
     proposal_raw = data.get(RESP_PROPOSAL)
     proposal: Proposal | None = None
     if isinstance(proposal_raw, dict):
@@ -1161,7 +1158,7 @@ def _parse_prompt_result(data: dict[str, Any]) -> PromptResult:
 
 
 async def _iter_ndjson(
-    stream: AsyncIterable[bytes],
+    stream: AsyncIterable[bytes], engine: Engine
 ) -> AsyncIterator[StreamDelta | PromptResult]:
     """Yield deltas then the final result from an NDJSON stream (contract §2).
 
@@ -1188,11 +1185,11 @@ async def _iter_ndjson(
         elif kind == STREAM_KIND_DONE:
             if held:
                 yield StreamDelta(_valid_unicode(held))
-            yield _parse_prompt_result(event)
+            yield _parse_prompt_result(event, engine)
             return
         elif kind == STREAM_KIND_ERROR:
             event = _valid_json(event)
-            raise _coded_error(event) or ClaudeConnectionError(
+            raise _coded_error(event, engine=engine) or ClaudeConnectionError(
                 str(event.get(STREAM_ERROR, "stream error"))
             )
     raise ClaudeConnectionError("Stream ended without a final result")
@@ -1232,28 +1229,33 @@ _ERROR_PLACEHOLDERS: Final[Mapping[str, tuple[str, str]]] = {
 }
 
 
-async def _raise_for_answer(resp: ClientResponse) -> NoReturn:
+async def _raise_for_answer(resp: ClientResponse, engine: Engine) -> NoReturn:
     """Raise the error an add-on's failed HTTP answer describes."""
     try:
         body = await resp.json(content_type=None)
     except ClientError, ValueError:
         body = None
-    raise _coded_error(body, resp.status) or _status_error(resp.status)
+    raise _coded_error(body, resp.status, engine=engine) or _status_error(resp.status)
 
 
-def _coded_error(body: Any, status: int | None = None) -> ClaudeError | None:
+def _coded_error(
+    body: Any, status: int | None = None, *, engine: Engine
+) -> ClaudeError | None:
     """Return the error a coded answer names, or ``None`` if it names none usable.
 
     ``None`` covers an add-on that predates codes, a code this version does not
     know, and a code without the value its message needs; the caller then falls
-    back to what it knew before codes existed.
+    back to what it knew before codes existed. ``engine`` is the caller's own,
+    named by ``auth_expired``'s placeholders (the only code that needs it).
     """
     if not isinstance(body, dict) or body.get(ERROR_CODE) not in _ERROR_CODES:
         return None
     code = body[ERROR_CODE]
     error, key = _ERROR_CODES[code]
     placeholders: dict[str, str] | None = None
-    if key in _ERROR_PLACEHOLDERS:
+    if key == "auth_expired":
+        placeholders = engine.placeholders
+    elif key in _ERROR_PLACEHOLDERS:
         field, name = _ERROR_PLACEHOLDERS[key]
         value = body.get(field)
         if field == ERROR_LIMIT_BYTES:

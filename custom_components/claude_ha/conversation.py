@@ -731,17 +731,10 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         same issue independently; see :mod:`.health`).
         """
         LOGGER.debug("Chat turn failed (%s): %s", err.translation_key, err)
-        placeholders: dict[str, str] | None = None
         if isinstance(err, ClaudeAuthExpiredError):
             entry = self.coordinator.config_entry
             engine = engine_for_entry(entry)
             assert engine is not None
-            placeholders = {
-                "engine": engine.name,
-                "addon": engine.addon_name,
-                "login_fix": engine.login_fix,
-                "durable_login": engine.durable_login,
-            }
             async_raise_issue(
                 self.hass,
                 entry.entry_id,
@@ -749,14 +742,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 severity=ir.IssueSeverity.ERROR,
                 persistent=True,
                 learn_more_url="https://github.com/LayerTM/claude-ha#health-checks",
-                placeholders=placeholders,
+                placeholders=engine.placeholders,
             )
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_error(
             intent.IntentResponseErrorCode.UNKNOWN,
-            await async_error_message(
-                self.hass, user_input.language, err, placeholders
-            ),
+            await async_error_message(self.hass, user_input.language, err),
         )
         return conversation.ConversationResult(
             response=response, conversation_id=chat_log.conversation_id
