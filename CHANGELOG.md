@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-09
+
 ### Fixed
 
 - **A Codex add-on's expired sign-in pointed at Claude's fix.** The repair
@@ -713,7 +715,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.13.2...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/LayerTM/claude-ha/compare/v1.13.2...v1.14.0
 [1.13.2]: https://github.com/LayerTM/claude-ha/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/LayerTM/claude-ha/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/LayerTM/claude-ha/compare/v1.12.0...v1.13.0
