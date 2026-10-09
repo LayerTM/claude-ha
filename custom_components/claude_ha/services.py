@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import (
     HomeAssistant,
@@ -46,6 +44,7 @@ from .const import (
 )
 from .coordinator import ClaudeConfigEntry
 from .engines import engine_for_entry
+from .schema import vol
 from .voice import DEFAULT_WHISPER_MODEL, async_setup_voice_pipeline, default_voice
 
 ASK_SCHEMA = vol.Schema(

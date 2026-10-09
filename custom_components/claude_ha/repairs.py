@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.components.hassio import AddonError
-from homeassistant.components.repairs import ConfirmRepairFlow, RepairsFlow
+from homeassistant.components.repairs import (
+    ConfirmRepairFlow,
+    RepairsFlow,
+    RepairsFlowResult,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
 
 from .addon import get_addon_manager
 from .const import ISSUE_ADDON_NOT_RUNNING, LOGGER
 from .issues import ISSUE_DATA_KIND
+from .schema import vol
 
 
 class AddonNotRunningRepairFlow(RepairsFlow):
@@ -25,13 +27,13 @@ class AddonNotRunningRepairFlow(RepairsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> RepairsFlowResult:
         """Handle the first step of the fix flow."""
         return await self.async_step_confirm()
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> RepairsFlowResult:
         """Start the add-on on confirmation."""
         if user_input is not None:
             try:

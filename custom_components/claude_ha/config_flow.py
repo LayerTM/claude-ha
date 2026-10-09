@@ -6,7 +6,6 @@ import asyncio
 from typing import Any
 
 from aiohasupervisor.models import StoreAddRepository
-import voluptuous as vol
 
 from homeassistant.components.hassio import (
     AddonError,
@@ -47,6 +46,7 @@ from .const import (
     LOGGER,
 )
 from .engines import ENGINES, Engine, engine_for_entry, engine_for_slug
+from .schema import vol
 
 ON_SUPERVISOR_SCHEMA = vol.Schema({vol.Required(CONF_USE_ADDON, default=True): bool})
 ADD_REPOSITORY_SCHEMA = vol.Schema({vol.Required("confirm", default=False): bool})

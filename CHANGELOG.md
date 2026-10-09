@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Automation drafts rejected by Home Assistant's validator were reported as
+  an unexpected failure.** Home Assistant 2026.9 replaced voluptuous with
+  probatio, so its validation errors no longer matched the exception the
+  commit path caught and fell through to the generic handler. The schema
+  library is now chosen once (probatio, with voluptuous on older releases),
+  and the integration type-checks against Home Assistant 2026.10.
+
 ## [1.14.0] - 2026-10-09
 
 ### Fixed

@@ -205,7 +205,7 @@ def _local_attempt_failed(chat_log: conversation.ChatLog, agent_id: str) -> None
             agent_id=agent_id,
             tool_call_id=tool_input.id,
             tool_name=tool_input.tool_name,
-            tool_result=llm.IntentResponseDict(failed),
+            result=llm.ToolResult(data=llm.IntentResponseDict(failed)),
         )
     )
 
