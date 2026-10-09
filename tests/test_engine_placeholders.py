@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from custom_components.claude_ha.const import DOMAIN
-from custom_components.claude_ha.engines import CLAUDE
+from custom_components.claude_ha.engines import CLAUDE, CODEX
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import translation
 
@@ -134,11 +134,6 @@ _ISSUES_OLD = {
         "Home Assistant is trying to install it; check the add-on for progress."
     ),
     "component.claude_ha.issues.not_logged_in.title": "Claude isn't logged in",
-    "component.claude_ha.issues.not_logged_in.description": (
-        "The Claude Code add-on is running but Claude isn't authenticated, so "
-        "chat can't answer. Open the Claude Code add-on and run `claude` to log "
-        "in (or set an OAuth token in the add-on options), then check again."
-    ),
     "component.claude_ha.issues.no_ha_token.title": (
         "Claude has no token to read your home"
     ),
@@ -279,3 +274,61 @@ async def test_engine_mismatch_issue_names_both_engines(hass: HomeAssistant) -> 
     )
     assert "Claude" in text
     assert "codex" in text
+
+
+# Each engine's own renewal commands, from its add-on's own docs (engines.py).
+# A sign-in string rendered for one engine must show only its own commands.
+_SIGNIN_COMMANDS = {
+    CLAUDE: ("`/login`", "`claude setup-token`"),
+    CODEX: ("`codex logout`", "`codex login`"),
+}
+
+_SIGNIN_KEYS = {
+    "exceptions": ("component.claude_ha.exceptions.auth_expired.message",),
+    "issues": (
+        "component.claude_ha.issues.not_logged_in.description",
+        "component.claude_ha.issues.signin_expired.description",
+    ),
+}
+
+
+async def test_signin_strings_name_each_engines_own_fix(hass: HomeAssistant) -> None:
+    """auth_expired/not_logged_in/signin_expired each name the rendering engine's fix.
+
+    How to renew a sign-in is a fact of the Engine; rendering any of these
+    three strings for one engine must show that engine's own commands and
+    never the other engine's.
+    """
+    rendered: dict[str, str] = {}
+    for category, keys in _SIGNIN_KEYS.items():
+        translations = await translation.async_get_translations(
+            hass, "en", category, {DOMAIN}
+        )
+        rendered.update({key: translations[key] for key in keys})
+
+    for key, template in rendered.items():
+        for engine in (CLAUDE, CODEX):
+            other = CODEX if engine is CLAUDE else CLAUDE
+            text = template.format(
+                engine=engine.name,
+                addon=engine.addon_name,
+                login_fix=engine.login_fix,
+                durable_login=engine.durable_login,
+            )
+            for own_command in _SIGNIN_COMMANDS[engine]:
+                assert own_command in text, (key, engine.key)
+            for foreign_command in _SIGNIN_COMMANDS[other]:
+                assert foreign_command not in text, (key, engine.key)
+
+
+def test_no_translation_names_an_engines_command_literally() -> None:
+    """strings.json/translations/en.json never hardcode one engine's own fix.
+
+    A literal `/login`, `claude setup-token` or `codex login` there would mean
+    some string skipped the {login_fix}/{durable_login} placeholders and named
+    one engine's command for every engine.
+    """
+    for literal in ("claude setup-token", "`/login`", "codex login", "codex logout"):
+        for strings in ("strings.json", "translations/en.json"):
+            text = (_PACKAGE / strings).read_text()
+            assert literal not in text, (literal, strings)

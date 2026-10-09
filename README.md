@@ -398,13 +398,16 @@ raises a repair with the exact fix when it finds:
 - the **Model Context Protocol Server** integration is missing or unreachable;
 - nothing is exposed to Assist (so there's nothing to see or control).
 
-Separately, **Claude's sign-in has expired** is raised the moment a chat turn
+Separately, **a sign-in that has expired** is raised the moment a chat turn
 hits it, or from the next status poll, whichever comes first — the shared
 subscription token's refresh window is short, so an add-on asked only rarely
 can lose it between chats. The repair and the chat reply both point at the
-fix: sign in again (`/login`) in the add-on's console, or set a
-`claude setup-token` token as its OAuth Token option, which survives idle
-spells. It clears once the add-on reports the sign-in is good again.
+configured engine's own fix: for the Claude Code add-on, sign in again
+(`/login`) in its console, or set a `claude setup-token` token as its OAuth
+Token option; for the Codex add-on, run `codex logout` then `codex login` in
+a console shell tab, or set an API key as its API Key option. Either durable
+option survives idle spells. It clears once the add-on reports the sign-in
+is good again.
 
 These checks cost nothing (they read the status poll, not Claude). Press the
 **Check Claude health** button (`button.claude_code_check_claude_health`) to run a

@@ -131,14 +131,20 @@ class ClaudeError(HomeAssistantError):
 
 
 async def async_error_message(
-    hass: HomeAssistant, language: str, err: ClaudeError
+    hass: HomeAssistant,
+    language: str,
+    err: ClaudeError,
+    placeholders: dict[str, str] | None = None,
 ) -> str:
     """Return what ``err`` says to a user, in ``language``; never raises.
 
-    Home Assistant falls back to English for a language without a translation.
-    A key or placeholder that cannot be rendered gives the generic message, and
-    translations that cannot be loaded at all give :data:`GENERIC_ERROR_MESSAGE`,
-    so a failure is never answered with a raw key, a template or a traceback.
+    ``placeholders`` fills in facts the raise site didn't have (e.g. the
+    entry's engine), under ``err.translation_placeholders`` where both name
+    the same key. Home Assistant falls back to English for a language without
+    a translation. A key or placeholder that cannot be rendered gives the
+    generic message, and translations that cannot be loaded at all give
+    :data:`GENERIC_ERROR_MESSAGE`, so a failure is never answered with a raw
+    key, a template or a traceback.
     """
     try:
         translations = await translation.async_get_translations(
@@ -149,8 +155,9 @@ async def async_error_message(
         return GENERIC_ERROR_MESSAGE
     template = translations.get(_exception_key(err.translation_key))
     if template is not None:
+        merged = {**(placeholders or {}), **(err.translation_placeholders or {})}
         with suppress(KeyError, IndexError, ValueError):
-            return template.format(**(err.translation_placeholders or {}))
+            return template.format(**merged)
     return translations.get(
         _exception_key(ClaudeError.translation_key), GENERIC_ERROR_MESSAGE
     )

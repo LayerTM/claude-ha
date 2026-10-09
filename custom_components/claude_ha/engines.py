@@ -37,6 +37,13 @@ class Engine:
     device_model: str
     # Public GitHub repo URL: where to point a user who lacks the add-on.
     repository_url: str
+    # How to renew THIS engine's own sign-in to its model provider, from its
+    # add-on's own docs. A full clause ("run ...", naming where), so every
+    # string that tells a user how to sign in reads it through a placeholder
+    # instead of naming an engine's command itself.
+    login_fix: str
+    # The durable alternative to login_fix (survives idle spells), same shape.
+    durable_login: str
 
 
 CLAUDE: Final = Engine(
@@ -47,6 +54,8 @@ CLAUDE: Final = Engine(
     manufacturer="Anthropic",
     device_model="Claude Code add-on",
     repository_url="https://github.com/LayerTM/ClaudeInHA",
+    login_fix="run `/login` in the add-on's console",
+    durable_login="set a `claude setup-token` token as its OAuth Token option",
 )
 
 CODEX: Final = Engine(
@@ -57,6 +66,8 @@ CODEX: Final = Engine(
     manufacturer="OpenAI",
     device_model="Codex add-on",
     repository_url="https://github.com/LayerTM/CodexInHA",
+    login_fix="run `codex logout` then `codex login` in a console shell tab",
+    durable_login="set an API key as its API Key option",
 )
 
 ENGINES: Final[Mapping[str, Engine]] = {

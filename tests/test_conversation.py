@@ -25,6 +25,7 @@ from custom_components.claude_ha.conversation import (
     _render_proposal,
     _spoken_confirm,
 )
+from custom_components.claude_ha.engines import CLAUDE
 from custom_components.claude_ha.issues import entry_issue_id
 from homeassistant.components import conversation
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
@@ -349,6 +350,8 @@ async def test_conversation_names_an_expired_signin_and_raises_the_repair(
     assert issue.translation_placeholders == {
         "engine": "Claude",
         "addon": "Claude Code",
+        "login_fix": CLAUDE.login_fix,
+        "durable_login": CLAUDE.durable_login,
     }
 
 
