@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The integration type-checks against Home Assistant 2026.10 (probatio-typed
+  schemas, `RepairsFlowResult`). No behaviour change.
+
 ## [1.14.0] - 2026-10-09
 
 ### Fixed

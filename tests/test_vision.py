@@ -588,14 +588,16 @@ def _two_channels(
         config_entry_id=entry_id, identifiers={(DOMAIN, "g4")}, name="G4 Instant"
     )
     ent = er.async_get(hass)
-    area_id = ar.async_get(hass).async_create(area_name).id if area_name else None
+    if area_name:
+        # An entity without a name of its own cannot carry an area (Home
+        # Assistant 2026.10), so the camera's area lives on its device.
+        area_id = ar.async_get(hass).async_create(area_name).id
+        dr.async_get(hass).async_update_device(device.id, area_id=area_id)
     ids: list[str] = []
     for index, friendly in enumerate(friendlies):
         reg = ent.async_get_or_create(
             "camera", "unifi", f"g4_{index}", device_id=device.id
         )
-        if area_id is not None:
-            ent.async_update_entity(reg.entity_id, area_id=area_id)
         hass.states.async_set(reg.entity_id, "idle", {"friendly_name": friendly})
         ids.append(reg.entity_id)
     return ids

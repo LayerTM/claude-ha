@@ -20,8 +20,6 @@ import re
 from typing import Any
 import uuid
 
-import voluptuous as vol
-
 from homeassistant.components.automation.config import async_validate_config_item
 from homeassistant.components.automation.const import DOMAIN as AUTOMATION_DOMAIN
 from homeassistant.config import AUTOMATION_CONFIG_PATH
@@ -61,6 +59,7 @@ from homeassistant.util.file import write_utf8_file_atomic
 from homeassistant.util.yaml import dump, load_yaml
 
 from .api import ClaudeError
+from .schema import vol
 
 # The GATE (reject-not-filter): a Claude-created automation may only ACTUATE the
 # user's own entities in these domains — every service call AND every entity it

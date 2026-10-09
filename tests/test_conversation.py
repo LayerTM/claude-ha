@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -200,12 +201,20 @@ def _local_attempt_failed(chat_log: conversation.ChatLog, agent_id: str) -> None
     failed.async_set_error(
         intent.IntentResponseErrorCode.NO_VALID_TARGETS, "No area named bedroom"
     )
+    # The result field is typed from Home Assistant 2026.10; older releases take
+    # the bare response dict as ``tool_result``.
+    if hasattr(llm, "ToolResult"):
+        result: dict[str, Any] = {
+            "result": llm.ToolResult(data=llm.IntentResponseDict(failed))
+        }
+    else:
+        result = {"tool_result": llm.IntentResponseDict(failed)}
     chat_log.async_add_assistant_content_without_tools(
         conversation.ToolResultContent(
             agent_id=agent_id,
             tool_call_id=tool_input.id,
             tool_name=tool_input.tool_name,
-            tool_result=llm.IntentResponseDict(failed),
+            **result,
         )
     )
 
