@@ -17,6 +17,7 @@ from custom_components.claude_ha.const import (
     CONF_ENGINE,
     DOMAIN,
     ISSUE_CAMERA_VISION_NO_CAMERAS,
+    ISSUE_MCP_UNAUTHORIZED,
     ISSUE_MCP_UNREACHABLE,
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_NO_HA_TOKEN,
@@ -178,6 +179,58 @@ async def test_exposed_count_handles_missing_store(
     assert report.exposed_to_assist is None
     # None is not zero, so the nothing-exposed problem does not fire.
     assert report.problem is None
+
+
+async def test_evaluate_mcp_unauthorized(
+    hass: HomeAssistant, expose: Callable[[bool], None]
+) -> None:
+    """A refused token outranks the generic unreachable verdict it often comes with."""
+    _healthy(hass)
+    expose(True)
+    for connected in (True, False, None):
+        status = _status(ha_mcp_auth="unauthorized", ha_mcp_connected=connected)
+        assert health.evaluate(hass, status).problem == ISSUE_MCP_UNAUTHORIZED
+
+
+@pytest.mark.parametrize("verdict", ["ok", "unreachable", "something-new", None])
+async def test_evaluate_other_mcp_auth_verdicts_raise_nothing(
+    hass: HomeAssistant, expose: Callable[[bool], None], verdict: str | None
+) -> None:
+    """Only a positive 'unauthorized' is a token problem; the rest is unknown/other."""
+    _healthy(hass)
+    expose(True)
+    assert health.evaluate(hass, _status(ha_mcp_auth=verdict)).problem is None
+
+
+async def test_evaluate_no_token_outranks_unauthorized(
+    hass: HomeAssistant, expose: Callable[[bool], None]
+) -> None:
+    """Without a configured token the verdict is moot: the missing token is named."""
+    _healthy(hass)
+    expose(True)
+    status = _status(ha_mcp=False, ha_mcp_auth="unauthorized")
+    assert health.evaluate(hass, status).problem == ISSUE_NO_HA_TOKEN
+
+
+async def test_mcp_unauthorized_repair_clears_once_accepted(
+    hass: HomeAssistant, expose: Callable[[bool], None]
+) -> None:
+    """The repair is raised on 'unauthorized' and gone on the next accepted status."""
+    _healthy(hass)
+    expose(True)
+    registry = ir.async_get(hass)
+    issue_id = entry_issue_id(ISSUE_MCP_UNAUTHORIZED, ENTRY_ID)
+    entry = _entry(ENTRY_ID)
+
+    health.async_apply(
+        hass, entry, health.evaluate(hass, _status(ha_mcp_auth="unauthorized"))
+    )
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.severity is ir.IssueSeverity.ERROR
+
+    health.async_apply(hass, entry, health.evaluate(hass, _status(ha_mcp_auth="ok")))
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
 async def test_apply_raises_active_and_clears_others(hass: HomeAssistant) -> None:

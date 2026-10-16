@@ -81,6 +81,7 @@ from .const import (
     STATUS_ENGINE,
     STATUS_ENGINE_VERSION,
     STATUS_HA_MCP,
+    STATUS_HA_MCP_AUTH,
     STATUS_HA_MCP_CONNECTED,
     STATUS_MODEL,
     STATUS_PROMPT_MAX_BYTES,
@@ -458,6 +459,9 @@ class StatusResult:
     alerts: Alerts | None = None
     # ``None``: the add-on predates it, or sends nothing readable -> unknown, no repair.
     auth: AuthState | None = None
+    # Whether Home Assistant accepts the add-on's token on MCP, read as an open token
+    # ("ok"/"unauthorized"/"unreachable"). ``None``: absent, null or unreadable.
+    ha_mcp_auth: str | None = None
 
 
 @dataclass(slots=True)
@@ -624,6 +628,7 @@ class ClaudeClient:
             budget=budget,
             alerts=alerts,
             auth=auth,
+            ha_mcp_auth=_parse_text(data.get(STATUS_HA_MCP_AUTH)),
         )
 
     async def async_get_usage(self) -> UsageResult:
@@ -950,6 +955,11 @@ def _parse_alerts(raw: Any) -> Alerts | None:
             if isinstance(item, dict)
         ],
     )
+
+
+def _parse_text(raw: Any) -> str | None:
+    """Return a non-empty string as-is, anything else as ``None`` (= unknown)."""
+    return raw if isinstance(raw, str) and raw else None
 
 
 def _parse_auth(raw: Any) -> AuthState | None:

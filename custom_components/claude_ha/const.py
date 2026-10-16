@@ -151,6 +151,12 @@ STATUS_HA_MCP: Final = "ha_mcp"
 # Whether the LAST chat read actually reached the HA MCP server (add-on >= 1.14.0;
 # null until the first read). Distinct from ha_mcp, which only says a config exists.
 STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
+# Whether Home Assistant accepts the add-on's token on its MCP endpoint: "ok",
+# "unauthorized" (401/403: unknown/revoked token, or a non-admin token while the MCP
+# Server requires an administrator), "unreachable" (no answer ABOUT the token; not a
+# token problem) or null (no token / nothing answered yet). Absent on older add-ons.
+STATUS_HA_MCP_AUTH: Final = "ha_mcp_auth"
+MCP_AUTH_UNAUTHORIZED: Final = "unauthorized"
 # Rolling chat-reliability summary (add-on >= 1.20.0): {recent, degraded, recovered,
 # last_reason}. last_reason is a reason TOKEN from the runner's enum, never prompt
 # content. Absent on older add-ons (the chat-health sensor is then unavailable).
@@ -334,6 +340,8 @@ ISSUE_USAGE_HISTORY_RESET: Final = "usage_history_reset"
 ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
 ISSUE_NO_HA_TOKEN: Final = "no_ha_token"
 ISSUE_MCP_UNREACHABLE: Final = "mcp_unreachable"
+# Home Assistant answered the add-on's token with 401/403 on the MCP endpoint.
+ISSUE_MCP_UNAUTHORIZED: Final = "mcp_unauthorized"
 ISSUE_NO_EXPOSED_ENTITIES: Final = "no_exposed_entities"
 # Camera vision is on but no camera is exposed to Assist, so the feature is inert
 # (HA hides cameras from Assist by default as security devices). Independent advisory.
@@ -349,6 +357,7 @@ HEALTH_ISSUES: Final = (
     ISSUE_NOT_LOGGED_IN,
     ISSUE_NO_HA_TOKEN,
     ISSUE_MCP_UNREACHABLE,
+    ISSUE_MCP_UNAUTHORIZED,
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_CAMERA_VISION_NO_CAMERAS,
     ISSUE_SIGNIN_EXPIRED,

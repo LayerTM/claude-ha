@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A repair when Home Assistant refuses the add-on's token on the Model Context
+  Protocol Server (a revoked token, or a non-administrator token while the server
+  requires an administrator). It appears from the add-on's status as soon as the
+  add-on reports it, without waiting for a chat, and clears when Home Assistant
+  accepts the token again. Needs an add-on that reports `ha_mcp_auth`.
+
 ### Fixed
 
 - `claude_ha.setup_voice` no longer fails with "Unknown error" while installing
