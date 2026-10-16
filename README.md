@@ -420,20 +420,22 @@ the reachability signal.
 `claude_ha.setup_voice` turns local voice chat with Claude into one action. Give
 it a language and it installs and starts the official **Whisper** (speech-to-text)
 and **Piper** (text-to-speech) add-ons, then creates an Assist pipeline whose
-conversation agent is Claude:
+conversation agent is Claude (it also confirms the Wyoming prompts for those two
+add-ons, so nothing is left to click):
 
 ```yaml
 action: claude_ha.setup_voice
 data:
   language: uk        # uk, pl, en, de, …
   # tts_voice: uk_UA-ukrainian_tts-medium   # override the default voice
-  # stt_model: small-int8                    # override the Whisper model
+  # stt_model: small-int8                    # set the Whisper model (default: keep the add-on's)
 ```
 
 Then pick the new pipeline on your phone. Honest caveats: Whisper on CPU takes a
 few seconds per phrase, and some voices (Ukrainian especially) are weaker than
 others — pass `tts_voice` or switch to Cloud TTS if the default doesn't fit. The
-service returns the engines it wired and the pipeline id.
+action returns the engines it wired and the pipeline id (request the response
+with `response_variable` to read it).
 
 ## Security model
 

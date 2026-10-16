@@ -45,7 +45,7 @@ from .const import (
 from .coordinator import ClaudeConfigEntry
 from .engines import engine_for_entry
 from .schema import vol
-from .voice import DEFAULT_WHISPER_MODEL, async_setup_voice_pipeline, default_voice
+from .voice import async_setup_voice_pipeline, default_voice
 
 ASK_SCHEMA = vol.Schema(
     {
@@ -80,14 +80,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_ASK,
         _async_handle_ask,
         schema=ASK_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_SETUP_VOICE,
         _async_handle_setup_voice,
         schema=SETUP_VOICE_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 
@@ -208,7 +208,7 @@ async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:
         hass,
         conversation_entity_id,
         language=language,
-        whisper_model=call.data.get(ATTR_STT_MODEL, DEFAULT_WHISPER_MODEL),
+        whisper_model=call.data.get(ATTR_STT_MODEL),
         piper_voice=voice,
         pipeline_name=call.data.get(ATTR_PIPELINE_NAME)
         or f"{engine.name} ({language})",

@@ -37,16 +37,21 @@ DATA_ADDON_WATCHES = f"{DOMAIN}_addon_watches"
 
 
 @callback
-def get_addon_manager(hass: HomeAssistant, slug: str) -> AddonManager:
-    """Return a cached :class:`AddonManager` for the resolved add-on slug.
+def get_addon_manager(
+    hass: HomeAssistant, slug: str, name: str | None = None
+) -> AddonManager:
+    """Return a cached :class:`AddonManager` for an add-on slug.
 
     Cached per slug in ``hass.data`` (rather than via ``@singleton``) because the
-    slug is only known at runtime. ``slug`` is one of an engine's add-ons: it
-    came from discovery or a lookup, both of which accept only those.
+    slug is only known at runtime. An engine's add-on (from discovery or a
+    lookup) is named by its engine; any other add-on (Whisper, Piper) must be
+    named by the caller.
     """
     managers: dict[str, AddonManager] = hass.data.setdefault(DATA_ADDON_MANAGERS, {})
     if slug not in managers:
-        managers[slug] = AddonManager(hass, LOGGER, _engine(slug).addon_name, slug)
+        managers[slug] = AddonManager(
+            hass, LOGGER, name or _engine(slug).addon_name, slug
+        )
     return managers[slug]
 
 
