@@ -22,6 +22,10 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # requirements_min_ha.txt pins the oldest Home Assistant hacs.json supports;
+    # it is raised by hand together with hacs.json, never by the bot.
+    exclude-paths:
+      - "requirements_min_ha.txt"
     commit-message:
       prefix: "deps"
     labels: ["dependencies"]
