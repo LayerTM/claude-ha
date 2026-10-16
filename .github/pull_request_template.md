@@ -1,16 +1,11 @@
-## Summary
+## What changes for users
 
-<!-- What does this change and why? -->
+<!-- What someone running this will notice: the behaviour, option, message or fix. -->
 
-## Related issue
+## Why
 
-<!-- e.g. Closes #123 -->
+<!-- The problem it solves for them: what went wrong before, or what they could not do. -->
 
-## Checklist
+## How a user can check it
 
-- [ ] `ruff check` and `ruff format --check` pass
-- [ ] `mypy custom_components/claude_ha` (strict) passes
-- [ ] `pytest` passes at 100% coverage
-- [ ] `python scripts/secret_scan.py .` is clean
-- [ ] `README.md` / `CHANGELOG.md` updated if behaviour changed
-- [ ] Wire-format changes (if any) were agreed on the add-on contract first
+<!-- Steps a user can follow on their own install to see the change: what to open, set or run, and what they should see. -->
