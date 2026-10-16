@@ -80,14 +80,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_ASK,
         _async_handle_ask,
         schema=ASK_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_SETUP_VOICE,
         _async_handle_setup_voice,
         schema=SETUP_VOICE_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 

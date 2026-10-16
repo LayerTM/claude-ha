@@ -35,6 +35,8 @@ ASSIST_PIPELINE_DATA = "assist_pipeline"
 # Official Supervisor add-on slugs and the integration that discovers them.
 WHISPER_ADDON_SLUG = "core_whisper"
 PIPER_ADDON_SLUG = "core_piper"
+WHISPER_ADDON_NAME = "Whisper"
+PIPER_ADDON_NAME = "Piper"
 WYOMING_PLATFORM = "wyoming"
 
 # A multilingual Whisper model that runs on CPU; overridable per call.
@@ -75,15 +77,18 @@ def default_voice(language: str) -> str | None:
 
 
 async def _async_ensure_addon(
-    hass: HomeAssistant, slug: str, options: dict[str, object]
+    hass: HomeAssistant, slug: str, name: str, options: dict[str, object]
 ) -> None:
     """Install (if needed), configure and start one Supervisor add-on."""
-    manager = get_addon_manager(hass, slug)
+    manager = get_addon_manager(hass, slug, name)
     try:
         info = await manager.async_get_addon_info()
         if info.state is AddonState.NOT_INSTALLED:
             await manager.async_install_addon()
-        await manager.async_set_addon_options(options)
+            info = await manager.async_get_addon_info()
+        # Supervisor validates the whole option set, and add-ons grow required
+        # options over time, so change only ours on top of what is stored.
+        await manager.async_set_addon_options({**info.options, **options})
         info = await manager.async_get_addon_info()
         if info.state is not AddonState.RUNNING:
             await manager.async_start_addon()
@@ -181,9 +186,14 @@ async def async_setup_voice_pipeline(
     before_tts = _wyoming_engine_ids(hass, "tts")
 
     await _async_ensure_addon(
-        hass, WHISPER_ADDON_SLUG, {"model": whisper_model, "language": language}
+        hass,
+        WHISPER_ADDON_SLUG,
+        WHISPER_ADDON_NAME,
+        {"model": whisper_model, "language": language},
     )
-    await _async_ensure_addon(hass, PIPER_ADDON_SLUG, {"voice": piper_voice})
+    await _async_ensure_addon(
+        hass, PIPER_ADDON_SLUG, PIPER_ADDON_NAME, {"voice": piper_voice}
+    )
 
     stt_engine = await _async_wait_for_new_engine(hass, "stt", before_stt)
     tts_engine = await _async_wait_for_new_engine(hass, "tts", before_tts)

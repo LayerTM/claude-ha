@@ -38,6 +38,14 @@ def test_get_addon_manager_is_cached(hass: HomeAssistant) -> None:
     mock_manager_cls.assert_called_once()
 
 
+def test_get_addon_manager_for_a_third_party_addon(hass: HomeAssistant) -> None:
+    """A slug outside every engine (Whisper, Piper) still gets a named manager."""
+    with patch("custom_components.claude_ha.addon.AddonManager") as mock_manager_cls:
+        manager = get_addon_manager(hass, "core_whisper", "Whisper")
+    assert manager is mock_manager_cls.return_value
+    assert mock_manager_cls.call_args.args[2:] == ("Whisper", "core_whisper")
+
+
 async def test_resolve_from_installed(hass: HomeAssistant) -> None:
     """An installed add-on is matched by slug suffix."""
     with patch(

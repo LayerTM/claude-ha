@@ -19,7 +19,7 @@ from custom_components.claude_ha.voice import (
     VoiceSetupResult,
 )
 from homeassistant.components.hassio import AddonError, AddonState
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
@@ -59,17 +59,23 @@ async def test_ensure_addon_installs_configures_starts(
         side_effect=[
             make_addon_info(AddonState.NOT_INSTALLED),
             make_addon_info(AddonState.NOT_RUNNING),
+            make_addon_info(AddonState.NOT_RUNNING),
         ]
     )
     manager.async_install_addon = AsyncMock()
     manager.async_set_addon_options = AsyncMock()
     manager.async_start_addon = AsyncMock()
-    monkeypatch.setattr(voice, "get_addon_manager", lambda _h, _s: manager)
+    monkeypatch.setattr(voice, "get_addon_manager", lambda _h, _s, _n: manager)
 
-    await voice._async_ensure_addon(hass, WHISPER_ADDON_SLUG, {"model": "small-int8"})
+    await voice._async_ensure_addon(
+        hass, WHISPER_ADDON_SLUG, "Whisper", {"model": "small-int8"}
+    )
 
     manager.async_install_addon.assert_awaited_once()
-    manager.async_set_addon_options.assert_awaited_once_with({"model": "small-int8"})
+    # The add-on's own defaults (incl. options it requires) are kept.
+    manager.async_set_addon_options.assert_awaited_once_with(
+        {**make_addon_info().options, "model": "small-int8"}
+    )
     manager.async_start_addon.assert_awaited_once()
 
 
@@ -84,9 +90,9 @@ async def test_ensure_addon_already_running(
     manager.async_install_addon = AsyncMock()
     manager.async_set_addon_options = AsyncMock()
     manager.async_start_addon = AsyncMock()
-    monkeypatch.setattr(voice, "get_addon_manager", lambda _h, _s: manager)
+    monkeypatch.setattr(voice, "get_addon_manager", lambda _h, _s, _n: manager)
 
-    await voice._async_ensure_addon(hass, PIPER_ADDON_SLUG, {"voice": "x"})
+    await voice._async_ensure_addon(hass, PIPER_ADDON_SLUG, "Piper", {"voice": "x"})
 
     manager.async_install_addon.assert_not_awaited()
     manager.async_start_addon.assert_not_awaited()
@@ -98,10 +104,10 @@ async def test_ensure_addon_wraps_error(
     """A Supervisor error is surfaced as a translated HomeAssistantError."""
     manager = MagicMock()
     manager.async_get_addon_info = AsyncMock(side_effect=AddonError("boom"))
-    monkeypatch.setattr(voice, "get_addon_manager", lambda _h, _s: manager)
+    monkeypatch.setattr(voice, "get_addon_manager", lambda _h, _s, _n: manager)
 
     with pytest.raises(HomeAssistantError):
-        await voice._async_ensure_addon(hass, WHISPER_ADDON_SLUG, {})
+        await voice._async_ensure_addon(hass, WHISPER_ADDON_SLUG, "Whisper", {})
 
 
 async def test_setup_pipeline_full(
@@ -112,7 +118,7 @@ async def test_setup_pipeline_full(
     _install_pipeline_store(hass, captured)
 
     async def _fake_ensure(
-        _hass: HomeAssistant, slug: str, _options: dict[str, Any]
+        _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
     ) -> None:
         if slug == WHISPER_ADDON_SLUG:
             _register_wyoming(hass, "stt", "faster_whisper")
@@ -144,7 +150,9 @@ async def test_setup_pipeline_engine_timeout(
     """If the engines never appear, no pipeline is created."""
     monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
 
-    async def _noop(_hass: HomeAssistant, _slug: str, _options: dict[str, Any]) -> None:
+    async def _noop(
+        _hass: HomeAssistant, _slug: str, _name: str, _options: dict[str, Any]
+    ) -> None:
         return None
 
     monkeypatch.setattr(voice, "_async_ensure_addon", _noop)
@@ -168,7 +176,7 @@ async def test_setup_pipeline_without_assist_pipeline(
     hass.data.pop(ASSIST_PIPELINE_DATA, None)
 
     async def _fake_ensure(
-        _hass: HomeAssistant, slug: str, _options: dict[str, Any]
+        _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
     ) -> None:
         domain = "stt" if slug == WHISPER_ADDON_SLUG else "tts"
         _register_wyoming(hass, domain, "engine")
@@ -224,6 +232,34 @@ async def test_service_setup_voice_success(
     engine = engine_for_entry(mock_config_entry)
     assert engine is not None
     assert captured["pipeline_name"] == f"{engine.name} (uk)"
+
+
+@pytest.mark.parametrize("service", ["ask", "setup_voice"])
+async def test_services_answer_with_or_without_a_response(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    service: str,
+) -> None:
+    """Callers that cannot request a response (MCP, plain actions) may still call."""
+    await setup_integration(hass, mock_config_entry)
+    assert hass.services.supports_response(DOMAIN, service) is SupportsResponse.OPTIONAL
+
+
+async def test_ensure_addon_names_third_party_managers(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real manager factory serves the Whisper and Piper slugs (no engine)."""
+    for slug, name in ((WHISPER_ADDON_SLUG, "Whisper"), (PIPER_ADDON_SLUG, "Piper")):
+        manager = MagicMock()
+        manager.async_get_addon_info = AsyncMock(
+            return_value=make_addon_info(AddonState.RUNNING)
+        )
+        manager.async_set_addon_options = AsyncMock()
+        created = MagicMock(return_value=manager)
+        monkeypatch.setattr("custom_components.claude_ha.addon.AddonManager", created)
+        await voice._async_ensure_addon(hass, slug, name, {})
+        assert created.call_args.args[2:] == (name, slug)
 
 
 async def test_service_setup_voice_unknown_language(
