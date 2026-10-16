@@ -396,6 +396,9 @@ raises a repair with the exact fix when it finds:
 - Claude isn't logged in (the add-on is up but unauthenticated);
 - Claude has no Home Assistant token to read your home;
 - the **Model Context Protocol Server** integration is missing or unreachable;
+- Home Assistant **refuses the add-on's token** on the Model Context Protocol
+  Server (a revoked token, or a non-administrator token while the server
+  requires an administrator account) — needs an add-on that reports it;
 - nothing is exposed to Assist (so there's nothing to see or control).
 
 Separately, **a sign-in that has expired** is raised the moment a chat turn

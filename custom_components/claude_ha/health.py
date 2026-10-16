@@ -25,12 +25,14 @@ from .const import (
     AUTH_STATE_OK,
     HEALTH_PROBE_PROMPT,
     ISSUE_CAMERA_VISION_NO_CAMERAS,
+    ISSUE_MCP_UNAUTHORIZED,
     ISSUE_MCP_UNREACHABLE,
     ISSUE_NO_EXPOSED_ENTITIES,
     ISSUE_NO_HA_TOKEN,
     ISSUE_NOT_LOGGED_IN,
     ISSUE_SIGNIN_EXPIRED,
     LOGGER,
+    MCP_AUTH_UNAUTHORIZED,
     MCP_SERVER_DOMAIN,
     MCP_UNREACHABLE_DEBOUNCE_POLLS,
     MODE_READ,
@@ -48,6 +50,10 @@ _ISSUES: dict[str, tuple[ir.IssueSeverity, str]] = {
     ISSUE_NO_HA_TOKEN: (
         ir.IssueSeverity.ERROR,
         "https://github.com/LayerTM/claude-ha#the-conversation-agent",
+    ),
+    ISSUE_MCP_UNAUTHORIZED: (
+        ir.IssueSeverity.ERROR,
+        "https://www.home-assistant.io/integrations/mcp_server/",
     ),
     ISSUE_MCP_UNREACHABLE: (
         ir.IssueSeverity.ERROR,
@@ -127,6 +133,9 @@ def evaluate(
         problem = ISSUE_NOT_LOGGED_IN
     elif status.ha_mcp is False:
         problem = ISSUE_NO_HA_TOKEN
+    elif status.ha_mcp_auth == MCP_AUTH_UNAUTHORIZED:
+        # More specific than "unreachable": Home Assistant answered and refused.
+        problem = ISSUE_MCP_UNAUTHORIZED
     elif connected is False or (not mcp_loaded and running):
         problem = ISSUE_MCP_UNREACHABLE
     elif exposed == 0:

@@ -92,6 +92,40 @@ async def test_supports_edit_automation_version_gate(
     assert client.supports_edit_automation is supported
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("ok", "ok"),
+        ("unauthorized", "unauthorized"),
+        ("unreachable", "unreachable"),
+        ("something-new", "something-new"),
+        (None, None),
+        ("", None),
+        (7, None),
+    ],
+)
+async def test_status_ha_mcp_auth(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    raw: object,
+    expected: str | None,
+) -> None:
+    """The MCP-token verdict is read as an open token; unreadable means unknown."""
+    aioclient_mock.get(
+        f"{TEST_BASE_URL}/api/status", json={**STATUS_PAYLOAD, "ha_mcp_auth": raw}
+    )
+    assert (await _client(hass).async_get_status()).ha_mcp_auth == expected
+
+
+async def test_status_without_ha_mcp_auth(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An add-on that predates the field reports it as unknown, not as a break."""
+    payload = {k: v for k, v in STATUS_PAYLOAD.items() if k != "ha_mcp_auth"}
+    aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=payload)
+    assert (await _client(hass).async_get_status()).ha_mcp_auth is None
+
+
 async def test_status_parsing(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

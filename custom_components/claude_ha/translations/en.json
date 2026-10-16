@@ -378,6 +378,10 @@
       "title": "{engine} has no token to read your home",
       "description": "{engine} is logged in but has no Home Assistant token, so chat can answer general questions but can't see or control your home. Set the 'Prompt API HA Token' (or 'HA Token') in the {addon} add-on options, then check again."
     },
+    "mcp_unauthorized": {
+      "title": "Home Assistant refuses {engine}'s token",
+      "description": "Home Assistant answered {engine}'s token on the Model Context Protocol Server with 'not authorized', so chat can't see your home. Use an administrator's token in the {addon} add-on options, or turn off 'Require an administrator account' in the Model Context Protocol Server options. After fixing Home Assistant's side, restart the {addon} add-on, then check again."
+    },
     "mcp_unreachable": {
       "title": "{engine} can't reach the Model Context Protocol Server",
       "description": "{engine} has a token but the Model Context Protocol Server integration is missing or unreachable, so chat can't see your home. Add it under Settings → Devices & services → Add integration → Model Context Protocol Server, expose entities to Assist, then check again."
