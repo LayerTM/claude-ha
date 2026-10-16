@@ -19,6 +19,7 @@ from custom_components.claude_ha.voice import (
     VoiceSetupResult,
 )
 from homeassistant.components.hassio import AddonError, AddonState
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, SupportsResponse
 from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -27,10 +28,15 @@ from homeassistant.helpers import entity_registry as er
 from .conftest import make_addon_info, setup_integration
 
 
-def _register_wyoming(hass: HomeAssistant, domain: str, obj: str) -> None:
-    """Register a Wyoming engine entity as if discovery had created it."""
+def _register_wyoming(hass: HomeAssistant, domain: str, obj: str, slug: str) -> None:
+    """Register a Wyoming engine of an add-on as if discovery had created it."""
+    entry = MockConfigEntry(
+        domain="wyoming",
+        data={CONF_HOST: slug.replace("_", "-"), CONF_PORT: 10200},
+    )
+    entry.add_to_hass(hass)
     er.async_get(hass).async_get_or_create(
-        domain, "wyoming", obj, suggested_object_id=obj
+        domain, "wyoming", obj, suggested_object_id=obj, config_entry=entry
     )
 
 
@@ -122,9 +128,9 @@ async def test_setup_pipeline_full(
         _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
     ) -> None:
         if slug == WHISPER_ADDON_SLUG:
-            _register_wyoming(hass, "stt", "faster_whisper")
+            _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
         else:
-            _register_wyoming(hass, "tts", "piper")
+            _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
 
     monkeypatch.setattr(voice, "_async_ensure_addon", _fake_ensure)
 
@@ -193,7 +199,6 @@ async def test_setup_pipeline_sends_a_model_only_when_given(
 async def test_setup_pipeline_confirms_only_its_own_discoveries(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Whisper/Piper discovery prompts are answered; anything else is left alone."""
     captured: dict[str, Any] = {}
@@ -205,12 +210,10 @@ async def test_setup_pipeline_confirms_only_its_own_discoveries(
     async def _configure(flow_id: str, data: dict[str, Any]) -> None:
         assert data == {}
         configured.append(flow_id)
-        if flow_id == "gone":
-            raise UnknownFlow
         if flow_id == "left-over":
-            _register_wyoming(hass, "stt", "faster_whisper")
+            _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
         elif flow_id == "piper":
-            _register_wyoming(hass, "tts", "piper")
+            _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
 
     fake = SimpleNamespace(
         async_subscribe_flow=lambda listener: (
@@ -230,13 +233,11 @@ async def test_setup_pipeline_confirms_only_its_own_discoveries(
                 [
                     _flow("piper", PIPER_ADDON_SLUG),
                     _flow("other", "core_other"),
-                    _flow("gone", PIPER_ADDON_SLUG),
                 ]
             )
             for event, flow_id in (
                 ("added", "piper"),
                 ("added", "other"),
-                ("added", "gone"),
                 ("removed", "piper"),
             ):
                 listeners[0](event, flow_id)
@@ -253,9 +254,146 @@ async def test_setup_pipeline_confirms_only_its_own_discoveries(
     )
 
     assert result.pipeline_id == "pipeline-1"
-    assert sorted(configured) == ["gone", "left-over", "piper"]
-    assert "Could not confirm the Wyoming discovery" in caplog.text
+    assert sorted(configured) == ["left-over", "piper"]
     assert listeners == []
+
+
+def _fake_flow_manager(
+    monkeypatch: pytest.MonkeyPatch,
+    hass: HomeAssistant,
+    pending: list[dict[str, Any]],
+    configure: Any,
+) -> None:
+    """Replace the config-entries flow manager with one holding ``pending``."""
+    fake = SimpleNamespace(
+        async_subscribe_flow=lambda _listener: lambda: None,
+        async_progress_by_handler=lambda *_a, **_k: list(pending),
+        async_configure=configure,
+        async_shutdown=MagicMock(),
+    )
+    monkeypatch.setattr(hass.config_entries, "flow", fake)
+
+
+async def _setup_voice(hass: HomeAssistant) -> VoiceSetupResult:
+    """Run the voice setup with add-ons that are already installed and running."""
+    return await voice.async_setup_voice_pipeline(
+        hass,
+        "conversation.claude",
+        language="uk",
+        whisper_model=None,
+        piper_voice="uk_UA-x",
+        pipeline_name="Claude (uk)",
+    )
+
+
+async def _noop_ensure(
+    _hass: HomeAssistant, _slug: str, _name: str, _options: dict[str, Any]
+) -> None:
+    return None
+
+
+async def test_setup_pipeline_reuses_engines_that_already_exist(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second run finds Whisper and Piper already wired and builds the pipeline."""
+    monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
+    captured: dict[str, Any] = {}
+    _install_pipeline_store(hass, captured)
+    _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    result = await _setup_voice(hass)
+
+    assert result == VoiceSetupResult("stt.faster_whisper", "tts.piper", "pipeline-1")
+
+
+async def test_setup_pipeline_ignores_other_wyoming_engines(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another Wyoming server's engine is never taken for Whisper or Piper."""
+    monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
+    _register_wyoming(hass, "stt", "other_stt", "core_other")
+    _register_wyoming(hass, "tts", "other_tts", "core_other")
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    assert await _setup_voice(hass) == VoiceSetupResult(None, None, None)
+
+
+async def test_setup_pipeline_does_not_confirm_a_duplicate_entry(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A discovery for an add-on that already has an entry is left unconfirmed."""
+    _install_pipeline_store(hass, {})
+    _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+    configured: list[str] = []
+
+    async def _configure(flow_id: str, _data: dict[str, Any]) -> None:
+        configured.append(flow_id)
+
+    _fake_flow_manager(
+        monkeypatch,
+        hass,
+        [_flow("stale", PIPER_ADDON_SLUG), _flow("new", WHISPER_ADDON_SLUG)],
+        _configure,
+    )
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    await _setup_voice(hass)
+
+    assert configured == []
+
+
+async def test_setup_pipeline_confirms_one_discovery_per_addon(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale and a fresh discovery of one add-on make one entry, not two."""
+    monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
+    configured: list[str] = []
+
+    async def _configure(flow_id: str, _data: dict[str, Any]) -> None:
+        configured.append(flow_id)
+
+    _fake_flow_manager(
+        monkeypatch,
+        hass,
+        [_flow("stale", PIPER_ADDON_SLUG), _flow("new", PIPER_ADDON_SLUG)],
+        _configure,
+    )
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    await _setup_voice(hass)
+
+    assert configured == ["stale"]
+
+
+async def test_setup_pipeline_retries_a_discovery_that_failed(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A discovery that cannot be confirmed does not block the add-on's next one."""
+    monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
+    configured: list[str] = []
+
+    async def _configure(flow_id: str, _data: dict[str, Any]) -> None:
+        configured.append(flow_id)
+        if flow_id == "gone":
+            raise UnknownFlow
+
+    _fake_flow_manager(
+        monkeypatch,
+        hass,
+        [_flow("gone", PIPER_ADDON_SLUG), _flow("new", PIPER_ADDON_SLUG)],
+        _configure,
+    )
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    await _setup_voice(hass)
+
+    assert configured == ["gone", "new"]
+    assert "Could not confirm the Wyoming discovery" in caplog.text
 
 
 async def test_setup_pipeline_engine_timeout(
@@ -293,7 +431,7 @@ async def test_setup_pipeline_without_assist_pipeline(
         _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
     ) -> None:
         domain = "stt" if slug == WHISPER_ADDON_SLUG else "tts"
-        _register_wyoming(hass, domain, "engine")
+        _register_wyoming(hass, domain, f"engine_{domain}", slug)
 
     monkeypatch.setattr(voice, "_async_ensure_addon", _fake_ensure)
 
