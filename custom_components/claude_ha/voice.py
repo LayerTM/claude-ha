@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.hassio import AddonError, AddonState
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.exceptions import HomeAssistantError
@@ -73,10 +74,16 @@ def _discovery_url(slug: str) -> str:
     return f"homeassistant://hassio/addon/{slug}/info"
 
 
-# Wyoming's Supervisor-discovery flows for exactly the two add-ons set up here.
-_OWN_DISCOVERY_URLS = frozenset(
-    _discovery_url(slug) for slug in (WHISPER_ADDON_SLUG, PIPER_ADDON_SLUG)
-)
+# Wyoming's Supervisor-discovery flows for exactly the two add-ons set up here,
+# mapped to the add-on each one belongs to.
+_OWN_DISCOVERY_SLUGS = {
+    _discovery_url(slug): slug for slug in (WHISPER_ADDON_SLUG, PIPER_ADDON_SLUG)
+}
+
+
+def _addon_host(slug: str) -> str:
+    """Return the hostname Supervisor gives an add-on on the internal network."""
+    return slug.replace("_", "-")
 
 
 @callback
@@ -109,50 +116,75 @@ async def _async_ensure_addon(
         ) from err
 
 
-async def _async_confirm_discovery(hass: HomeAssistant, flow_id: str) -> None:
+@callback
+def _wyoming_hosts(hass: HomeAssistant) -> set[str]:
+    """Return the hosts of every Wyoming config entry."""
+    return {
+        str(entry.data.get(CONF_HOST))
+        for entry in hass.config_entries.async_entries(WYOMING_PLATFORM)
+    }
+
+
+async def _async_confirm_discovery(
+    hass: HomeAssistant, flow_id: str, claimed: set[str]
+) -> None:
     """Confirm one Wyoming discovery flow if it is for Whisper or Piper.
 
     The action is the user's explicit request to wire these two add-ons, so the
     prompt Wyoming would otherwise show for them is answered here. Any other
-    Wyoming flow, or any other add-on's, is left to the user.
+    Wyoming flow, or any other add-on's, is left to the user. An add-on that
+    already has an entry, or whose discovery is already confirmed in this run
+    (a stale one is left behind when an add-on is reinstalled), is never wired
+    a second time.
     """
     for flow in hass.config_entries.flow.async_progress_by_handler(
         WYOMING_PLATFORM, match_context={"source": "hassio"}
     ):
-        if (
-            flow["flow_id"] == flow_id
-            and flow["context"].get("configuration_url") in _OWN_DISCOVERY_URLS
-        ):
-            try:
-                await hass.config_entries.flow.async_configure(flow_id, {})
-            except (UnknownFlow, HomeAssistantError) as err:
-                LOGGER.warning("Could not confirm the Wyoming discovery: %s", err)
+        slug = _OWN_DISCOVERY_SLUGS.get(flow["context"].get("configuration_url", ""))
+        if flow["flow_id"] != flow_id or slug is None:
+            continue
+        if slug in claimed or _addon_host(slug) in _wyoming_hosts(hass):
             return
+        claimed.add(slug)
+        try:
+            await hass.config_entries.flow.async_configure(flow_id, {})
+        except (UnknownFlow, HomeAssistantError) as err:
+            claimed.discard(slug)
+            LOGGER.warning("Could not confirm the Wyoming discovery: %s", err)
+        return
 
 
 @callback
-def _wyoming_engine_ids(hass: HomeAssistant, domain: str) -> set[str]:
-    """Return the entity ids of Wyoming engines in a domain (stt/tts)."""
+def _wyoming_engine_ids(hass: HomeAssistant, domain: str, host: str) -> set[str]:
+    """Return the entity ids of a Wyoming server's engines in a domain (stt/tts)."""
+    entry_ids = {
+        entry.entry_id
+        for entry in hass.config_entries.async_entries(WYOMING_PLATFORM)
+        if entry.data.get(CONF_HOST) == host
+    }
     return {
         entry.entity_id
         for entry in er.async_get(hass).entities.values()
-        if entry.domain == domain and entry.platform == WYOMING_PLATFORM
+        if entry.domain == domain
+        and entry.platform == WYOMING_PLATFORM
+        and entry.config_entry_id in entry_ids
     }
 
 
-async def _async_wait_for_new_engine(
-    hass: HomeAssistant, domain: str, before: set[str]
+async def _async_wait_for_engine(
+    hass: HomeAssistant, domain: str, host: str
 ) -> str | None:
-    """Wait (bounded) for a newly-discovered Wyoming engine, or None on timeout.
+    """Return an add-on's Wyoming engine, waiting (bounded) for its discovery.
 
-    Driven by entity-registry updates (Wyoming registers the engine once the
+    An engine that is already registered is returned at once. Otherwise this is
+    driven by entity-registry updates (Wyoming registers the engine once the
     Supervisor discovery for the started add-on lands), so there is no polling.
     """
     appeared = asyncio.Event()
 
     @callback
     def _check(_event: object = None) -> None:
-        if _wyoming_engine_ids(hass, domain) - before:
+        if _wyoming_engine_ids(hass, domain, host):
             appeared.set()
 
     cancel = hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _check)
@@ -165,8 +197,7 @@ async def _async_wait_for_new_engine(
         return None
     finally:
         cancel()
-    new = _wyoming_engine_ids(hass, domain) - before
-    return sorted(new)[0] if new else None
+    return sorted(_wyoming_engine_ids(hass, domain, host))[0]
 
 
 async def _async_create_pipeline(
@@ -212,19 +243,19 @@ async def async_setup_voice_pipeline(
     pipeline_name: str,
 ) -> VoiceSetupResult:
     """Install Whisper + Piper, discover their engines and build the pipeline."""
-    before_stt = _wyoming_engine_ids(hass, "stt")
-    before_tts = _wyoming_engine_ids(hass, "tts")
-
     # Answer the discovery prompts as they appear; keep a stored model unless
     # the caller named one.
     confirmations: set[asyncio.Task[None]] = set()
     seen: set[str] = set()
+    claimed: set[str] = set()
 
     @callback
     def _on_flow(event: str, flow_id: str) -> None:
         if event == "added" and flow_id not in seen:
             seen.add(flow_id)
-            task = hass.async_create_task(_async_confirm_discovery(hass, flow_id))
+            task = hass.async_create_task(
+                _async_confirm_discovery(hass, flow_id, claimed)
+            )
             confirmations.add(task)
             task.add_done_callback(confirmations.discard)
 
@@ -245,8 +276,12 @@ async def async_setup_voice_pipeline(
         ):
             _on_flow("added", flow["flow_id"])
 
-        stt_engine = await _async_wait_for_new_engine(hass, "stt", before_stt)
-        tts_engine = await _async_wait_for_new_engine(hass, "tts", before_tts)
+        stt_engine = await _async_wait_for_engine(
+            hass, "stt", _addon_host(WHISPER_ADDON_SLUG)
+        )
+        tts_engine = await _async_wait_for_engine(
+            hass, "tts", _addon_host(PIPER_ADDON_SLUG)
+        )
     finally:
         unsubscribe()
         if confirmations:

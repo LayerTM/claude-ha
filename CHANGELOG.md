@@ -24,6 +24,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `claude_ha.setup_voice` confirms the Wyoming discovery prompts for the Whisper
   and Piper add-ons it sets up, so the pipeline is created without waiting for
   the prompts to be confirmed by hand.
+- `claude_ha.setup_voice` run again when Whisper and Piper are already set up now
+  reuses them and creates the pipeline at once, instead of waiting for engines that
+  are already there and returning nothing.
+- `claude_ha.setup_voice` no longer leaves two Wyoming entries for one add-on, for
+  example after Piper is uninstalled and installed again.
 
 ### Changed
 
