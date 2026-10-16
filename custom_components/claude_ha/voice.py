@@ -20,6 +20,7 @@ from typing import Any
 
 from homeassistant.components.hassio import AddonError, AddonState
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
@@ -38,9 +39,6 @@ PIPER_ADDON_SLUG = "core_piper"
 WHISPER_ADDON_NAME = "Whisper"
 PIPER_ADDON_NAME = "Piper"
 WYOMING_PLATFORM = "wyoming"
-
-# A multilingual Whisper model that runs on CPU; overridable per call.
-DEFAULT_WHISPER_MODEL = "small-int8"
 
 # Best-effort default Piper voice per language — VERIFY against the live Piper
 # catalogue, a wrong id stops Piper from starting. Override with ``tts_voice``.
@@ -68,6 +66,17 @@ class VoiceSetupResult:
     stt_engine: str | None
     tts_engine: str | None
     pipeline_id: str | None
+
+
+def _discovery_url(slug: str) -> str:
+    """Return the ``configuration_url`` Wyoming's flow carries for an add-on."""
+    return f"homeassistant://hassio/addon/{slug}/info"
+
+
+# Wyoming's Supervisor-discovery flows for exactly the two add-ons set up here.
+_OWN_DISCOVERY_URLS = frozenset(
+    _discovery_url(slug) for slug in (WHISPER_ADDON_SLUG, PIPER_ADDON_SLUG)
+)
 
 
 @callback
@@ -98,6 +107,27 @@ async def _async_ensure_addon(
             translation_key="voice_addon_failed",
             translation_placeholders={"addon": slug, "error": str(err)},
         ) from err
+
+
+async def _async_confirm_discovery(hass: HomeAssistant, flow_id: str) -> None:
+    """Confirm one Wyoming discovery flow if it is for Whisper or Piper.
+
+    The action is the user's explicit request to wire these two add-ons, so the
+    prompt Wyoming would otherwise show for them is answered here. Any other
+    Wyoming flow, or any other add-on's, is left to the user.
+    """
+    for flow in hass.config_entries.flow.async_progress_by_handler(
+        WYOMING_PLATFORM, match_context={"source": "hassio"}
+    ):
+        if (
+            flow["flow_id"] == flow_id
+            and flow["context"].get("configuration_url") in _OWN_DISCOVERY_URLS
+        ):
+            try:
+                await hass.config_entries.flow.async_configure(flow_id, {})
+            except (UnknownFlow, HomeAssistantError) as err:
+                LOGGER.warning("Could not confirm the Wyoming discovery: %s", err)
+            return
 
 
 @callback
@@ -177,7 +207,7 @@ async def async_setup_voice_pipeline(
     conversation_entity_id: str,
     *,
     language: str,
-    whisper_model: str,
+    whisper_model: str | None,
     piper_voice: str,
     pipeline_name: str,
 ) -> VoiceSetupResult:
@@ -185,18 +215,42 @@ async def async_setup_voice_pipeline(
     before_stt = _wyoming_engine_ids(hass, "stt")
     before_tts = _wyoming_engine_ids(hass, "tts")
 
-    await _async_ensure_addon(
-        hass,
-        WHISPER_ADDON_SLUG,
-        WHISPER_ADDON_NAME,
-        {"model": whisper_model, "language": language},
-    )
-    await _async_ensure_addon(
-        hass, PIPER_ADDON_SLUG, PIPER_ADDON_NAME, {"voice": piper_voice}
-    )
+    # Answer the discovery prompts as they appear; keep a stored model unless
+    # the caller named one.
+    confirmations: set[asyncio.Task[None]] = set()
+    seen: set[str] = set()
 
-    stt_engine = await _async_wait_for_new_engine(hass, "stt", before_stt)
-    tts_engine = await _async_wait_for_new_engine(hass, "tts", before_tts)
+    @callback
+    def _on_flow(event: str, flow_id: str) -> None:
+        if event == "added" and flow_id not in seen:
+            seen.add(flow_id)
+            task = hass.async_create_task(_async_confirm_discovery(hass, flow_id))
+            confirmations.add(task)
+            task.add_done_callback(confirmations.discard)
+
+    unsubscribe = hass.config_entries.flow.async_subscribe_flow(_on_flow)
+    try:
+        whisper_options: dict[str, object] = {"language": language}
+        if whisper_model:
+            whisper_options["model"] = whisper_model
+        await _async_ensure_addon(
+            hass, WHISPER_ADDON_SLUG, WHISPER_ADDON_NAME, whisper_options
+        )
+        await _async_ensure_addon(
+            hass, PIPER_ADDON_SLUG, PIPER_ADDON_NAME, {"voice": piper_voice}
+        )
+        # A prompt left over from an earlier attempt is already pending.
+        for flow in hass.config_entries.flow.async_progress_by_handler(
+            WYOMING_PLATFORM, match_context={"source": "hassio"}
+        ):
+            _on_flow("added", flow["flow_id"])
+
+        stt_engine = await _async_wait_for_new_engine(hass, "stt", before_stt)
+        tts_engine = await _async_wait_for_new_engine(hass, "tts", before_tts)
+    finally:
+        unsubscribe()
+        if confirmations:
+            await asyncio.gather(*confirmations)
 
     pipeline_id: str | None = None
     if stt_engine is not None and tts_engine is not None:

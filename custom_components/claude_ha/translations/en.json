@@ -187,7 +187,7 @@
         },
         "stt_model": {
           "name": "Whisper model",
-          "description": "The Whisper speech-to-text model. Defaults to small-int8, a multilingual model that runs on CPU."
+          "description": "The Whisper speech-to-text model. Leave empty to keep the add-on's current model."
         },
         "tts_voice": {
           "name": "Piper voice",

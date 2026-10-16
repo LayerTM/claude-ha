@@ -20,6 +20,7 @@ from custom_components.claude_ha.voice import (
 )
 from homeassistant.components.hassio import AddonError, AddonState
 from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
@@ -142,6 +143,119 @@ async def test_setup_pipeline_full(
     assert captured["conversation_engine"] == "conversation.claude"
     assert captured["tts_voice"] == "uk_UA-x"
     assert captured["language"] == "uk"
+
+
+def _flow(flow_id: str, slug: str) -> dict[str, Any]:
+    """Return a pending Wyoming Supervisor-discovery flow for an add-on slug."""
+    return {
+        "flow_id": flow_id,
+        "context": {
+            "source": "hassio",
+            "configuration_url": f"homeassistant://hassio/addon/{slug}/info",
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [(None, {"language": "fr"}), ("tiny", {"language": "fr", "model": "tiny"})],
+)
+async def test_setup_pipeline_sends_a_model_only_when_given(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    model: str | None,
+    expected: dict[str, Any],
+) -> None:
+    """A Whisper model the user chose is kept unless the caller names another."""
+    monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
+    sent: dict[str, dict[str, Any]] = {}
+
+    async def _record(
+        _hass: HomeAssistant, slug: str, _name: str, options: dict[str, Any]
+    ) -> None:
+        sent[slug] = options
+
+    monkeypatch.setattr(voice, "_async_ensure_addon", _record)
+
+    await voice.async_setup_voice_pipeline(
+        hass,
+        "conversation.claude",
+        language="fr",
+        whisper_model=model,
+        piper_voice="fr_FR-x",
+        pipeline_name="Claude (fr)",
+    )
+
+    assert sent[WHISPER_ADDON_SLUG] == expected
+    assert sent[PIPER_ADDON_SLUG] == {"voice": "fr_FR-x"}
+
+
+async def test_setup_pipeline_confirms_only_its_own_discoveries(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Whisper/Piper discovery prompts are answered; anything else is left alone."""
+    captured: dict[str, Any] = {}
+    _install_pipeline_store(hass, captured)
+    listeners: list[Any] = []
+    pending: list[dict[str, Any]] = [_flow("left-over", WHISPER_ADDON_SLUG)]
+    configured: list[str] = []
+
+    async def _configure(flow_id: str, data: dict[str, Any]) -> None:
+        assert data == {}
+        configured.append(flow_id)
+        if flow_id == "gone":
+            raise UnknownFlow
+        if flow_id == "left-over":
+            _register_wyoming(hass, "stt", "faster_whisper")
+        elif flow_id == "piper":
+            _register_wyoming(hass, "tts", "piper")
+
+    fake = SimpleNamespace(
+        async_subscribe_flow=lambda listener: (
+            listeners.append(listener) or (lambda: listeners.remove(listener))
+        ),
+        async_progress_by_handler=lambda *_a, **_k: list(pending),
+        async_configure=_configure,
+        async_shutdown=MagicMock(),
+    )
+    monkeypatch.setattr(hass.config_entries, "flow", fake)
+
+    async def _ensure(
+        _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
+    ) -> None:
+        if slug == PIPER_ADDON_SLUG:
+            pending.extend(
+                [
+                    _flow("piper", PIPER_ADDON_SLUG),
+                    _flow("other", "core_other"),
+                    _flow("gone", PIPER_ADDON_SLUG),
+                ]
+            )
+            for event, flow_id in (
+                ("added", "piper"),
+                ("added", "other"),
+                ("added", "gone"),
+                ("removed", "piper"),
+            ):
+                listeners[0](event, flow_id)
+
+    monkeypatch.setattr(voice, "_async_ensure_addon", _ensure)
+
+    result = await voice.async_setup_voice_pipeline(
+        hass,
+        "conversation.claude",
+        language="fr",
+        whisper_model=None,
+        piper_voice="fr_FR-x",
+        pipeline_name="Claude (fr)",
+    )
+
+    assert result.pipeline_id == "pipeline-1"
+    assert sorted(configured) == ["gone", "left-over", "piper"]
+    assert "Could not confirm the Wyoming discovery" in caplog.text
+    assert listeners == []
 
 
 async def test_setup_pipeline_engine_timeout(

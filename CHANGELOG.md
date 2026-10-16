@@ -11,6 +11,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `claude_ha.setup_voice` no longer fails with "Unknown error" while installing
   the Whisper and Piper add-ons, and no longer overwrites their other required
   options (Whisper rejected the partial set with a missing `custom_model_type`).
+- `claude_ha.setup_voice` keeps the Whisper model already set on the add-on
+  unless `stt_model` is given, instead of replacing it with `small-int8`.
+- `claude_ha.setup_voice` confirms the Wyoming discovery prompts for the Whisper
+  and Piper add-ons it sets up, so the pipeline is created without waiting for
+  the prompts to be confirmed by hand.
 
 ### Changed
 
