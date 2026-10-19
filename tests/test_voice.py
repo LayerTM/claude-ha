@@ -290,12 +290,20 @@ def _fake_flow_manager(
     pending: list[dict[str, Any]],
     configure: Any,
     aborted: list[str] | None = None,
+    listeners: list[Any] | None = None,
 ) -> None:
     """Replace the config-entries flow manager with one holding ``pending``."""
     if aborted is None:
         aborted = []
+    if listeners is None:
+        listeners = []
+
+    def _subscribe(listener: Any) -> Any:
+        listeners.append(listener)
+        return lambda: None
+
     fake = SimpleNamespace(
-        async_subscribe_flow=lambda _listener: lambda: None,
+        async_subscribe_flow=_subscribe,
         async_progress_by_handler=lambda *_a, **_k: list(pending),
         async_configure=configure,
         async_abort=aborted.append,
@@ -657,10 +665,20 @@ async def test_setup_pipeline_knows_an_entry_by_the_addon_ip(
     )
     monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
 
+    aborted: list[str] = []
+    _fake_flow_manager(
+        monkeypatch,
+        hass,
+        [_flow("whisper", WHISPER_ADDON_SLUG)],
+        _configure,
+        aborted,
+    )
+
     result = await _setup_voice(hass)
 
     assert result == VoiceSetupResult("stt.whisper_ip", "tts.piper_ip", "pipeline-1")
     assert configured == []
+    assert aborted == ["whisper"]
 
 
 async def test_setup_pipeline_without_supervisor_info_uses_the_hostname(
@@ -692,3 +710,127 @@ async def test_setup_pipeline_says_when_an_entry_is_disabled(
 
     assert err.value.translation_key == "voice_engine_disabled"
     assert err.value.translation_placeholders == {"addon": "Whisper"}
+
+
+async def test_setup_pipeline_checks_a_discovery_made_by_starting_the_addon(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    addon_addresses: dict[str, Any],
+) -> None:
+    """A discovery that appears while the add-on starts is checked by its IP too."""
+    _install_pipeline_store(hass, {})
+    addon_addresses[WHISPER_ADDON_SLUG] = "192.0.2.14"
+    _register_wyoming(hass, "stt", "whisper_ip", WHISPER_ADDON_SLUG, host="192.0.2.14")
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+    pending: list[dict[str, Any]] = []
+    listeners: list[Any] = []
+    configured: list[str] = []
+    aborted: list[str] = []
+
+    async def _configure(flow_id: str, _data: dict[str, Any]) -> None:
+        configured.append(flow_id)
+
+    async def _ensure_starts_and_discovers(
+        _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
+    ) -> None:
+        if slug == WHISPER_ADDON_SLUG:
+            pending.append(_flow("on-start", WHISPER_ADDON_SLUG))
+            for listener in listeners:
+                listener("added", "on-start")
+
+    _fake_flow_manager(monkeypatch, hass, pending, _configure, aborted, listeners)
+    monkeypatch.setattr(voice, "_async_ensure_addon", _ensure_starts_and_discovers)
+
+    result = await _setup_voice(hass)
+
+    assert result.stt_engine == "stt.whisper_ip"
+    assert configured == []
+    assert aborted == ["on-start"]
+
+
+async def test_setup_pipeline_keeps_a_duplicate_when_the_confirm_fails(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A duplicate prompt stays when the claimed one could not be confirmed."""
+    monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
+    aborted: list[str] = []
+
+    async def _configure(flow_id: str, _data: dict[str, Any]) -> None:
+        raise HomeAssistantError("boom")
+
+    _fake_flow_manager(
+        monkeypatch,
+        hass,
+        [_flow("first", PIPER_ADDON_SLUG), _flow("second", PIPER_ADDON_SLUG)],
+        _configure,
+        aborted,
+    )
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    await _setup_voice(hass)
+
+    assert aborted == []
+
+
+async def test_setup_pipeline_matches_hosts_regardless_of_case(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hand entry spelled "Core-Whisper" is still the add-on's."""
+    _install_pipeline_store(hass, {})
+    _register_wyoming(hass, "stt", "whisper", WHISPER_ADDON_SLUG, host="Core-Whisper")
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    result = await _setup_voice(hass)
+
+    assert result.stt_engine == "stt.whisper"
+
+
+async def test_setup_pipeline_one_disabled_entry_beside_an_enabled_one_waits(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only when every entry of the add-on is disabled is that reported."""
+    _install_pipeline_store(hass, {})
+    _register_wyoming(hass, "stt", "old", WHISPER_ADDON_SLUG, disabled=True)
+    _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    result = await _setup_voice(hass)
+
+    assert result.pipeline_id == "pipeline-1"
+
+
+async def test_setup_pipeline_says_when_the_piper_entry_is_disabled(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second engine's disabled entry is reported the same way."""
+    _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG, disabled=True)
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    with pytest.raises(HomeAssistantError) as err:
+        await _setup_voice(hass)
+
+    assert err.value.translation_placeholders == {"addon": "Piper"}
+
+
+async def test_setup_pipeline_addon_without_an_ip_uses_the_hostname(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    addon_addresses: dict[str, Any],
+) -> None:
+    """Supervisor reporting no IP leaves the hostname as the only address."""
+    _install_pipeline_store(hass, {})
+    addon_addresses[WHISPER_ADDON_SLUG] = None
+    addon_addresses[PIPER_ADDON_SLUG] = ""
+    _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+    _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+    monkeypatch.setattr(voice, "_async_ensure_addon", _noop_ensure)
+
+    assert await voice._async_addon_hosts(hass, WHISPER_ADDON_SLUG) == frozenset(
+        {"core-whisper"}
+    )
+    result = await _setup_voice(hass)
+
+    assert result.pipeline_id == "pipeline-1"
