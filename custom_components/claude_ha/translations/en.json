@@ -398,6 +398,9 @@
     },
     "forget_nothing_selected": {
       "message": "Name the facts to forget, or choose All."
+    },
+    "voice_engine_disabled": {
+      "message": "The Wyoming entry for the {addon} add-on is disabled. Enable it under Settings → Devices & services → Wyoming Protocol, then run the action again."
     }
   },
   "issues": {

@@ -19,6 +19,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `claude_ha.setup_voice` dismisses a Wyoming discovery prompt it does not
+  need (for an add-on that is already set up, or a second prompt for the same
+  add-on), so no stale "Discovered" card is left behind.
+- `claude_ha.setup_voice` recognises a Wyoming entry added by hand with the
+  Whisper or Piper add-on's internal IP address, instead of adding a second
+  entry for the same add-on.
+- `claude_ha.setup_voice` reports a disabled Wyoming entry for Whisper or Piper
+  at once, instead of waiting 90 seconds and creating no pipeline.
 - A held confirmation (a proposed action, an automation, or a fact to remember)
   can only be answered by the user it was held for. Before, another caller using
   the same conversation id could confirm it.
