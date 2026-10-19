@@ -19,7 +19,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
-from .api import ClaudeError, Proposal
+from .api import ClaudeError, MemoryChange, Proposal
 from .const import DOMAIN, EVENT_ACTION_EXECUTED, LOGGER, MODE_WRITE
 from .engines import engine_for_entry
 
@@ -53,8 +53,9 @@ class PendingProposal:
     """A proposal awaiting the user's Approve/Dismiss decision.
 
     Carries one of: entity-control ``intents`` (the notification/chat write path);
-    an ``automation`` config awaiting a confirmed create/update; or a
-    ``delete_automation_id`` awaiting a confirmed delete (both chat-only paths). When
+    an ``automation`` config awaiting a confirmed create/update; a
+    ``delete_automation_id`` awaiting a confirmed delete; or a ``memory_change``
+    awaiting a confirmed save/removal of remembered facts (all chat-only). When
     ``automation`` is set with ``update_target_id``, the confirmed write updates that
     existing automation in place instead of creating a new one.
     """
@@ -68,6 +69,7 @@ class PendingProposal:
     automation: dict[str, Any] | None = None
     delete_automation_id: str | None = None
     update_target_id: str | None = None
+    memory_change: MemoryChange | None = None
 
 
 @callback

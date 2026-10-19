@@ -951,3 +951,35 @@ async def test_timeout(
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", exc=TimeoutError())
     with pytest.raises(ClaudeConnectionError):
         await _client(hass).async_get_status()
+
+
+@pytest.mark.parametrize(
+    ("version", "fields", "sent"),
+    [
+        ("99.0.0", None, False),  # predates request_fields: never, whatever version
+        ("1.60.0", frozenset({"prompt", "mode"}), False),  # lists fields, not memory
+        ("1.60.0", frozenset({"prompt", "mode", "memory"}), True),
+    ],
+)
+async def test_memory_sent_only_when_listed(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    version: str,
+    fields: frozenset[str] | None,
+    sent: bool,
+) -> None:
+    """`memory` goes on the wire only when the add-on lists it."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
+    )
+    client = _client(hass)
+    note_status(client, version, fields)
+
+    items = [{"id": "a1", "text": "My room is the office."}]
+    async for _chunk in client.async_prompt_stream("hi", memory=items):
+        pass
+
+    body = aioclient_mock.mock_calls[-1][2]
+    assert client.supports_memory is sent
+    assert ("memory" in body) is sent

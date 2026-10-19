@@ -27,6 +27,9 @@ CONF_AUTO_EXECUTE: Final = "auto_execute"
 # Camera vision (add-on >= 1.17.0): opt-in, off by default because a snapshot is
 # more sensitive than state. Only ever an Assist-exposed camera is sent.
 CONF_CAMERA_VISION: Final = "camera_vision"
+# Memory between conversations: on by default, because nothing is stored without
+# the user's own ask and yes (see memory.py); off sends no facts and offers none.
+CONF_MEMORY: Final = "memory"
 
 # Default prompt-server port (contract §4; bound 0.0.0.0, not published to host).
 DEFAULT_PORT: Final = 8126
@@ -84,6 +87,9 @@ PROPOSAL_INTENTS: Final = "intents"
 # later capability that re-validates and writes it in-process — the add-on never
 # writes it.
 RESP_AUTOMATION: Final = "automation"
+# Optional {remember: [text], forget: [id]} when this turn requests to
+# remember or forget something; a suggestion the user still confirms.
+RESP_MEMORY_CHANGE: Final = "memory_change"
 # Optional reason token on a degraded read's 200 body (or its streaming `done`
 # line): the same token ``chat_health.last_reason`` uses. A sign-in the engine
 # no longer accepts is "auth-expired" — never retried (one engine call, not
@@ -133,6 +139,16 @@ ADDON_MIN_SURFACE_VERSION: Final = "1.28.0"
 # Send-gated on the version below, like REQUEST_SURFACE.
 REQUEST_EDIT_AUTOMATION: Final = "edit_automation"
 ADDON_MIN_EDIT_VERSION: Final = "1.36.0"
+# Optional remembered facts, [{id, text}], on reads only. Gated by
+# STATUS_REQUEST_FIELDS alone: no add-on that predates the list accepts it.
+REQUEST_MEMORY: Final = "memory"
+# The longest fact, in characters, after whitespace is collapsed, and the most
+# facts one chat turn may ask to remember / forget (the contract's bounds).
+MAX_FACT_CHARS: Final = 200
+# The id shape the add-on accepts for a fact; it refuses the whole read otherwise.
+MEMORY_ID_PATTERN: Final = r"[A-Za-z0-9_-]{1,32}"
+MAX_REMEMBER_PER_TURN: Final = 3
+MAX_FORGET_PER_TURN: Final = 20
 
 # GET /api/status 200-response keys.
 STATUS_READY: Final = "ready"
@@ -315,6 +331,9 @@ USAGE_SCAN_INTERVAL: Final = 300
 # --- Services ---------------------------------------------------------------
 SERVICE_ASK: Final = "ask"
 SERVICE_SETUP_VOICE: Final = "setup_voice"
+SERVICE_REMEMBER: Final = "remember"
+SERVICE_FORGET: Final = "forget"
+SERVICE_LIST_MEMORY: Final = "list_memory"
 ATTR_CONFIG_ENTRY: Final = "config_entry"
 ATTR_PROMPT: Final = "prompt"
 ATTR_MODE: Final = "mode"
@@ -324,6 +343,10 @@ ATTR_LANGUAGE: Final = "language"
 ATTR_STT_MODEL: Final = "stt_model"
 ATTR_TTS_VOICE: Final = "tts_voice"
 ATTR_PIPELINE_NAME: Final = "pipeline_name"
+ATTR_TEXT: Final = "text"
+ATTR_HOUSEHOLD: Final = "household"
+ATTR_FACT_IDS: Final = "fact_ids"
+ATTR_ALL: Final = "all"
 
 # Event fired after a confirmed write executes (for automations/logbook).
 EVENT_ACTION_EXECUTED: Final = f"{DOMAIN}_action_executed"

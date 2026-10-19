@@ -17,7 +17,8 @@ from http import HTTPStatus
 import json
 import math
 import re
-from typing import Any, Final, NoReturn
+from typing import Any, Final, NoReturn, TypedDict
+import unicodedata
 
 from aiohttp import ClientError, ClientResponse, ClientSession
 from awesomeversion import AwesomeVersion, AwesomeVersionException
@@ -53,6 +54,9 @@ from .const import (
     LIMITS_LIST,
     LIMITS_MODE,
     LOGGER,
+    MAX_FACT_CHARS,
+    MAX_FORGET_PER_TURN,
+    MAX_REMEMBER_PER_TURN,
     MODE_READ,
     MODE_WRITE,
     PROPOSAL_INTENTS,
@@ -64,10 +68,12 @@ from .const import (
     REQUEST_IMAGE_ENTITY,
     REQUEST_INTENTS,
     REQUEST_LANGUAGE,
+    REQUEST_MEMORY,
     REQUEST_STREAM,
     REQUEST_SURFACE,
     REQUEST_TIMEOUT,
     RESP_AUTOMATION,
+    RESP_MEMORY_CHANGE,
     RESP_PROPOSAL,
     RESP_REASON,
     RESP_TEXT,
@@ -237,6 +243,63 @@ class Proposal:
     intents: list[dict[str, Any]] = field(default_factory=list)
 
 
+class MemoryItem(TypedDict):
+    """A fact as sent to the add-on: its id and its text."""
+
+    id: str
+    text: str
+
+
+@dataclass(slots=True, frozen=True)
+class MemoryChange:
+    """What a chat turn asks to change: facts to add, ids to remove."""
+
+    remember: tuple[str, ...]
+    forget: tuple[str, ...]
+
+
+def normalize_fact(text: object) -> str | None:
+    """Return ``text`` as a storable fact, or None if it is not one.
+
+    Whitespace (line breaks included) collapses to single spaces, so a fact is
+    always one line; any other control or format character makes it invalid.
+    """
+    if not isinstance(text, str):
+        return None
+    normalized = " ".join(text.split())
+    if not normalized or len(normalized) > MAX_FACT_CHARS:
+        return None
+    if any(unicodedata.category(char).startswith("C") for char in normalized):
+        return None
+    return normalized
+
+
+def parse_memory_change(raw: object) -> MemoryChange | None:
+    """Validate the add-on's ``memory_change``; None when it asks for nothing.
+
+    The add-on bounds it too; anything outside the bounds here is dropped, not
+    trusted. Ids are checked against the turn's own facts when applied.
+    """
+    if not isinstance(raw, dict):
+        return None
+    remember_raw = raw.get("remember")
+    forget_raw = raw.get("forget")
+    remember: list[str] = []
+    if isinstance(remember_raw, list):
+        for item in remember_raw[:MAX_REMEMBER_PER_TURN]:
+            fact = normalize_fact(item)
+            if fact is not None and fact not in remember:
+                remember.append(fact)
+    forget: list[str] = []
+    if isinstance(forget_raw, list):
+        for item in forget_raw[:MAX_FORGET_PER_TURN]:
+            if isinstance(item, str) and item and item not in forget:
+                forget.append(item)
+    if not remember and not forget:
+        return None
+    return MemoryChange(tuple(remember), tuple(forget))
+
+
 @dataclass(slots=True)
 class PromptResult:
     """Parsed 200 response of ``POST /api/prompt``."""
@@ -246,6 +309,7 @@ class PromptResult:
     tools_used: list[str]
     truncated: bool
     automation: dict[str, Any] | None = None
+    memory_change: MemoryChange | None = None
 
 
 @dataclass(slots=True)
@@ -540,7 +604,13 @@ class ClaudeClient:
         except AwesomeVersionException:
             return False
 
-    def accepts(self, field: str, legacy_min_version: str | None = None) -> bool:
+    def accepts(
+        self,
+        field: str,
+        legacy_min_version: str | None = None,
+        *,
+        listed_only: bool = False,
+    ) -> bool:
         """Whether the add-on accepts optional request field ``field``.
 
         The add-on rejects a request with a key it does not know (400), so an
@@ -548,11 +618,19 @@ class ClaudeClient:
         that reports ``request_fields`` says so itself. One that predates the
         list is a Claude add-on, and for it the field's first accepting version
         decides: ``legacy_min_version``, or ``None`` for a field every such
-        add-on accepts.
+        add-on accepts. A ``listed_only`` field is newer than the list, so no
+        such add-on accepts it.
         """
         if self._request_fields is not None:
             return field in self._request_fields
+        if listed_only:
+            return False
         return legacy_min_version is None or self._addon_at_least(legacy_min_version)
+
+    @property
+    def supports_memory(self) -> bool:
+        """Whether the connected add-on accepts remembered facts."""
+        return self.accepts(REQUEST_MEMORY, listed_only=True)
 
     @property
     def supports_edit_automation(self) -> bool:
@@ -720,6 +798,7 @@ class ClaudeClient:
         language: str | None = None,
         surface: str | None = None,
         edit_automation: dict[str, Any] | None = None,
+        memory: list[MemoryItem] | None = None,
     ) -> AsyncIterator[StreamDelta | PromptResult]:
         """Stream a read: yield text deltas, then one final ``PromptResult``.
 
@@ -729,6 +808,7 @@ class ClaudeClient:
         Streaming is read-only (contract §2). The last item is always the
         authoritative ``PromptResult`` (its proposal drives auto/confirm).
         ``edit_automation`` is the current config of an automation to modify.
+        ``memory`` is the remembered facts to send (only when non-empty).
         Each optional field is sent only if the add-on accepts it (see
         :meth:`accepts`).
         """
@@ -742,6 +822,10 @@ class ClaudeClient:
         self._put(
             payload, REQUEST_EDIT_AUTOMATION, edit_automation, ADDON_MIN_EDIT_VERSION
         )
+        # An empty list still says "this client keeps facts", so the model may
+        # suggest the first one; only an absent key means it may not.
+        if memory is not None and self.supports_memory:
+            payload[REQUEST_MEMORY] = memory
         headers = self._auth_headers
         if caller:
             headers[HEADER_CALLER] = caller
@@ -1164,6 +1248,7 @@ def _parse_prompt_result(data: dict[str, Any], engine: Engine) -> PromptResult:
         tools_used=list(data.get(RESP_TOOLS_USED, []) or []),
         truncated=bool(data.get(RESP_TRUNCATED, False)),
         automation=automation,
+        memory_change=parse_memory_change(data.get(RESP_MEMORY_CHANGE)),
     )
 
 

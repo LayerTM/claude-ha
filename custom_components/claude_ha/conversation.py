@@ -25,6 +25,8 @@ from homeassistant.util import dt as dt_util
 from .api import (
     ClaudeAuthExpiredError,
     ClaudeError,
+    MemoryChange,
+    MemoryItem,
     PromptResult,
     Proposal,
     StreamDelta,
@@ -42,6 +44,7 @@ from .const import (
     CONF_AUTO_EXECUTE,
     CONF_CAMERA_VISION,
     CONF_CRITICAL_ENTITIES,
+    CONF_MEMORY,
     CONFIRMATION_AUTO,
     CONFIRMATION_CONFIRMED,
     ISSUE_SIGNIN_EXPIRED,
@@ -54,6 +57,7 @@ from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .engines import engine_for_entry
 from .entity import build_device_info
 from .issues import async_raise_issue
+from .memory import async_may_edit_household
 from .risk import is_auto_ok
 from .vision import resolve_camera
 
@@ -267,9 +271,15 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             DATA_PENDING_CHAT, {}
         )
 
-        # A. Resolve a confirmation that is pending for this conversation.
+        # A. Resolve a confirmation that is pending for this conversation. Only the
+        # caller it was held for, on this entry, can answer it: a conversation id
+        # can be shared, and a yes from someone else is not that caller's yes.
         pending = pending_store.pop(conv_id, None)
-        if pending is not None:
+        if (
+            pending is not None
+            and pending.caller == caller
+            and pending.entry_id == entry.entry_id
+        ):
             resolved = await self._resolve_pending(user_input, chat_log, text, pending)
             if resolved is not None:
                 return resolved
@@ -336,12 +346,20 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 automation=automation,
             )
             return self._automation_confirm_reply(
-                user_input, chat_log, automation, result.text, streamed, alias
+                user_input,
+                chat_log,
+                automation,
+                result.text,
+                streamed,
+                alias,
+                note=self._dropped_memory_note(user_input, result),
             )
 
         proposal = result.proposal
         if proposal is None or not proposal.intents:
-            return self._answer_reply(user_input, chat_log, result.text, streamed)
+            return await self._plain_reply(
+                user_input, chat_log, conv_id, pending_store, result, streamed
+            )
 
         summary = proposal.summary.strip() or "the requested change"
 
@@ -363,7 +381,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             except ClaudeError:
                 pass  # e.g. the add-on's 403 backstop -> fall through to confirm
             else:
-                return self._reply(user_input, chat_log, f"Done: {summary}")
+                note = self._dropped_memory_note(user_input, result)
+                return self._reply(user_input, chat_log, f"Done: {summary}{note}")
 
         # E. Hold the exact validated intents and ask for confirmation. The answer
         # already streamed, so append only the proposal + confirmation affordance.
@@ -382,7 +401,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             message = _spoken_confirm(answer, summary)
         else:
             message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
-        return self._reply(user_input, chat_log, message.strip())
+        note = self._dropped_memory_note(user_input, result)
+        return self._reply(user_input, chat_log, message.strip() + note)
 
     async def _async_stream_read(
         self,
@@ -415,6 +435,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 language=user_input.language,
                 surface=_surface(user_input),
                 edit_automation=edit_automation,
+                memory=self._memory_for_prompt(caller),
             ):
                 if isinstance(chunk, PromptResult):
                     captured["result"] = chunk
@@ -436,6 +457,129 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 "The add-on returned no result", translation_key="no_result"
             )
         return result, streamed
+
+    def _dropped_memory_note(
+        self, user_input: conversation.ConversationInput, result: PromptResult
+    ) -> str:
+        """Say that a memory suggestion beside an action was not kept.
+
+        One yes never means two things, so the action takes the confirmation and
+        the suggestion is dropped — said, not silent.
+        """
+        if result.memory_change is None or not self._memory_on:
+            return ""
+        separator = " " if _surface(user_input) == SURFACE_VOICE else "\n\n"
+        return f"{separator}{_MEMORY_DROPPED}"
+
+    @property
+    def _memory_on(self) -> bool:
+        """Whether this entry keeps facts between conversations."""
+        return bool(self.coordinator.config_entry.options.get(CONF_MEMORY, True))
+
+    def _memory_for_prompt(self, caller: str | None) -> list[MemoryItem] | None:
+        """Return the facts a read by ``caller`` carries, or None when off."""
+        if not self._memory_on:
+            return None
+        return self.coordinator.config_entry.runtime_data.memory.for_prompt(caller)
+
+    async def _plain_reply(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        conv_id: str,
+        pending_store: dict[str, PendingProposal],
+        result: PromptResult,
+        streamed: str,
+    ) -> conversation.ConversationResult:
+        """Answer a turn with no action: hold a suggested memory change, if any.
+
+        A turn without a user (a voice satellite, an automation) reads the
+        household's facts but never changes them: a spoken yes is not an identity.
+        """
+        if result.memory_change is not None and self._memory_on:
+            if user_input.context.user_id is None:
+                answer = "" if streamed else result.text
+                message = f"{answer}\n\n{_MEMORY_NEEDS_USER}".strip()
+                return self._reply(user_input, chat_log, message)
+            return await self._memory_confirm_reply(
+                user_input,
+                chat_log,
+                conv_id,
+                pending_store,
+                result.memory_change,
+                result.text,
+                streamed,
+            )
+        return self._answer_reply(user_input, chat_log, result.text, streamed)
+
+    async def _memory_confirm_reply(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        conv_id: str,
+        pending_store: dict[str, PendingProposal],
+        change: MemoryChange,
+        text: str,
+        streamed: str,
+    ) -> conversation.ConversationResult:
+        """Hold a suggested memory change and ask to confirm — nothing is saved yet.
+
+        Only ids of facts this caller can see are kept; a suggestion that is
+        left with nothing to do is answered as a plain reply.
+        """
+        caller = user_input.context.user_id
+        memory = self.coordinator.config_entry.runtime_data.memory
+        household = await async_may_edit_household(self.hass, caller)
+        visible = {
+            fact.id: fact.text for fact in memory.editable(caller, household=household)
+        }
+        forget = tuple(fact_id for fact_id in change.forget if fact_id in visible)
+        change = MemoryChange(change.remember, forget)
+        if not change.remember and not change.forget:
+            return self._answer_reply(user_input, chat_log, text, streamed)
+        answer = "" if streamed else text
+        pending_store[conv_id] = PendingProposal(
+            entry_id=self.coordinator.config_entry.entry_id,
+            prompt=user_input.text,
+            intents=[],
+            caller=caller,
+            summary="",
+            expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
+            memory_change=change,
+        )
+        lines = [f"Remember: {fact}" for fact in change.remember]
+        lines += [f"Forget: {visible[fact_id]}" for fact_id in change.forget]
+        if _surface(user_input) == SURFACE_VOICE:
+            # _spoken_confirm ends the summary with its own full stop.
+            message = _spoken_confirm(
+                answer, ". ".join(line.rstrip(".") for line in lines)
+            )
+        else:
+            parts = [answer.strip()] if answer.strip() else []
+            parts.append("\n".join(lines))
+            parts.append("Confirm? (yes/no)")
+            message = "\n\n".join(parts)
+        return self._reply(user_input, chat_log, message)
+
+    async def _async_apply_memory(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        change: MemoryChange,
+        caller: str | None,
+    ) -> conversation.ConversationResult:
+        """Save / remove the confirmed facts; a full or invalid set says why."""
+        memory = self.coordinator.config_entry.runtime_data.memory
+        household = await async_may_edit_household(self.hass, caller)
+        removed = await memory.async_forget(change.forget, caller, household=household)
+        lines = [f"Forgot: {fact.text}" for fact in removed]
+        try:
+            for text in change.remember:
+                fact = await memory.async_remember(text, caller)
+                lines.append(f"Remembered: {fact.text}")
+        except ClaudeError as err:
+            return await self._error(user_input, chat_log, err)
+        return self._reply(user_input, chat_log, "\n".join(lines) or "Done.")
 
     def _answer_reply(
         self,
@@ -459,6 +603,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         streamed: str,
         alias: str,
         action: str = "Create",
+        note: str = "",
     ) -> conversation.ConversationResult:
         """Show a drafted automation and ask to confirm — this never writes it.
 
@@ -470,9 +615,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         answer = "" if streamed else text
         if _surface(user_input) == SURFACE_VOICE:
             message = _spoken_confirm(answer, f"{action} automation {alias}")
-            return self._reply(user_input, chat_log, message)
+            return self._reply(user_input, chat_log, message + note)
         block = _render_automation_draft(answer, automation)
-        return self._reply(user_input, chat_log, f"{block}\n\n{action} it? (yes/no)")
+        return self._reply(
+            user_input, chat_log, f"{block}\n\n{action} it? (yes/no){note}"
+        )
 
     async def _async_commit_automation(
         self,
@@ -581,6 +728,10 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         """
         decision = _decision(text)
         if decision is True and pending.expires_at >= dt_util.utcnow():
+            if pending.memory_change is not None:
+                return await self._async_apply_memory(
+                    user_input, chat_log, pending.memory_change, pending.caller
+                )
             if pending.delete_automation_id is not None:
                 return await self._async_delete_automation(
                     user_input, chat_log, pending.delete_automation_id, pending.summary
@@ -752,6 +903,13 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         return conversation.ConversationResult(
             response=response, conversation_id=chat_log.conversation_id
         )
+
+
+_MEMORY_DROPPED = "Not saved to memory — ask on its own to keep it."
+_MEMORY_NEEDS_USER = (
+    "Not saved to memory: facts are kept from a signed-in chat or the Remember"
+    " a fact action."
+)
 
 
 def _spoken_confirm(answer: str, summary: str) -> str:

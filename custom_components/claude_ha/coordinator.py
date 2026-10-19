@@ -35,6 +35,7 @@ from .const import (
 )
 from .engines import engine_for_entry
 from .issues import async_clear_issues, async_raise_issue, entry_issue_id
+from .memory import Memory
 
 type ClaudeConfigEntry = ConfigEntry[ClaudeRuntimeData]
 
@@ -47,6 +48,7 @@ class ClaudeRuntimeData:
     status: ClaudeStatusCoordinator
     usage: ClaudeUsageCoordinator
     limits: ClaudeAccountLimitsCoordinator
+    memory: Memory
 
 
 class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):

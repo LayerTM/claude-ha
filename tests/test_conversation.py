@@ -1263,3 +1263,39 @@ async def test_modify_update_failure_is_clean(
         hass, "yes", first.conversation_id, context=Context(), agent_id=agent
     )
     assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+async def test_held_action_needs_the_same_caller(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A yes from another caller sharing the conversation id runs nothing."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "I can unlock it.",
+            "proposal": {
+                "summary": "Unlock the front door",
+                "intents": [
+                    {"intent": "HassTurnOff", "targets": ["lock.front"], "data": {}}
+                ],
+            },
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await setup_integration(hass, mock_config_entry)
+    agent = _agent_id(hass, mock_config_entry)
+
+    asked = await conversation.async_converse(
+        hass, "unlock the door", "hall", Context(user_id="user-1"), agent_id=agent
+    )
+    assert "Confirm? (yes/no)" in asked.response.speech["plain"]["speech"]
+    await conversation.async_converse(
+        hass, "yes", "hall", Context(user_id="user-2"), agent_id=agent
+    )
+
+    posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
+    assert all(body["mode"] == "read" for body in posts)

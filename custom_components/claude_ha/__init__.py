@@ -60,6 +60,7 @@ from .health import (
     evaluate as evaluate_health,
 )
 from .issues import async_clear_issues
+from .memory import Memory, async_remove_memory
 from .services import async_setup_services
 
 PLATFORMS = (
@@ -139,8 +140,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
     limits = ClaudeAccountLimitsCoordinator(hass, entry, client, watch)
     await limits.async_refresh()
 
+    memory = Memory(hass, entry.entry_id)
+    await memory.async_load()
+
     entry.runtime_data = ClaudeRuntimeData(
-        client=client, status=status, usage=usage, limits=limits
+        client=client, status=status, usage=usage, limits=limits, memory=memory
     )
 
     _async_setup_health(hass, entry, status)
@@ -179,7 +183,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> b
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> None:
-    """Forget everything a removed entry left behind: its issues and its watch."""
+    """Forget everything a removed entry left behind: issues, watch, memory."""
     async_clear_issues(
         hass,
         entry.entry_id,
@@ -191,6 +195,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> N
     )
     async_drop_addon_watch(hass, entry.entry_id)
     await async_remove_card_resource(hass, entry.entry_id)
+    await async_remove_memory(hass, entry.entry_id)
 
 
 async def _async_ensure_addon_running(

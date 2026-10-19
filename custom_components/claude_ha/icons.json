@@ -42,6 +42,15 @@
     },
     "setup_voice": {
       "service": "mdi:microphone-message"
+    },
+    "remember": {
+      "service": "mdi:brain"
+    },
+    "forget": {
+      "service": "mdi:delete-outline"
+    },
+    "list_memory": {
+      "service": "mdi:format-list-bulleted"
     }
   }
 }
