@@ -22,6 +22,7 @@ import secrets
 from typing import Any, Final
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -45,7 +46,7 @@ class Fact:
     created: str
 
 
-class MemoryFullError(ClaudeError):
+class MemoryFullError(ClaudeError, ServiceValidationError):
     """A set already holds :data:`MAX_FACTS` facts."""
 
     translation_key = "memory_full"
@@ -55,7 +56,7 @@ class MemoryFullError(ClaudeError):
         super().__init__(translation_placeholders={"max": str(MAX_FACTS)})
 
 
-class FactInvalidError(ClaudeError):
+class FactInvalidError(ClaudeError, ServiceValidationError):
     """The text is empty, too long or holds control characters."""
 
     translation_key = "memory_fact_invalid"

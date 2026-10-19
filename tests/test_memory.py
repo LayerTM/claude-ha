@@ -634,7 +634,10 @@ async def test_action_remember_invalid(
     _mock_status(aioclient_mock, memory=True)
     await setup_integration(hass, mock_config_entry)
 
-    with pytest.raises(FactInvalidError):
+    # A validation error: the caller's input is at fault, not the integration.
+    with pytest.raises(FactInvalidError) as err:
         await hass.services.async_call(
             DOMAIN, "remember", {"text": "x" * 201}, blocking=True, return_response=True
         )
+    assert isinstance(err.value, ServiceValidationError)
+    assert isinstance(MemoryFullError(), ServiceValidationError)
