@@ -179,6 +179,12 @@ add-on ≥ 1.8.0 (older add-ons simply confirm everything). Tune it under the
 integration's **Configure** options: turn off *auto-execute* to confirm every
 change, or list entities that must always be confirmed.
 
+<img src="assets/screenshots/held-proposal.png" alt="Assist holds a proposed change and asks to confirm it with yes or no" width="640">
+
+*A change to an entity listed under "Always confirm these entities": Assist
+shows what it would do and which entities it affects, and waits for your
+`yes` or `no`. Nothing changes until you answer `yes`.*
+
 > Claude can only ever touch entities you have exposed to Assist — that exposure
 > list is the outer ceiling; the per-action classifier is the inner gate.
 
