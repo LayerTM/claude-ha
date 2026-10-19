@@ -24,4 +24,6 @@ async def async_get_config_entry_diagnostics(
         "status": asdict(data.status.data) if data.status.data else None,
         "usage": data.usage.data.report if data.usage.data else None,
         "account_limits": data.limits.data.report if data.limits.data else None,
+        # Counts only: the facts themselves are the user's personal data.
+        "memory": data.memory.counts(),
     }

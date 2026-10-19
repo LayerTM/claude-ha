@@ -37,6 +37,7 @@ from .const import (
     CONF_CRITICAL_ENTITIES,
     CONF_ENGINE,
     CONF_HOST,
+    CONF_MEMORY,
     CONF_PORT,
     CONF_TOKEN,
     CONF_USE_ADDON,
@@ -454,6 +455,10 @@ class ClaudeOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_CAMERA_VISION,
                     default=options.get(CONF_CAMERA_VISION, False),
+                ): bool,
+                vol.Required(
+                    CONF_MEMORY,
+                    default=options.get(CONF_MEMORY, True),
                 ): bool,
             }
         )

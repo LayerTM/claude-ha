@@ -76,12 +76,14 @@
         "data": {
           "auto_execute": "Act automatically on benign requests",
           "critical_entities": "Always confirm these entities",
-          "camera_vision": "Let {engine} look at cameras"
+          "camera_vision": "Let {engine} look at cameras",
+          "memory": "Remember facts between conversations"
         },
         "data_description": {
           "auto_execute": "When on, {engine} carries out low-risk requests from chat immediately and only asks you to confirm important ones. When off, every change is confirmed first.",
           "critical_entities": "Entities that always require confirmation, on top of the automatic per-action risk checks.",
-          "camera_vision": "When on, a clearly visual question (e.g. 'who's at the door?') may send one snapshot of an Assist-exposed camera to {engine}. Off by default; snapshots are more sensitive than state."
+          "camera_vision": "When on, a clearly visual question (e.g. 'who's at the door?') may send one snapshot of an Assist-exposed camera to {engine}. Off by default; snapshots are more sensitive than state.",
+          "memory": "When on, {engine} can keep short facts you ask it to remember ('remember that my room is the office') and uses them in later conversations. Each fact is saved only after you confirm it."
         }
       }
     }
@@ -196,6 +198,52 @@
         "pipeline_name": {
           "name": "Pipeline name",
           "description": "Name for the created Assist pipeline. Defaults to Claude and the language, for example Claude (uk)."
+        }
+      }
+    },
+    "remember": {
+      "name": "Remember a fact",
+      "description": "Stores a short fact Claude takes into account in later conversations, for example which room is yours. It is kept for the calling user, or for the whole household when there is no calling user (automations) or Household is on.",
+      "fields": {
+        "config_entry": {
+          "name": "Claude",
+          "description": "The Claude configuration to use. Defaults to the only one if a single Claude is configured."
+        },
+        "text": {
+          "name": "Fact",
+          "description": "The fact to remember: one line, at most 200 characters."
+        },
+        "household": {
+          "name": "Household",
+          "description": "Keep it for everyone in the home instead of only the calling user."
+        }
+      }
+    },
+    "forget": {
+      "name": "Forget facts",
+      "description": "Removes remembered facts the calling user can see: their own and the household's.",
+      "fields": {
+        "config_entry": {
+          "name": "Claude",
+          "description": "The Claude configuration to use. Defaults to the only one if a single Claude is configured."
+        },
+        "fact_ids": {
+          "name": "Fact IDs",
+          "description": "IDs of the facts to remove, as returned by List remembered facts."
+        },
+        "all": {
+          "name": "All",
+          "description": "Remove every fact the calling user can see."
+        }
+      }
+    },
+    "list_memory": {
+      "name": "List remembered facts",
+      "description": "Returns the facts the calling user can see, with their IDs, and whether the add-on uses them in chat.",
+      "fields": {
+        "config_entry": {
+          "name": "Claude",
+          "description": "The Claude configuration to use. Defaults to the only one if a single Claude is configured."
         }
       }
     }
@@ -341,6 +389,15 @@
     },
     "voice_addon_failed": {
       "message": "Failed to set up the {addon} add-on: {error}"
+    },
+    "memory_full": {
+      "message": "Claude already remembers {max} facts here. Forget some before adding more."
+    },
+    "memory_fact_invalid": {
+      "message": "A fact must be one line of text, at most {max} characters."
+    },
+    "forget_nothing_selected": {
+      "message": "Name the facts to forget, or choose All."
     }
   },
   "issues": {

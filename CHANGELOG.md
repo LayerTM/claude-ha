@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Memory between conversations: ask the agent to remember a short fact ("my
+  room is the office") and later conversations take it into account. A fact is
+  kept only after you confirm it, per Home Assistant user, with a shared
+  household set for turns without a user. New actions `claude_ha.remember`,
+  `claude_ha.forget` and `claude_ha.list_memory`; diagnostics show counts only;
+  removing the integration deletes the facts. On by default (option *Remember
+  facts between conversations*). Chat uses the facts with an add-on release that
+  supports them.
+
+### Fixed
+
+- The README no longer says chat cannot confirm a proposed change: chat asks
+  for a `yes` / `no` before important actions.
+
 ## [1.15.0] - 2026-10-16
 
 ### Added

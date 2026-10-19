@@ -46,6 +46,7 @@ cloud directly.**
 | | |
 |---|---|
 | 💬 **Conversation agent** | Talk to Claude from HA Assist — replies stream in live, it acts on benign requests immediately and confirms important ones (judged per action). |
+| 🧠 **Memory between conversations** | Ask it to remember a fact ("my room is the office") and it keeps it for later conversations — saved only after your yes. |
 | 👁️ **Camera vision** | Optionally, a visual question ("who's at the door?") sends one snapshot of an Assist-exposed camera to Claude. Off by default. |
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
@@ -189,6 +190,33 @@ camera you have exposed to Assist is ever sent, only when the message is visual
 and exactly one camera resolves (by name, area or floor); it never guesses
 between cameras. The add-on fetches and downscales the snapshot itself; the
 integration passes only the entity id.
+
+**Memory between conversations** (on by default). Ask Claude to remember a
+short fact — "remember that my room is the office", "sleep mode means the
+office and hall lights off" — and it shows the fact and asks you to confirm;
+it is kept only after your `yes`. Later conversations take it into account
+("turn off my room" then means the office). "Forget where my room is" removes
+it the same way, after a `yes`.
+
+- **What is kept:** only facts you asked it to remember, one line each, at most
+  200 characters, at most 50 per person and 50 for the household. Never device
+  states, answers, or anything Claude worked out on its own.
+- **Whose facts:** facts you ask for in your own Home Assistant account are
+  yours; another person never sees them. Turns without an account (voice
+  satellites, automations) use the household's facts, which everyone shares.
+  Because household facts reach everyone's conversations, only an
+  administrator (or a turn without an account) can add or remove them.
+- **What they can do:** they are background for Claude, not instructions — they
+  never unlock an action or skip a confirmation.
+- **See, edit and clear them:** the actions `claude_ha.list_memory`,
+  `claude_ha.remember` and `claude_ha.forget` (one fact by id, or all you can
+  see). Diagnostics show only how many facts are stored. Removing the
+  integration deletes them; turning off *Remember facts between conversations*
+  in the options stops sending and offering them.
+
+Chat uses the facts with a Claude Code or Codex add-on release that supports
+them; with an older one they are still kept and listed, and
+`claude_ha.list_memory` reports `used_in_chat: false`.
 
 ### Dashboard card
 
@@ -467,9 +495,8 @@ add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
 - Requires Home Assistant OS / Supervised — the add-on is a Supervisor add-on and
   is not available on Home Assistant Container or Core installs.
 - One Claude instance per Home Assistant (one add-on → one config entry).
-- The conversation agent surfaces proposed state changes but does not run a full
-  confirm-and-act handshake from chat; use `claude_ha.ask` with `mode: write`
-  from a trusted automation for that.
+- A remembered fact is sent with every chat turn as background for Claude, so
+  it counts towards what the add-on processes; keep facts short.
 
 ## Troubleshooting
 

@@ -56,3 +56,44 @@ setup_voice:
       example: Claude (Ukrainian)
       selector:
         text:
+remember:
+  fields:
+    config_entry:
+      required: false
+      selector:
+        config_entry:
+          integration: claude_ha
+    text:
+      required: true
+      example: My room is the office.
+      selector:
+        text:
+    household:
+      required: false
+      default: false
+      selector:
+        boolean:
+forget:
+  fields:
+    config_entry:
+      required: false
+      selector:
+        config_entry:
+          integration: claude_ha
+    fact_ids:
+      required: false
+      selector:
+        text:
+          multiple: true
+    all:
+      required: false
+      default: false
+      selector:
+        boolean:
+list_memory:
+  fields:
+    config_entry:
+      required: false
+      selector:
+        config_entry:
+          integration: claude_ha
