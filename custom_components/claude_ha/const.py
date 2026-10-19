@@ -145,6 +145,8 @@ REQUEST_MEMORY: Final = "memory"
 # The longest fact, in characters, after whitespace is collapsed, and the most
 # facts one chat turn may ask to remember / forget (the contract's bounds).
 MAX_FACT_CHARS: Final = 200
+# The id shape the add-on accepts for a fact; it refuses the whole read otherwise.
+MEMORY_ID_PATTERN: Final = r"[A-Za-z0-9_-]{1,32}"
 MAX_REMEMBER_PER_TURN: Final = 3
 MAX_FORGET_PER_TURN: Final = 20
 

@@ -215,7 +215,7 @@
         },
         "household": {
           "name": "Household",
-          "description": "Keep it for everyone in the home instead of only the calling user."
+          "description": "Keep it for everyone in the home instead of only the calling user. Needs an administrator."
         }
       }
     },

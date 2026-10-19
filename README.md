@@ -202,17 +202,25 @@ it the same way, after a `yes`.
   200 characters, at most 50 per person and 50 for the household. Never device
   states, answers, or anything Claude worked out on its own.
 - **Whose facts:** facts you ask for in your own Home Assistant account are
-  yours; another person never sees them. Turns without an account (voice
-  satellites, automations) use the household's facts, which everyone shares.
-  Because household facts reach everyone's conversations, only an
-  administrator (or a turn without an account) can add or remove them.
+  yours; another person never sees them. Household facts are shared by
+  everyone, including turns without an account (voice satellites,
+  automations). Because they reach everyone's conversations, only an
+  administrator can add or remove them — in chat, or with the actions below
+  (an automation calling the actions counts as set up by an administrator).
+  A turn without an account uses the household's facts but never changes
+  them: a spoken "yes" does not tell who is speaking.
 - **What they can do:** they are background for Claude, not instructions — they
   never unlock an action or skip a confirmation.
 - **See, edit and clear them:** the actions `claude_ha.list_memory`,
-  `claude_ha.remember` and `claude_ha.forget` (one fact by id, or all you can
-  see). Diagnostics show only how many facts are stored. Removing the
+  `claude_ha.remember` and `claude_ha.forget` (one fact by id, or all you may
+  remove). Diagnostics show only how many facts are stored. Removing the
   integration deletes them; turning off *Remember facts between conversations*
-  in the options stops sending and offering them.
+  in the options stops sending and offering them. A fact added with
+  `claude_ha.remember` also appears in Home Assistant's event history, like
+  the data of any action call; `claude_ha.forget` does not remove it there.
+- **One question at a time:** if a request both asks for an action and to
+  remember something, the action is confirmed and the fact is not kept — the
+  reply says so; ask to remember it on its own.
 
 Chat uses the facts with a Claude Code or Codex add-on release that supports
 them; with an older one they are still kept and listed, and

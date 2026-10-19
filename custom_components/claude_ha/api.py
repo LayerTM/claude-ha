@@ -822,7 +822,9 @@ class ClaudeClient:
         self._put(
             payload, REQUEST_EDIT_AUTOMATION, edit_automation, ADDON_MIN_EDIT_VERSION
         )
-        if memory and self.supports_memory:
+        # An empty list still says "this client keeps facts", so the model may
+        # suggest the first one; only an absent key means it may not.
+        if memory is not None and self.supports_memory:
             payload[REQUEST_MEMORY] = memory
         headers = self._auth_headers
         if caller:

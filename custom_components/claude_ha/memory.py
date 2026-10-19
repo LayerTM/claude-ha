@@ -18,6 +18,7 @@ diagnostics (counts only).
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 import secrets
 from typing import Any, Final
 
@@ -27,9 +28,10 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .api import ClaudeError, MemoryItem, normalize_fact
-from .const import DOMAIN, MAX_FACT_CHARS
+from .const import DOMAIN, MAX_FACT_CHARS, MEMORY_ID_PATTERN
 
 STORAGE_VERSION: Final = 1
+_ID_RE: Final = re.compile(MEMORY_ID_PATTERN)
 # The most facts one set (the household's, or one user's) holds.
 MAX_FACTS: Final = 50
 # The most UTF-8 bytes of fact text sent with one turn; the newest facts win.
@@ -85,18 +87,40 @@ class Memory:
         """Read the stored facts; a missing or malformed store is empty."""
         data = await self._store.async_load()
         facts = data.get("facts") if isinstance(data, dict) else None
-        self._facts = [
-            Fact(
-                id=item["id"],
-                text=item["text"],
-                user_id=item.get("user_id"),
-                created=item.get("created", ""),
+        self._facts = []
+        # The add-on refuses a whole read over one bad item, so a hand-edited or
+        # restored store keeps only what it accepts: a valid id, its first use,
+        # and at most MAX_FACTS per set.
+        ids: set[str] = set()
+        per_set: dict[str | None, int] = {}
+        for item in facts if isinstance(facts, list) else []:
+            if not isinstance(item, dict):
+                continue
+            fact_id, text, user_id = (
+                item.get("id"),
+                item.get("text"),
+                item.get("user_id"),
             )
-            for item in (facts if isinstance(facts, list) else [])
-            if isinstance(item, dict)
-            and isinstance(item.get("id"), str)
-            and normalize_fact(item.get("text")) == item.get("text")
-        ]
+            if (
+                not isinstance(fact_id, str)
+                or not _ID_RE.fullmatch(fact_id)
+                or fact_id in ids
+                or normalize_fact(text) != text
+                or not (user_id is None or isinstance(user_id, str))
+                or per_set.get(user_id, 0) >= MAX_FACTS
+            ):
+                continue
+            ids.add(fact_id)
+            per_set[user_id] = per_set.get(user_id, 0) + 1
+            created = item.get("created")
+            self._facts.append(
+                Fact(
+                    id=fact_id,
+                    text=str(text),
+                    user_id=user_id,
+                    created=created if isinstance(created, str) else "",
+                )
+            )
 
     async def _async_save(self) -> None:
         """Persist the current facts."""
@@ -211,8 +235,9 @@ class Memory:
 async def async_may_edit_household(hass: HomeAssistant, user_id: str | None) -> bool:
     """Whether a caller may change the household set.
 
-    A call without a user comes from something an administrator set up (an
-    automation, a voice satellite); a user must be an administrator.
+    An action call without a user comes from an automation or script, which an
+    administrator set up; a user must be an administrator. Chat turns without a
+    user never get here: they read the household's facts but never change them.
     """
     if user_id is None:
         return True

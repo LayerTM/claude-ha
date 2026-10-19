@@ -7,7 +7,11 @@ from typing import Any
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant_custom_component.test_util.aiohttp import (
+    AiohttpClientMocker,
+    AiohttpClientMockResponse,
+)
+from yarl import URL
 
 from custom_components.claude_ha.api import (
     MemoryChange,
@@ -62,16 +66,35 @@ def _mock_status(aioclient_mock: AiohttpClientMocker, *, memory: bool) -> None:
 def _mock_answer(
     aioclient_mock: AiohttpClientMocker, memory_change: dict[str, Any] | None = None
 ) -> None:
-    """Mock a plain read answer, optionally suggesting a memory change."""
-    body: dict[str, Any] = {
-        "text": "Got it.",
-        "proposal": None,
-        "tools_used": [],
-        "truncated": False,
-    }
-    if memory_change is not None:
-        body["memory_change"] = memory_change
-    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=body)
+    """Mock a plain read answer, optionally suggesting a memory change.
+
+    Like the add-on, a suggestion comes back only when the request carried a
+    ``memory`` key (an empty list included): without it the model is told not to.
+    """
+    _mock_reply(aioclient_mock, {"proposal": None}, memory_change)
+
+
+def _mock_reply(
+    aioclient_mock: AiohttpClientMocker,
+    fields: dict[str, Any],
+    memory_change: dict[str, Any] | None,
+) -> None:
+    """Mock a read answer with ``fields``, suggesting ``memory_change`` if allowed."""
+
+    async def _answer(
+        method: str, url: URL, data: dict[str, Any]
+    ) -> AiohttpClientMockResponse:
+        body: dict[str, Any] = {
+            "text": "Got it.",
+            "tools_used": [],
+            "truncated": False,
+            **fields,
+        }
+        if memory_change is not None and "memory" in data:
+            body["memory_change"] = memory_change
+        return AiohttpClientMockResponse(method, url, json=body)
+
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", side_effect=_answer)
 
 
 def _agent_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
@@ -231,13 +254,25 @@ async def test_store_load_ignores_malformed(
                 {"id": "ok1", "text": "kept", "user_id": None, "created": "t"},
                 {"id": "bad1", "text": "two\nlines"},
                 {"id": 3, "text": "no id"},
+                {"id": "has space", "text": "id the add-on refuses"},
+                {"id": "x" * 33, "text": "id too long"},
+                {"id": "ok1", "text": "duplicate id"},
+                {"id": "u1", "text": "bad owner", "user_id": 5},
+                {"id": "ok2", "text": "no created"},
                 "not a dict",
+            ]
+            + [
+                {"id": f"cap{index}", "text": f"fact {index}", "user_id": "user-1"}
+                for index in range(MAX_FACTS + 2)
             ]
         },
     }
     memory = Memory(hass, "entry-e")
     await memory.async_load()
-    assert [fact.id for fact in memory.visible(None)] == ["ok1"]
+    assert [fact.id for fact in memory.visible(None)] == ["ok1", "ok2"]
+    assert memory.visible(None)[1].created == ""
+    assert len(memory.visible("user-1")) == MAX_FACTS + 2
+    assert memory.counts()["total"] == MAX_FACTS + 2
 
     hass_storage[f"{DOMAIN}.memory.entry-f"] = {"version": 1, "data": {"facts": 5}}
     empty = Memory(hass, "entry-f")
@@ -409,7 +444,7 @@ async def test_chat_remember_voice_is_spoken(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """On a voice turn the confirmation is one speakable sentence."""
+    """On a signed-in voice turn the confirmation is one speakable sentence."""
     _mock_status(aioclient_mock, memory=True)
     _mock_answer(aioclient_mock, {"remember": ["Guests sleep upstairs."]})
     await setup_integration(hass, mock_config_entry)
@@ -418,22 +453,48 @@ async def test_chat_remember_voice_is_spoken(
         hass,
         mock_config_entry,
         "remember that guests sleep upstairs",
-        user_id=None,
         satellite_id=VOICE_SATELLITE,
     )
     assert _speech(asked) == (
         "Got it. Remember: Guests sleep upstairs. Say yes to confirm."
     )
-    await _say(
-        hass,
-        mock_config_entry,
-        "yes",
-        user_id=None,
-        conversation_id=asked.conversation_id,
-        satellite_id=VOICE_SATELLITE,
-    )
-    # No HA user (a satellite): the household set.
-    assert [fact.user_id for fact in _memory(mock_config_entry).visible(None)] == [None]
+
+
+async def test_chat_without_user_never_changes_memory(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A turn without a user reads the household facts but cannot change them."""
+    _mock_status(aioclient_mock, memory=True)
+    await setup_integration(hass, mock_config_entry)
+    house = await _memory(mock_config_entry).async_remember("Guests: upstairs.", None)
+
+    for change in ({"remember": ["Door code is 1234."]}, {"forget": [house.id]}):
+        aioclient_mock.clear_requests()
+        _mock_answer(aioclient_mock, change)
+        asked = await _say(
+            hass,
+            mock_config_entry,
+            "remember the door code",
+            user_id=None,
+            satellite_id=VOICE_SATELLITE,
+        )
+        assert _posts(aioclient_mock)[-1]["memory"] == [
+            {"id": house.id, "text": "Guests: upstairs."}
+        ]
+        assert _speech(asked).startswith("Got it.\n\nNot saved to memory")
+        yes = await _say(
+            hass,
+            mock_config_entry,
+            "yes",
+            user_id=None,
+            conversation_id=asked.conversation_id,
+            satellite_id=VOICE_SATELLITE,
+        )
+        assert "Remembered" not in _speech(yes)
+        assert "Forgot" not in _speech(yes)
+    assert _memory(mock_config_entry).visible(None) == [house]
 
 
 async def test_chat_remember_full_says_why(
@@ -573,6 +634,9 @@ async def test_actions_remember_list_forget(
     # An automation (no user) keeps household facts.
     automation = await _call(hass, "remember", {"text": "Bins go out Monday."}, None)
     assert automation["household"] is True
+    assert await _call(hass, "forget", {"fact_ids": [automation["id"]]}, None) == {
+        "removed": 1
+    }
 
     with pytest.raises(ServiceValidationError):
         await _call(hass, "forget", {}, admin)
@@ -641,3 +705,115 @@ async def test_action_remember_invalid(
         )
     assert isinstance(err.value, ServiceValidationError)
     assert isinstance(MemoryFullError(), ServiceValidationError)
+
+
+async def test_first_fact_is_offered_from_an_empty_store(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An empty store still sends `memory: []`, so the first fact can be offered."""
+    _mock_status(aioclient_mock, memory=True)
+    _mock_answer(aioclient_mock, {"remember": ["My room is the office."]})
+    await setup_integration(hass, mock_config_entry)
+
+    asked = await _say(hass, mock_config_entry, "remember that my room is the office")
+    assert _posts(aioclient_mock)[-1]["memory"] == []
+    assert "Remember: My room is the office." in _speech(asked)
+
+
+async def test_only_the_held_caller_can_confirm(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A yes from another caller sharing the conversation id resolves nothing."""
+    _mock_status(aioclient_mock, memory=True)
+    _mock_answer(aioclient_mock, {"remember": ["My room is the office."]})
+    await setup_integration(hass, mock_config_entry)
+
+    asked = await _say(
+        hass, mock_config_entry, "remember my room", conversation_id="kitchen"
+    )
+    assert "Remember:" in _speech(asked)
+    other = await _say(
+        hass, mock_config_entry, "yes", user_id="user-2", conversation_id="kitchen"
+    )
+    assert "Remembered" not in _speech(other)
+    assert _memory(mock_config_entry).visible("user-1") == []
+    assert _memory(mock_config_entry).visible("user-2") == []
+
+
+@pytest.mark.parametrize(
+    ("fields", "expected_end"),
+    [
+        (
+            {
+                "proposal": {
+                    "summary": "Unlock the door",
+                    "intents": [
+                        {"intent": "HassTurnOff", "targets": ["lock.front"], "data": {}}
+                    ],
+                }
+            },
+            "Confirm? (yes/no)\n\nNot saved to memory — ask on its own to keep it.",
+        ),
+        (
+            {"automation": {"alias": "Night", "triggers": [], "actions": []}},
+            "Create it? (yes/no)\n\nNot saved to memory — ask on its own to keep it.",
+        ),
+    ],
+)
+async def test_memory_beside_an_action_is_dropped_and_said(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    fields: dict[str, Any],
+    expected_end: str,
+) -> None:
+    """The action takes the yes; the memory suggestion is not held, and says so."""
+    _mock_status(aioclient_mock, memory=True)
+    _mock_reply(aioclient_mock, fields, {"remember": ["My room is the office."]})
+    await setup_integration(hass, mock_config_entry)
+
+    asked = await _say(hass, mock_config_entry, "lock up and remember my room")
+    assert _speech(asked).endswith(expected_end)
+    assert "Remember:" not in _speech(asked)
+
+
+async def test_memory_beside_an_auto_action_is_said(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An auto-run action reports the dropped suggestion too (voice: one line)."""
+    _mock_status(aioclient_mock, memory=True)
+    hass.states.async_set("light.desk", "on")
+    _mock_reply(
+        aioclient_mock,
+        {
+            "proposal": {
+                "summary": "Turn off the desk light",
+                "intents": [
+                    {
+                        "intent": "HassTurnOff",
+                        "targets": ["light.desk"],
+                        "data": {},
+                        "risk": "low",
+                    }
+                ],
+            }
+        },
+        {"remember": ["My room is the office."]},
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    done = await _say(
+        hass,
+        mock_config_entry,
+        "turn off the desk light and remember my room",
+        satellite_id=VOICE_SATELLITE,
+    )
+    assert _speech(done) == (
+        "Done: Turn off the desk light Not saved to memory — ask on its own to keep it."
+    )
