@@ -466,7 +466,9 @@ the reachability signal.
 it a language and it installs and starts the official **Whisper** (speech-to-text)
 and **Piper** (text-to-speech) add-ons, then creates an Assist pipeline whose
 conversation agent is Claude (it also confirms the Wyoming prompts for those two
-add-ons, so nothing is left to click):
+add-ons and dismisses any duplicate prompt, so nothing is left to click). Whisper
+and Piper already set up in Wyoming — by discovery or by hand with the add-on's
+internal address — are reused; if their Wyoming entry is disabled, the action says so:
 
 ```yaml
 action: claude_ha.setup_voice
