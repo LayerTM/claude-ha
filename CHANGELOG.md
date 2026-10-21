@@ -19,6 +19,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A failure that names no action is reported as an error, never as "Done".
 - A "yes" from someone else in a shared conversation no longer discards the
   confirmation held for another user; it stays pending until its owner answers.
+  Each user's held confirmation is kept separately, so a proposal made by
+  someone else in the same conversation no longer replaces it.
 - Running `claude_ha.setup_voice` again no longer adds another pipeline. The
   pipeline with the same name that talks to the same Claude agent is updated in
   place with the current engines and voice.

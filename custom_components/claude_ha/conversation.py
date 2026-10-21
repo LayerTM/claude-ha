@@ -270,22 +270,18 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         conv_id = chat_log.conversation_id
         caller = user_input.context.user_id
         text = user_input.text
-        pending_store: dict[str, PendingProposal] = hass.data.setdefault(
-            DATA_PENDING_CHAT, {}
+        pending_store: dict[tuple[str, str | None], PendingProposal] = (
+            hass.data.setdefault(DATA_PENDING_CHAT, {})
         )
 
         # A. Resolve a confirmation that is pending for this conversation. Only the
         # caller it was held for, on this entry, can answer it: a conversation id
         # can be shared, and a yes from someone else is not that caller's yes.
-        # Another caller's turn must leave the hold untouched for its owner, so it
-        # is only taken out of the store once it is known to be this caller's.
-        pending = pending_store.get(conv_id)
-        if (
-            pending is not None
-            and pending.caller == caller
-            and pending.entry_id == entry.entry_id
-        ):
-            del pending_store[conv_id]
+        # The hold is keyed by caller too, so another caller's turn never sees,
+        # replaces or discards it.
+        pending = pending_store.get((conv_id, caller))
+        if pending is not None and pending.entry_id == entry.entry_id:
+            del pending_store[conv_id, caller]
             resolved = await self._resolve_pending(user_input, chat_log, text, pending)
             if resolved is not None:
                 return resolved
@@ -342,7 +338,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if result.automation is not None:
             automation = result.automation
             alias = _automation_alias(automation)
-            pending_store[conv_id] = PendingProposal(
+            pending_store[conv_id, user_input.context.user_id] = PendingProposal(
                 entry_id=entry.entry_id,
                 prompt=text,
                 intents=[],
@@ -381,7 +377,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
         # E. Hold the exact validated intents and ask for confirmation. The answer
         # already streamed, so append only the proposal + confirmation affordance.
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=text,
             intents=proposal.intents,
@@ -523,7 +519,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         result: PromptResult,
         streamed: str,
     ) -> conversation.ConversationResult:
@@ -553,7 +549,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         change: MemoryChange,
         text: str,
         streamed: str,
@@ -574,7 +570,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if not change.remember and not change.forget:
             return self._answer_reply(user_input, chat_log, text, streamed)
         answer = "" if streamed else text
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=self.coordinator.config_entry.entry_id,
             prompt=user_input.text,
             intents=[],
@@ -676,7 +672,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         entry: ClaudeConfigEntry,
         caller: str | None,
         query: str,
@@ -721,7 +717,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             return self._answer_reply(user_input, chat_log, result.text, streamed)
         updated = result.automation
         alias = _automation_alias(updated)
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=user_input.text,
             intents=[],
@@ -800,7 +796,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         entry: ClaudeConfigEntry,
         caller: str | None,
         query: str,
@@ -817,7 +813,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 user_input, chat_log, f"I found more than one — which? {names}"
             )
         match = matches[0]
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=user_input.text,
             intents=[],

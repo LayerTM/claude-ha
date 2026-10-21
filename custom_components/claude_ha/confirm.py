@@ -30,7 +30,8 @@ DISMISS_PREFIX = "CLAUDE_HA_DISMISS_"
 # Pending proposals awaiting a notification Approve/Dismiss, keyed by pid.
 DATA_PENDING = f"{DOMAIN}_pending_proposals"
 DATA_CONFIRM_LISTENER = f"{DOMAIN}_confirm_listener"
-# Pending chat confirmations, keyed by conversation_id (see conversation.py).
+# Pending chat confirmations, keyed by (conversation_id, caller): one hold per
+# user, so another user's proposal in a shared conversation cannot replace it.
 DATA_PENDING_CHAT = f"{DOMAIN}_pending_chat"
 
 PENDING_TTL = timedelta(minutes=10)
