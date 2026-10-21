@@ -26,6 +26,7 @@ from .api import (
     ActionOutcome,
     ClaudeActionFailedError,
     ClaudeAuthExpiredError,
+    ClaudeConnectionError,
     ClaudeError,
     MemoryChange,
     MemoryItem,
@@ -372,16 +373,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         auto_execute = entry.options.get(CONF_AUTO_EXECUTE, True)
         critical = entry.options.get(CONF_CRITICAL_ENTITIES, [])
         if auto_execute and is_auto_ok(hass, proposal.intents, critical):
-            try:
-                written = await self._async_auto_write(
-                    user_input, text, conv_id, caller, proposal.intents, summary
-                )
-            except ClaudeActionFailedError as err:
-                # Failed, and nothing says which action: an error, never "Done".
-                return await self._error(user_input, chat_log, err)
+            written = await self._async_auto_write(
+                user_input, chat_log, result, conv_id, proposal.intents, summary
+            )
             if written is not None:
-                note = self._dropped_memory_note(user_input, result)
-                return self._reply(user_input, chat_log, f"{written}{note}")
+                return written
 
         # E. Hold the exact validated intents and ask for confirmation. The answer
         # already streamed, so append only the proposal + confirmation affordance.
@@ -406,37 +402,43 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
     async def _async_auto_write(
         self,
         user_input: conversation.ConversationInput,
-        prompt: str,
+        chat_log: conversation.ChatLog,
+        read: PromptResult,
         conv_id: str,
-        caller: str | None,
         intents: list[dict[str, Any]],
         summary: str,
-    ) -> str | None:
+    ) -> conversation.ConversationResult | None:
         """Run an auto-executable write; say what it did, or ``None`` to confirm.
 
         ``None`` is a refusal before anything ran (e.g. the add-on's 403
-        backstop). A write that ran and failed is said, not asked again; an
-        ``action_failed`` that names no action is re-raised for the caller to
-        report as an error.
+        backstop). A write that ran and failed is said, not asked again; so is one
+        whose outcome is unknown (connection lost or timed out), because a held
+        confirmation would run it twice. An ``action_failed`` that names no
+        action is an error, never "Done".
         """
         try:
             written = await self.coordinator.client.async_prompt(
-                prompt,
+                user_input.text,
                 mode=MODE_WRITE,
                 intents=intents,
                 confirmation=CONFIRMATION_AUTO,
                 conversation_id=conv_id,
-                caller=caller,
+                caller=user_input.context.user_id,
                 language=user_input.language,
                 surface=_surface(user_input),
             )
         except ClaudeActionFailedError as err:
             if not err.actions:
-                raise
-            return _write_reply(self.coordinator.hass, summary, err.actions)
+                return await self._error(user_input, chat_log, err)
+            reply = _write_reply(self.coordinator.hass, summary, err.actions)
+        except ClaudeConnectionError:
+            reply = f"I couldn't confirm what happened with: {summary}. Check first."
         except ClaudeError:
             return None
-        return _write_reply(self.coordinator.hass, summary, written.actions)
+        else:
+            reply = _write_reply(self.coordinator.hass, summary, written.actions)
+        note = self._dropped_memory_note(user_input, read)
+        return self._reply(user_input, chat_log, f"{reply}{note}")
 
     async def _async_stream_read(
         self,

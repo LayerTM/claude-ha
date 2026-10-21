@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import aiohttp
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
@@ -1580,6 +1581,29 @@ async def test_auto_write_action_failed_without_actions_is_not_done(
     )
     assert result.response.response_type is intent.IntentResponseType.ERROR
     assert "didn't go through" in _spoken(result)
+
+
+@pytest.mark.parametrize(
+    "write_response",
+    [
+        aiohttp.ClientError("connection reset"),
+        {"status": 504, "json": {}},
+    ],
+)
+async def test_auto_write_with_unknown_outcome_does_not_offer_a_rerun(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    write_response: Any,
+) -> None:
+    """A lost answer is said as such; "yes" has nothing held to re-run."""
+    result = await _auto_write(hass, mock_config_entry, aioclient_mock, write_response)
+    spoken = _spoken(result)
+    assert "couldn't confirm" in spoken
+    assert "Turn off the lamp" in spoken
+    assert "Confirm?" not in spoken
+    assert not hass.data.get(DATA_PENDING_CHAT)
 
 
 async def test_auto_write_names_the_failed_target(

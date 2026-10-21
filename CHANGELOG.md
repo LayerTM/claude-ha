@@ -13,6 +13,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reply says "Done" only when every action went through; otherwise it names
   the targets that failed, with Home Assistant's reason, and the ones that
   worked. Older add-ons keep the previous reply.
+- An automatic change whose result could not be read back (connection lost or
+  timed out) now says it could not confirm what happened instead of asking
+  "Confirm?", since a "yes" would have run every action again.
+- A failure that names no action is reported as an error, never as "Done".
 - A "yes" from someone else in a shared conversation no longer discards the
   confirmation held for another user; it stays pending until its owner answers.
 - Running `claude_ha.setup_voice` again no longer adds another pipeline. The
