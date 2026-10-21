@@ -20,6 +20,7 @@ CONF_HOST: Final = "host"
 CONF_PORT: Final = "port"
 CONF_TOKEN: Final = "token"
 CONF_USE_ADDON: Final = "use_addon"
+CONF_VOICE_PIPELINE_ID: Final = "voice_pipeline_id"
 
 # Options (additive; not part of the config-entry data schema).
 CONF_CRITICAL_ENTITIES: Final = "critical_entities"

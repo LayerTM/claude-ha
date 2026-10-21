@@ -479,8 +479,9 @@ data:
   # stt_model: small-int8                    # set the Whisper model (default: keep the add-on's)
 ```
 
-Running it again updates that pipeline (same name, same Claude agent) instead of
-adding another one. Then pick the new pipeline on your phone. Honest caveats: Whisper on CPU takes a
+Running it again updates the pipeline it created (the integration remembers it)
+instead of adding another one; a pipeline you made yourself is never modified,
+even if it has the same name. Then pick the new pipeline on your phone. Honest caveats: Whisper on CPU takes a
 few seconds per phrase, and some voices (Ukrainian especially) are weaker than
 others — pass `tts_voice` or switch to Cloud TTS if the default doesn't fit. The
 action returns the engines it wired and the pipeline id (request the response

@@ -11,7 +11,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.claude_ha import voice
-from custom_components.claude_ha.const import DOMAIN
+from custom_components.claude_ha.const import CONF_VOICE_PIPELINE_ID, DOMAIN
 from custom_components.claude_ha.engines import engine_for_entry
 from custom_components.claude_ha.voice import (
     ASSIST_PIPELINE_DATA,
@@ -173,7 +173,9 @@ async def test_setup_pipeline_twice_reuses_the_pipeline(
 
     monkeypatch.setattr(voice, "_async_ensure_addon", _fake_ensure)
 
-    async def _run(name: str, piper_voice: str, entity: str) -> str | None:
+    async def _run(
+        name: str, piper_voice: str, entity: str, remembered: str | None = None
+    ) -> str | None:
         result = await voice.async_setup_voice_pipeline(
             hass,
             entity,
@@ -181,19 +183,29 @@ async def test_setup_pipeline_twice_reuses_the_pipeline(
             whisper_model=None,
             piper_voice=piper_voice,
             pipeline_name=name,
+            pipeline_id=remembered,
         )
         return result.pipeline_id
 
-    first = await _run("Claude (fr)", "fr_FR-a", "conversation.claude")
-    again = await _run("Claude (fr)", "fr_FR-b", "conversation.claude")
-    other_name = await _run("Other", "fr_FR-b", "conversation.claude")
-    other_agent = await _run("Claude (fr)", "fr_FR-b", "conversation.other")
-
     store = hass.data[ASSIST_PIPELINE_DATA].pipeline_store
+    # A pipeline of the user's own, same name and same agent, made by hand.
+    store.data["hand-made"] = SimpleNamespace(
+        id="hand-made",
+        name="Claude (fr)",
+        conversation_engine="conversation.claude",
+        tts_voice="mine",
+    )
+
+    first = await _run("Claude (fr)", "fr_FR-a", "conversation.claude")
+    again = await _run("Claude (fr)", "fr_FR-b", "conversation.claude", first)
+    gone = await _run("Claude (fr)", "fr_FR-c", "conversation.claude", "deleted")
+
+    assert first != "hand-made"
+    assert store.data["hand-made"].tts_voice == "mine"
     assert again == first
     assert store.data[first].tts_voice == "fr_FR-b"
-    # A different name or a different agent is a different pipeline.
-    assert len({first, other_name, other_agent}) == 3
+    # A remembered id the user has since deleted is made again, not guessed.
+    assert gone not in (first, "hand-made", "deleted")
     assert len(store.data) == 3
 
 
@@ -576,6 +588,13 @@ async def test_service_setup_voice_success(
     engine = engine_for_entry(mock_config_entry)
     assert engine is not None
     assert captured["pipeline_name"] == f"{engine.name} (uk)"
+    # The pipeline is remembered, so the next run re-wires it.
+    assert captured["pipeline_id"] is None
+    assert mock_config_entry.data[CONF_VOICE_PIPELINE_ID] == "pipeline-1"
+    await hass.services.async_call(
+        DOMAIN, "setup_voice", {"language": "uk"}, blocking=True, return_response=True
+    )
+    assert captured["pipeline_id"] == "pipeline-1"
 
 
 @pytest.mark.parametrize("service", ["ask", "setup_voice"])

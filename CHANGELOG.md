@@ -22,8 +22,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Each user's held confirmation is kept separately, so a proposal made by
   someone else in the same conversation no longer replaces it.
 - Running `claude_ha.setup_voice` again no longer adds another pipeline. The
-  pipeline with the same name that talks to the same Claude agent is updated in
-  place with the current engines and voice.
+  pipeline it created is remembered and updated in place with the current
+  engines and voice. A pipeline you made yourself is never modified, even if it
+  has the same name.
 
 ## [1.16.0] - 2026-10-22
 
