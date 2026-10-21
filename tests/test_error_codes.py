@@ -139,10 +139,7 @@ def test_every_core_code_is_mapped() -> None:
             403,
             {"error": "forbidden", "code": "forbidden"},
             ClaudeAuthError,
-            "The add-on rejected the request. Either the token is invalid or expired "
-            "(create a new one), or it belongs to a user who is not an "
-            "administrator, which the Model Context Protocol Server requires "
-            "(use an administrator's token).",
+            "The add-on rejected the request. The shared token may be out of date.",
         ),
         (
             503,
