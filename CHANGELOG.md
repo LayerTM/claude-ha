@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A confirmed or automatic change no longer answers "Done" when Home Assistant
+  refused it. With an add-on release that reports each action's outcome, the
+  reply says "Done" only when every action went through; otherwise it names
+  the targets that failed, with Home Assistant's reason, and the ones that
+  worked. Older add-ons keep the previous reply.
+
 ## [1.16.0] - 2026-10-22
 
 ### Added

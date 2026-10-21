@@ -164,7 +164,8 @@ actions, and the integration decides — **per action, from live entity metadata
 whether to carry it out immediately or confirm:
 
 - **Benign, low-risk actions run right away** (e.g. turning a light on) and reply
-  `Done: …`.
+  `Done: …`. If Home Assistant refuses an action, the reply names the targets
+  that failed instead (with an add-on that reports each action's outcome).
 - **Important actions are held and confirmed** with a plain `yes` / `no` — anything
   the deterministic classifier flags (locks, alarms, garage/door/gate covers,
   firmware updates, router/AP and other config entities, and opaque-effect

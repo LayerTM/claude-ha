@@ -90,6 +90,16 @@ RESP_AUTOMATION: Final = "automation"
 # Optional {remember: [text], forget: [id]} when this turn requests to
 # remember or forget something; a suggestion the user still confirms.
 RESP_MEMORY_CHANGE: Final = "memory_change"
+# Optional per-action outcomes of a write (core >= 0.10.0): [{intent, target, ok,
+# error?}], one per intent x target, Home Assistant's own answer to each. Also
+# carried by the 502 ``action_failed`` answer. Absent on an older core, whose
+# 200 then means "accepted", not "every action succeeded".
+RESP_ACTIONS: Final = "actions"
+ACTION_INTENT: Final = "intent"
+ACTION_TARGET: Final = "target"
+ACTION_OK: Final = "ok"
+ACTION_ERROR: Final = "error"
+ERROR_CODE_ACTION_FAILED: Final = "action_failed"
 # Optional reason token on a degraded read's 200 body (or its streaming `done`
 # line): the same token ``chat_health.last_reason`` uses. A sign-in the engine
 # no longer accepts is "auth-expired" — never retried (one engine call, not

@@ -7,7 +7,10 @@ from typing import Any
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant_custom_component.test_util.aiohttp import (
+    AiohttpClientMocker,
+    AiohttpClientMockResponse,
+)
 
 from custom_components.claude_ha.api import (
     ClaudeAuthExpiredError,
@@ -1299,3 +1302,216 @@ async def test_held_action_needs_the_same_caller(
 
     posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
     assert all(body["mode"] == "read" for body in posts)
+
+
+_WRITE_PROPOSAL = {
+    "text": "ok",
+    "proposal": {
+        "summary": "Turn off the lamps",
+        "intents": [
+            {"intent": "HassTurnOff", "targets": ["light.a", "light.b"]},
+        ],
+    },
+    "tools_used": [],
+    "truncated": False,
+}
+_OK_A = {"intent": "HassTurnOff", "target": "light.a", "ok": True}
+_FAILED_B = {
+    "intent": "HassTurnOff",
+    "target": "light.b",
+    "ok": False,
+    "error": "light.b is unavailable",
+}
+
+
+async def _confirmed_write(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    *,
+    status: int,
+    body: dict[str, Any],
+) -> conversation.ConversationResult:
+    """Propose a sensitive write, answer yes, and return the turn that wrote."""
+
+    async def _side_effect(
+        method: str, url: str, data: dict
+    ) -> AiohttpClientMockResponse:
+        if data.get("mode") == "write":
+            return AiohttpClientMockResponse(method, url, status=status, json=body)
+        return AiohttpClientMockResponse(method, url, json=_WRITE_PROPOSAL)
+
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", side_effect=_side_effect)
+    await setup_integration(hass, entry)
+    hass.states.async_set("light.b", "unavailable", {"friendly_name": "Desk lamp"})
+    agent_id = _agent_id(hass, entry)
+    first = await conversation.async_converse(
+        hass, "turn off the lamps", None, context=Context(), agent_id=agent_id
+    )
+    return await conversation.async_converse(
+        hass,
+        "yes",
+        first.conversation_id,
+        context=Context(),
+        agent_id=agent_id,
+    )
+
+
+def _spoken(result: conversation.ConversationResult) -> str:
+    return result.response.speech["plain"]["speech"]
+
+
+async def test_confirmed_write_is_done_when_every_action_is_ok(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A write whose actions all report ok is answered Done."""
+    result = await _confirmed_write(
+        hass,
+        mock_config_entry,
+        aioclient_mock,
+        status=200,
+        body={
+            "text": "ok",
+            "actions": [_OK_A, {**_OK_A, "target": "light.b"}],
+        },
+    )
+    assert _spoken(result) == "Done: Turn off the lamps"
+
+
+async def test_confirmed_write_names_the_failed_target(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A 502 action_failed is rendered from its actions, never as Done."""
+    result = await _confirmed_write(
+        hass,
+        mock_config_entry,
+        aioclient_mock,
+        status=502,
+        body={
+            "error": "an action failed",
+            "code": "action_failed",
+            "actions": [_OK_A, _FAILED_B],
+        },
+    )
+    assert result.response.response_type is not intent.IntentResponseType.ERROR
+    assert _spoken(result) == (
+        "Not done: Turn off the lamps. Failed: Desk lamp (light.b is unavailable). "
+        "Went through: light.a."
+    )
+
+
+async def test_confirmed_write_with_a_failed_action_in_a_200_is_not_done(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """The outcomes decide, even when the status says 200."""
+    result = await _confirmed_write(
+        hass,
+        mock_config_entry,
+        aioclient_mock,
+        status=200,
+        body={
+            "text": "ok",
+            "actions": [{"intent": "HassTurnOff", "ok": False}, "junk"],
+        },
+    )
+    assert _spoken(result) == "Not done: Turn off the lamps. Failed: the target."
+
+
+async def test_confirmed_write_from_a_core_without_actions_keeps_done(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An older core sends no actions; its 200 reads as before."""
+    result = await _confirmed_write(
+        hass,
+        mock_config_entry,
+        aioclient_mock,
+        status=200,
+        body={"text": "ok", "actions": "none"},
+    )
+    assert _spoken(result) == "Done: Turn off the lamps"
+
+
+async def test_confirmed_write_other_5xx_stays_an_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A 502 that is not action_failed (a proxy, a restart) is still an error."""
+    result = await _confirmed_write(
+        hass, mock_config_entry, aioclient_mock, status=502, body={}
+    )
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+
+
+async def test_action_failed_without_actions_is_an_error_not_done(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A coded failure that names nothing still never reads as Done."""
+    result = await _confirmed_write(
+        hass,
+        mock_config_entry,
+        aioclient_mock,
+        status=502,
+        body={"code": "action_failed"},
+    )
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+    assert "didn't go through" in _spoken(result)
+
+
+async def test_auto_write_names_the_failed_target(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """An auto-executed write reports a failed action rather than asking again."""
+
+    async def _side_effect(
+        method: str, url: str, data: dict
+    ) -> AiohttpClientMockResponse:
+        if data.get("mode") == "write":
+            return AiohttpClientMockResponse(
+                method,
+                url,
+                status=502,
+                json={"code": "action_failed", "actions": [_FAILED_B]},
+            )
+        proposal = {
+            "summary": "Turn off the lamp",
+            "intents": [
+                {"intent": "HassTurnOff", "targets": ["light.b"], "risk": "low"}
+            ],
+        }
+        return AiohttpClientMockResponse(
+            method, url, json={**_WRITE_PROPOSAL, "proposal": proposal}
+        )
+
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", side_effect=_side_effect)
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "turn off the lamp",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+    assert _spoken(result) == (
+        "Not done: Turn off the lamp. Failed: light.b (light.b is unavailable)."
+    )

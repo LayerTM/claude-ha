@@ -23,6 +23,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .api import (
+    ActionOutcome,
+    ClaudeActionFailedError,
     ClaudeAuthExpiredError,
     ClaudeError,
     MemoryChange,
@@ -367,22 +369,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         auto_execute = entry.options.get(CONF_AUTO_EXECUTE, True)
         critical = entry.options.get(CONF_CRITICAL_ENTITIES, [])
         if auto_execute and is_auto_ok(hass, proposal.intents, critical):
-            try:
-                await self.coordinator.client.async_prompt(
-                    text,
-                    mode=MODE_WRITE,
-                    intents=proposal.intents,
-                    confirmation=CONFIRMATION_AUTO,
-                    conversation_id=conv_id,
-                    caller=caller,
-                    language=user_input.language,
-                    surface=_surface(user_input),
-                )
-            except ClaudeError:
-                pass  # e.g. the add-on's 403 backstop -> fall through to confirm
-            else:
+            written = await self._async_auto_write(
+                user_input, text, conv_id, caller, proposal.intents, summary
+            )
+            if written is not None:
                 note = self._dropped_memory_note(user_input, result)
-                return self._reply(user_input, chat_log, f"Done: {summary}{note}")
+                return self._reply(user_input, chat_log, f"{written}{note}")
 
         # E. Hold the exact validated intents and ask for confirmation. The answer
         # already streamed, so append only the proposal + confirmation affordance.
@@ -403,6 +395,37 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
         note = self._dropped_memory_note(user_input, result)
         return self._reply(user_input, chat_log, message.strip() + note)
+
+    async def _async_auto_write(
+        self,
+        user_input: conversation.ConversationInput,
+        prompt: str,
+        conv_id: str,
+        caller: str | None,
+        intents: list[dict[str, Any]],
+        summary: str,
+    ) -> str | None:
+        """Run an auto-executable write; say what it did, or ``None`` to confirm.
+
+        ``None`` is a refusal before anything ran (e.g. the add-on's 403
+        backstop). A write that ran and failed is said, not asked again.
+        """
+        try:
+            written = await self.coordinator.client.async_prompt(
+                prompt,
+                mode=MODE_WRITE,
+                intents=intents,
+                confirmation=CONFIRMATION_AUTO,
+                conversation_id=conv_id,
+                caller=caller,
+                language=user_input.language,
+                surface=_surface(user_input),
+            )
+        except ClaudeActionFailedError as err:
+            return _write_reply(self.coordinator.hass, summary, err.actions)
+        except ClaudeError:
+            return None
+        return _write_reply(self.coordinator.hass, summary, written.actions)
 
     async def _async_stream_read(
         self,
@@ -819,8 +842,9 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         summary: str,
     ) -> conversation.ConversationResult:
         """Run a confirmed write with the stored, validated intents."""
+        hass = self.coordinator.hass
         try:
-            await self.coordinator.client.async_prompt(
+            result = await self.coordinator.client.async_prompt(
                 prompt,
                 mode=MODE_WRITE,
                 intents=intents,
@@ -830,9 +854,17 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 language=user_input.language,
                 surface=_surface(user_input),
             )
+        except ClaudeActionFailedError as err:
+            if err.actions:
+                return self._reply(
+                    user_input, chat_log, _write_reply(hass, summary, err.actions)
+                )
+            return await self._error(user_input, chat_log, err)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, f"Done: {summary}")
+        return self._reply(
+            user_input, chat_log, _write_reply(hass, summary, result.actions)
+        )
 
     def _reply(
         self,
@@ -910,6 +942,41 @@ _MEMORY_NEEDS_USER = (
     "Not saved to memory: facts are kept from a signed-in chat or the Remember"
     " a fact action."
 )
+
+
+def _write_reply(
+    hass: HomeAssistant, summary: str, actions: list[ActionOutcome] | None
+) -> str:
+    """Say what a write did: "Done" only when every action reported ok.
+
+    A core that sends no ``actions`` (an older one) is taken at its 200, as before.
+    Otherwise each failed action is named by its target's friendly name with Home
+    Assistant's own reason, and the ones that went through are named too.
+    """
+    failed = [action for action in actions or () if not action.ok]
+    if not failed:
+        return f"Done: {summary}"
+    done = [action for action in actions or () if action.ok]
+    text = f"Not done: {summary}. Failed: " + "; ".join(
+        _failure(hass, action) for action in failed
+    )
+    if done:
+        text += ". Went through: " + ", ".join(
+            _target_name(hass, action.target) for action in done
+        )
+    return f"{text}."
+
+
+def _failure(hass: HomeAssistant, action: ActionOutcome) -> str:
+    """Name one failed action: its target, and the reason Home Assistant gave."""
+    name = _target_name(hass, action.target)
+    return f"{name} ({action.error})" if action.error else name
+
+
+def _target_name(hass: HomeAssistant, target: str) -> str:
+    """Return the friendly name of an entity target, or the target as given."""
+    state = hass.states.get(target)
+    return state.name if state is not None else target or "the target"
 
 
 def _spoken_confirm(answer: str, summary: str) -> str:
