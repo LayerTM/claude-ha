@@ -1529,6 +1529,59 @@ async def test_action_failed_without_actions_is_an_error_not_done(
     assert "didn't go through" in _spoken(result)
 
 
+async def _auto_write(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    write_response: Any,
+) -> conversation.ConversationResult:
+    """Converse a low-risk write whose auto-execute request is answered as given."""
+
+    async def _side_effect(
+        method: str, url: str, data: dict
+    ) -> AiohttpClientMockResponse:
+        if data.get("mode") == "write":
+            if isinstance(write_response, Exception):
+                raise write_response
+            return AiohttpClientMockResponse(method, url, **write_response)
+        proposal = {
+            "summary": "Turn off the lamp",
+            "intents": [
+                {"intent": "HassTurnOff", "targets": ["light.b"], "risk": "low"}
+            ],
+        }
+        return AiohttpClientMockResponse(
+            method, url, json={**_WRITE_PROPOSAL, "proposal": proposal}
+        )
+
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", side_effect=_side_effect)
+    await setup_integration(hass, mock_config_entry)
+    return await conversation.async_converse(
+        hass,
+        "turn off the lamp",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+
+
+async def test_auto_write_action_failed_without_actions_is_not_done(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A coded failure that names no action never reads as Done on the auto path."""
+    result = await _auto_write(
+        hass,
+        mock_config_entry,
+        aioclient_mock,
+        {"status": 502, "json": {"code": "action_failed"}},
+    )
+    assert result.response.response_type is intent.IntentResponseType.ERROR
+    assert "didn't go through" in _spoken(result)
+
+
 async def test_auto_write_names_the_failed_target(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,

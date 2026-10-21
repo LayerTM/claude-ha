@@ -372,9 +372,13 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         auto_execute = entry.options.get(CONF_AUTO_EXECUTE, True)
         critical = entry.options.get(CONF_CRITICAL_ENTITIES, [])
         if auto_execute and is_auto_ok(hass, proposal.intents, critical):
-            written = await self._async_auto_write(
-                user_input, text, conv_id, caller, proposal.intents, summary
-            )
+            try:
+                written = await self._async_auto_write(
+                    user_input, text, conv_id, caller, proposal.intents, summary
+                )
+            except ClaudeActionFailedError as err:
+                # Failed, and nothing says which action: an error, never "Done".
+                return await self._error(user_input, chat_log, err)
             if written is not None:
                 note = self._dropped_memory_note(user_input, result)
                 return self._reply(user_input, chat_log, f"{written}{note}")
@@ -411,7 +415,9 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         """Run an auto-executable write; say what it did, or ``None`` to confirm.
 
         ``None`` is a refusal before anything ran (e.g. the add-on's 403
-        backstop). A write that ran and failed is said, not asked again.
+        backstop). A write that ran and failed is said, not asked again; an
+        ``action_failed`` that names no action is re-raised for the caller to
+        report as an error.
         """
         try:
             written = await self.coordinator.client.async_prompt(
@@ -425,6 +431,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 surface=_surface(user_input),
             )
         except ClaudeActionFailedError as err:
+            if not err.actions:
+                raise
             return _write_reply(self.coordinator.hass, summary, err.actions)
         except ClaudeError:
             return None
