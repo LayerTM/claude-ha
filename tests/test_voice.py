@@ -552,6 +552,40 @@ async def test_setup_pipeline_without_assist_pipeline(
     assert result.pipeline_id is None
 
 
+async def test_service_setup_voice_reuse_is_not_created(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Re-wiring the remembered pipeline reports created_pipeline false."""
+    await setup_integration(hass, mock_config_entry)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, CONF_VOICE_PIPELINE_ID: "pipeline-1"},
+    )
+
+    async def _fake_pipeline(
+        _hass: HomeAssistant, conv_id: str, **kwargs: Any
+    ) -> VoiceSetupResult:
+        return VoiceSetupResult("stt.whisper", "tts.piper", "pipeline-1")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.services.async_setup_voice_pipeline",
+        _fake_pipeline,
+    )
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "setup_voice",
+        {"language": "uk"},
+        blocking=True,
+        return_response=True,
+    )
+    assert response["created_pipeline"] is False
+    assert response["pipeline_id"] == "pipeline-1"
+
+
 async def test_service_setup_voice_success(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,

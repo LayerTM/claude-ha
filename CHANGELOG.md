@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The message shown when the add-on rejects a request now names both causes: a
+  token that is invalid or expired, and a token of a user who is not an
+  administrator (which the Model Context Protocol Server requires).
+- `claude_ha.setup_voice` reports `created_pipeline: false` when it re-wired
+  the pipeline it had already created.
 - A confirmed or automatic change no longer answers "Done" when Home Assistant
   refused it. With an add-on release that reports each action's outcome, the
   reply says "Done" only when every action went through; otherwise it names

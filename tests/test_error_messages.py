@@ -47,7 +47,10 @@ async def _speech(
         ({"status": 503}, "The add-on is busy or rate-limited. Try again shortly."),
         (
             {"status": 401},
-            "The add-on rejected the request. The shared token may be out of date.",
+            "The add-on rejected the request. Either the token is invalid or expired "
+            "(create a new one), or it belongs to a user who is not an "
+            "administrator, which the Model Context Protocol Server requires "
+            "(use an administrator's token).",
         ),
         ({"status": 413}, "The request is too large for the add-on."),
         ({"status": 400}, "The add-on rejected the request as invalid."),
