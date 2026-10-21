@@ -17,6 +17,7 @@ from custom_components.claude_ha.api import (
     ClaudeError,
     Proposal,
 )
+from custom_components.claude_ha.confirm import DATA_PENDING_CHAT
 from custom_components.claude_ha.const import (
     DOMAIN,
     HEADER_CALLER,
@@ -1302,6 +1303,60 @@ async def test_held_action_needs_the_same_caller(
 
     posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
     assert all(body["mode"] == "read" for body in posts)
+
+
+async def test_other_callers_answer_leaves_the_hold_for_its_owner(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """Another caller's yes does not consume the hold: its owner can still confirm."""
+    proposal = {
+        "text": "I can unlock it.",
+        "proposal": {
+            "summary": "Unlock the front door",
+            "intents": [
+                {"intent": "HassTurnOff", "targets": ["lock.front"], "data": {}}
+            ],
+        },
+        "tools_used": [],
+        "truncated": False,
+    }
+    aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=proposal)
+    await setup_integration(hass, mock_config_entry)
+    agent = _agent_id(hass, mock_config_entry)
+
+    await conversation.async_converse(
+        hass, "unlock the door", "hall", Context(user_id="user-1"), agent_id=agent
+    )
+    # The other caller's turn is a plain answer, so it holds nothing of its own.
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "Sure.", "tools_used": [], "truncated": False},
+    )
+    await conversation.async_converse(
+        hass, "yes", "hall", Context(user_id="user-2"), agent_id=agent
+    )
+    assert hass.data[DATA_PENDING_CHAT]["hall"].caller == "user-1"
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "Done.",
+            "intents_results": [],
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await conversation.async_converse(
+        hass, "yes", "hall", Context(user_id="user-1"), agent_id=agent
+    )
+    posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
+    assert [body["mode"] for body in posts] == ["write"]
+    assert "hall" not in hass.data[DATA_PENDING_CHAT]
 
 
 _WRITE_PROPOSAL = {

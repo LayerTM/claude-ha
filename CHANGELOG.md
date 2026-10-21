@@ -13,6 +13,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reply says "Done" only when every action went through; otherwise it names
   the targets that failed, with Home Assistant's reason, and the ones that
   worked. Older add-ons keep the previous reply.
+- A "yes" from someone else in a shared conversation no longer discards the
+  confirmation held for another user; it stays pending until its owner answers.
 
 ## [1.16.0] - 2026-10-22
 

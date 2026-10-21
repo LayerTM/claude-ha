@@ -276,12 +276,15 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         # A. Resolve a confirmation that is pending for this conversation. Only the
         # caller it was held for, on this entry, can answer it: a conversation id
         # can be shared, and a yes from someone else is not that caller's yes.
-        pending = pending_store.pop(conv_id, None)
+        # Another caller's turn must leave the hold untouched for its owner, so it
+        # is only taken out of the store once it is known to be this caller's.
+        pending = pending_store.get(conv_id)
         if (
             pending is not None
             and pending.caller == caller
             and pending.entry_id == entry.entry_id
         ):
+            del pending_store[conv_id]
             resolved = await self._resolve_pending(user_input, chat_log, text, pending)
             if resolved is not None:
                 return resolved
