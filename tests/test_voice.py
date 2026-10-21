@@ -70,9 +70,22 @@ def _install_pipeline_store(hass: HomeAssistant, captured: dict[str, Any]) -> No
     """Install a fake assist_pipeline store that records created pipelines."""
 
     class _Store:
+        def __init__(self) -> None:
+            self.data: dict[str, SimpleNamespace] = {}
+
         async def async_create_item(self, data: dict[str, Any]) -> SimpleNamespace:
             captured.update(data)
-            return SimpleNamespace(id="pipeline-1")
+            item = SimpleNamespace(id=f"pipeline-{len(self.data) + 1}", **data)
+            self.data[item.id] = item
+            return item
+
+        async def async_update_item(
+            self, item_id: str, updates: dict[str, Any]
+        ) -> SimpleNamespace:
+            captured.update(updates)
+            item = self.data[item_id]
+            item.__dict__.update(updates)
+            return item
 
     hass.data[ASSIST_PIPELINE_DATA] = SimpleNamespace(pipeline_store=_Store())
 
@@ -141,6 +154,47 @@ async def test_ensure_addon_wraps_error(
 
     with pytest.raises(HomeAssistantError):
         await voice._async_ensure_addon(hass, WHISPER_ADDON_SLUG, "Whisper", {})
+
+
+async def test_setup_pipeline_twice_reuses_the_pipeline(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Running the setup again re-wires the pipeline it made instead of adding one."""
+    captured: dict[str, Any] = {}
+    _install_pipeline_store(hass, captured)
+
+    async def _fake_ensure(
+        _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
+    ) -> None:
+        if slug == WHISPER_ADDON_SLUG:
+            _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+        else:
+            _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+
+    monkeypatch.setattr(voice, "_async_ensure_addon", _fake_ensure)
+
+    async def _run(name: str, piper_voice: str, entity: str) -> str | None:
+        result = await voice.async_setup_voice_pipeline(
+            hass,
+            entity,
+            language="fr",
+            whisper_model=None,
+            piper_voice=piper_voice,
+            pipeline_name=name,
+        )
+        return result.pipeline_id
+
+    first = await _run("Claude (fr)", "fr_FR-a", "conversation.claude")
+    again = await _run("Claude (fr)", "fr_FR-b", "conversation.claude")
+    other_name = await _run("Other", "fr_FR-b", "conversation.claude")
+    other_agent = await _run("Claude (fr)", "fr_FR-b", "conversation.other")
+
+    store = hass.data[ASSIST_PIPELINE_DATA].pipeline_store
+    assert again == first
+    assert store.data[first].tts_voice == "fr_FR-b"
+    # A different name or a different agent is a different pipeline.
+    assert len({first, other_name, other_agent}) == 3
+    assert len(store.data) == 3
 
 
 async def test_setup_pipeline_full(

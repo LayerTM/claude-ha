@@ -15,6 +15,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   worked. Older add-ons keep the previous reply.
 - A "yes" from someone else in a shared conversation no longer discards the
   confirmation held for another user; it stays pending until its owner answers.
+- Running `claude_ha.setup_voice` again no longer adds another pipeline. The
+  pipeline with the same name that talks to the same Claude agent is updated in
+  place with the current engines and voice.
 
 ## [1.16.0] - 2026-10-22
 

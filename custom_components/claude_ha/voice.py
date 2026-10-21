@@ -273,26 +273,42 @@ async def _async_create_pipeline(
     tts_engine: str,
     tts_voice: str,
 ) -> str | None:
-    """Create an Assist pipeline wiring Claude + the discovered engines."""
+    """Create the Assist pipeline wiring Claude + the engines, or re-wire ours.
+
+    A pipeline with this name that already talks to this conversation entity is the
+    one an earlier run created: it is updated in place, so running the action again
+    never piles up a second pipeline.
+    """
     pipeline_data: Any = hass.data.get(ASSIST_PIPELINE_DATA)
     if pipeline_data is None:
         LOGGER.warning("assist_pipeline is not set up; skipping pipeline creation")
         return None
-    pipeline = await pipeline_data.pipeline_store.async_create_item(
-        {
-            "name": name,
-            "conversation_engine": conversation_entity_id,
-            "conversation_language": language,
-            "language": language,
-            "stt_engine": stt_engine,
-            "stt_language": language,
-            "tts_engine": tts_engine,
-            "tts_language": language,
-            "tts_voice": tts_voice,
-            "wake_word_entity": None,
-            "wake_word_id": None,
-        }
+    store = pipeline_data.pipeline_store
+    settings = {
+        "name": name,
+        "conversation_engine": conversation_entity_id,
+        "conversation_language": language,
+        "language": language,
+        "stt_engine": stt_engine,
+        "stt_language": language,
+        "tts_engine": tts_engine,
+        "tts_language": language,
+        "tts_voice": tts_voice,
+        "wake_word_entity": None,
+        "wake_word_id": None,
+    }
+    existing = next(
+        (
+            item
+            for item in store.data.values()
+            if item.name == name and item.conversation_engine == conversation_entity_id
+        ),
+        None,
     )
+    if existing is not None:
+        pipeline = await store.async_update_item(existing.id, settings)
+    else:
+        pipeline = await store.async_create_item(settings)
     return str(pipeline.id)
 
 
