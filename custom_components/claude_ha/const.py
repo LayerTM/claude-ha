@@ -79,6 +79,7 @@ RESP_TEXT: Final = "text"
 RESP_PROPOSAL: Final = "proposal"
 RESP_TOOLS_USED: Final = "tools_used"
 RESP_TRUNCATED: Final = "truncated"
+RESP_DEGRADED: Final = "degraded"
 PROPOSAL_SUMMARY: Final = "summary"
 PROPOSAL_INTENTS: Final = "intents"
 # Optional model-drafted automation config (add-on >= 1.34.0): a full HA automation

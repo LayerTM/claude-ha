@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A streamed answer that the add-on cut short now ends with the add-on's
+  explanation, after the text already shown, instead of stopping mid-sentence.
 - `claude_ha.setup_voice` reports `created_pipeline: false` when it re-wired
   the pipeline it had already created.
 - A confirmed or automatic change no longer answers "Done" when Home Assistant

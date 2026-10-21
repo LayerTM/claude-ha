@@ -79,6 +79,7 @@ from .const import (
     REQUEST_TIMEOUT,
     RESP_ACTIONS,
     RESP_AUTOMATION,
+    RESP_DEGRADED,
     RESP_MEMORY_CHANGE,
     RESP_PROPOSAL,
     RESP_REASON,
@@ -364,6 +365,7 @@ class PromptResult:
     automation: dict[str, Any] | None = None
     memory_change: MemoryChange | None = None
     actions: list[ActionOutcome] | None = None
+    degraded: bool = False
 
 
 @dataclass(slots=True)
@@ -1304,6 +1306,7 @@ def _parse_prompt_result(data: dict[str, Any], engine: Engine) -> PromptResult:
         automation=automation,
         memory_change=parse_memory_change(data.get(RESP_MEMORY_CHANGE)),
         actions=parse_actions(data.get(RESP_ACTIONS)),
+        degraded=data.get(RESP_DEGRADED) is True,
     )
 
 

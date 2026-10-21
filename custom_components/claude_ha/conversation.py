@@ -476,6 +476,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                         yield {"role": "assistant"}
                         started = True
                     yield {"content": chunk.text}
+            # A cut answer always ends with the add-on's explanation, whatever the
+            # reason; without it the user sees only the half sentence.
+            degraded = captured.get("result")
+            if started and degraded is not None and degraded.degraded:
+                yield {"content": f"\n\n{degraded.text}"}
 
         async for content in chat_log.async_add_delta_content_stream(
             user_input.agent_id, _deltas()
