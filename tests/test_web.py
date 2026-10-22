@@ -247,6 +247,33 @@ async def test_web_agent_exists_only_when_enabled(
     assert _web_agent(hass, mock_config_entry) is None
 
 
+async def test_switching_web_off_clears_the_refusal_repair(
+    hass: HomeAssistant,
+    web_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """The repair about refused web answers does not outlive the web agent."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        status=403,
+        json={"error": "off", "code": "web_disabled"},
+    )
+    await setup_integration(hass, web_entry)
+    agent = _web_agent(hass, web_entry)
+    assert agent is not None
+    await _converse(hass, agent)
+    assert _issue(hass, web_entry) is not None
+
+    result = await hass.config_entries.options.async_init(web_entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_WEB: False}
+    )
+    await hass.async_block_till_done()
+
+    assert _web_agent(hass, web_entry) is None
+    assert _issue(hass, web_entry) is None
+
+
 async def test_web_agent_answers_text_and_ignores_a_proposal(
     hass: HomeAssistant,
     web_entry: MockConfigEntry,

@@ -53,6 +53,7 @@ from .const import (
     CONFIRMATION_CONFIRMED,
     DOMAIN,
     ISSUE_SIGNIN_EXPIRED,
+    ISSUE_WEB_DISABLED,
     LOGGER,
     MODE_WRITE,
     SURFACE_TEXT,
@@ -61,7 +62,7 @@ from .const import (
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .engines import engine_for_entry
 from .entity import build_device_info
-from .issues import async_raise_issue
+from .issues import async_clear_issues, async_raise_issue
 from .memory import async_may_edit_household
 from .risk import is_auto_ok
 from .vision import resolve_camera
@@ -240,13 +241,16 @@ async def async_setup_entry(
     web_unique_id = f"{entry.entry_id}_web"
     if entry.options.get(CONF_WEB, False):
         entities.append(ClaudeWebConversationEntity(entry.runtime_data.status))
-    elif (
-        web_entity_id := registry.async_get_entity_id(
-            "conversation", DOMAIN, web_unique_id
-        )
-    ) is not None:
-        # Switched off: the agent is gone, not left behind as an unavailable one.
-        registry.async_remove(web_entity_id)
+    else:
+        # Switched off: the agent is gone, not left behind as an unavailable one,
+        # and the repair about its refused answers goes with it.
+        async_clear_issues(hass, entry.entry_id, ISSUE_WEB_DISABLED)
+        if (
+            web_entity_id := registry.async_get_entity_id(
+                "conversation", DOMAIN, web_unique_id
+            )
+        ) is not None:
+            registry.async_remove(web_entity_id)
     async_add_entities(entities)
 
 
