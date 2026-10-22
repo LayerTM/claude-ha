@@ -18,7 +18,7 @@ import yaml
 from homeassistant.components import conversation
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import intent, issue_registry as ir
+from homeassistant.helpers import entity_registry as er, intent, issue_registry as ir
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -48,8 +48,10 @@ from .const import (
     CONF_CAMERA_VISION,
     CONF_CRITICAL_ENTITIES,
     CONF_MEMORY,
+    CONF_WEB,
     CONFIRMATION_AUTO,
     CONFIRMATION_CONFIRMED,
+    DOMAIN,
     ISSUE_SIGNIN_EXPIRED,
     LOGGER,
     MODE_WRITE,
@@ -63,6 +65,7 @@ from .issues import async_raise_issue
 from .memory import async_may_edit_household
 from .risk import is_auto_ok
 from .vision import resolve_camera
+from .web import async_note_web_outcome
 
 # Declared for the parallel-updates quality rule. Conversation turns are not
 # entity state updates, so this does not gate them; the add-on owns concurrency
@@ -230,14 +233,28 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the conversation entity from a config entry."""
-    async_add_entities([ClaudeConversationEntity(entry.runtime_data.status)])
+    entities: list[ClaudeConversationEntity] = [
+        ClaudeConversationEntity(entry.runtime_data.status)
+    ]
+    registry = er.async_get(hass)
+    web_unique_id = f"{entry.entry_id}_web"
+    if entry.options.get(CONF_WEB, False):
+        entities.append(ClaudeWebConversationEntity(entry.runtime_data.status))
+    elif (
+        web_entity_id := registry.async_get_entity_id(
+            "conversation", DOMAIN, web_unique_id
+        )
+    ) is not None:
+        # Switched off: the agent is gone, not left behind as an unavailable one.
+        registry.async_remove(web_entity_id)
+    async_add_entities(entities)
 
 
 class ClaudeConversationEntity(conversation.ConversationEntity):
     """Forwards HA Assist messages to Claude and acts on its proposals."""
 
     _attr_has_entity_name = True
-    _attr_name = None
+    _attr_name: str | None = None
     # The add-on can stream the answer as NDJSON deltas (>= 1.17.0); older
     # add-ons return a full JSON body, which the client yields as one result.
     _attr_supports_streaming = True
@@ -1038,3 +1055,45 @@ def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
     parts.append(f"Here's a draft automation — **{_automation_alias(automation)}**:")
     parts.append(f"```yaml\n{body}\n```")
     return "\n\n".join(parts)
+
+
+class ClaudeWebConversationEntity(ClaudeConversationEntity):
+    """A second Assist agent that answers from the web and does nothing else.
+
+    It never sees the home, keeps no history or memory, never shows or runs a
+    proposal and never confirms anything, whatever the "act automatically"
+    option says: every turn is one web-only question and its text answer. The
+    house agent never asks the web; this one never asks the house.
+    """
+
+    _attr_name = "(web)"
+    # No CONTROL: it cannot act on the home, so Assist keeps its warning.
+    _attr_supported_features = conversation.ConversationEntityFeature(0)
+    _attr_supports_streaming = False
+
+    def __init__(self, coordinator: ClaudeStatusCoordinator) -> None:
+        """Init beside the house agent, with a unique id of its own."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_web"
+
+    async def _async_handle_message(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+    ) -> conversation.ConversationResult:
+        """Answer one question from the web, as text."""
+        entry = self.coordinator.config_entry
+        engine = engine_for_entry(entry)
+        assert engine is not None
+        try:
+            result = await self.coordinator.client.async_prompt_web(
+                user_input.text,
+                caller=user_input.context.user_id,
+                language=user_input.language,
+                surface=_surface(user_input),
+            )
+        except ClaudeError as err:
+            async_note_web_outcome(self.hass, entry.entry_id, engine, err)
+            return await self._error(user_input, chat_log, err)
+        async_note_web_outcome(self.hass, entry.entry_id, engine, None)
+        return self._reply(user_input, chat_log, result.text)

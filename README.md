@@ -47,6 +47,7 @@ cloud directly.**
 |---|---|
 | 💬 **Conversation agent** | Talk to Claude from HA Assist — replies stream in live, it acts on benign requests immediately and confirms important ones (judged per action). |
 | 🧠 **Memory between conversations** | Ask it to remember a fact ("my room is the office") and it keeps it for later conversations — saved only after your yes. |
+| 🌐 **Web answers** | Optionally, a separate "(web)" Assist agent answers from the web alone — no view of your home, no actions. Off by default. |
 | 👁️ **Camera vision** | Optionally, a visual question ("who's at the door?") sends one snapshot of an Assist-exposed camera to Claude. Off by default. |
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
@@ -198,6 +199,16 @@ and exactly one camera resolves (by name, area or floor); it never guesses
 between cameras. The add-on fetches and downscales the snapshot itself; the
 integration passes only the entity id.
 
+**Web answers** (opt-in, off by default; needs an add-on release that supports
+them, switched on in the add-on's options). Turn on *Answer from the web
+(separate agent)* in the options and a second Assist agent, **Claude (web)**,
+appears next to the first. It answers a question from the web alone: it never
+sees your home, remembers nothing, is not part of the conversation history and
+cannot act on anything — whatever the add-on sends back, only its text is
+shown. Your home agent never uses the web. If the add-on has web answers
+switched off, the agent says so and Home Assistant shows a repair until the
+next web answer succeeds.
+
 **Memory between conversations** (on by default). Ask Claude to remember a
 short fact — "remember that my room is the office", "sleep mode means the
 office and hall lights off" — and it shows the fact and asks you to confirm;
@@ -272,6 +283,11 @@ response_variable: claude
 
 `claude.text` holds Claude's answer; the response also includes `proposal` (a
 described state change, or `null`), `tools_used`, and `truncated`.
+
+Add `web: true` for an answer from the web alone: text only, no view of your
+home, no memory, and `proposal` is always `null`. It needs an add-on that
+supports web answers with the option switched on, and cannot be combined with
+`mode: write`, `intents` or `notify`.
 
 To act on something, use the two-phase flow: a read call returns a `proposal`
 with `intents`; after your own confirmation, echo those exact `intents` back in a

@@ -77,13 +77,15 @@
           "auto_execute": "Act automatically on benign requests",
           "critical_entities": "Always confirm these entities",
           "camera_vision": "Let {engine} look at cameras",
-          "memory": "Remember facts between conversations"
+          "memory": "Remember facts between conversations",
+          "web_answers": "Answer from the web (separate agent)"
         },
         "data_description": {
           "auto_execute": "When on, {engine} carries out low-risk requests from chat immediately and only asks you to confirm important ones. When off, every change is confirmed first.",
           "critical_entities": "Entities that always require confirmation, on top of the automatic per-action risk checks.",
           "camera_vision": "When on, a clearly visual question (e.g. 'who's at the door?') may send one snapshot of an Assist-exposed camera to {engine}. Off by default; snapshots are more sensitive than state.",
-          "memory": "When on, {engine} can keep short facts you ask it to remember ('remember that my room is the office') and uses them in later conversations. Each fact is saved only after you confirm it."
+          "memory": "When on, {engine} can keep short facts you ask it to remember ('remember that my room is the office') and uses them in later conversations. Each fact is saved only after you confirm it.",
+          "web_answers": "When on, a second Assist agent, \"(web)\", answers questions from the web alone. It never sees your home, remembers nothing and cannot act on anything; your home agent never uses the web. Needs web answers switched on in the add-on's options."
         }
       }
     }
@@ -172,6 +174,10 @@
         "notify": {
           "name": "Confirm via",
           "description": "Optional notify service (e.g. mobile_app_my_phone). If Claude proposes a change, an actionable Approve/Dismiss notification is sent there; Approve runs the confirmed change."
+        },
+        "web": {
+          "name": "Web",
+          "description": "Answer from the web alone: text only, no view of your home, no memory, no proposed changes. Cannot be combined with write mode, intents or a notify service. Needs web answers switched on in the add-on's options."
         }
       }
     },
@@ -404,6 +410,18 @@
     },
     "voice_engine_disabled": {
       "message": "The Wyoming entry for the {addon} add-on is disabled. Enable it under Settings → Devices & services → Wyoming Protocol, then run the action again."
+    },
+    "web_disabled": {
+      "message": "Web answers are switched off in the add-on. Turn on the web option in the add-on's options, then ask again."
+    },
+    "web_unsupported": {
+      "message": "This add-on cannot answer from the web. Update the add-on, then ask again."
+    },
+    "web_rejected": {
+      "message": "The add-on rejected the web question."
+    },
+    "web_requires_plain_read": {
+      "message": "A web answer is text only: leave mode on read and do not pass intents or a notify service."
     }
   },
   "issues": {
@@ -460,6 +478,10 @@
     "usage_history_reset": {
       "title": "Usage history was reset",
       "description": "The add-on lost its usage history and could not recover it; the token and cost totals shown here now count from {history_since}. Nothing you did caused this."
+    },
+    "web_disabled": {
+      "title": "Web answers are switched off in the add-on",
+      "description": "The \"(web)\" agent asked {engine} for a web answer and the add-on refused: its web option is off. Turn it on in the add-on's options, then ask again. This hint clears itself after the next web answer."
     }
   }
 }

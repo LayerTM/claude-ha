@@ -31,6 +31,9 @@ CONF_CAMERA_VISION: Final = "camera_vision"
 # Memory between conversations: on by default, because nothing is stored without
 # the user's own ask and yes (see memory.py); off sends no facts and offers none.
 CONF_MEMORY: Final = "memory"
+# Web answers: off by default. On, a second Assist agent answers from the web
+# alone (no home data, no actions); the house agent never asks the web.
+CONF_WEB: Final = "web_answers"
 
 # Default prompt-server port (contract §4; bound 0.0.0.0, not published to host).
 DEFAULT_PORT: Final = 8126
@@ -154,6 +157,10 @@ ADDON_MIN_EDIT_VERSION: Final = "1.36.0"
 # Optional remembered facts, [{id, text}], on reads only. Gated by
 # STATUS_REQUEST_FIELDS alone: no add-on that predates the list accepts it.
 REQUEST_MEMORY: Final = "memory"
+# Web answer (listed only, like memory): an answer-only read that sees no home
+# data and acts on nothing. Sent alone: never with memory, history, an image or
+# an automation to edit.
+REQUEST_WEB: Final = "web"
 # The longest fact, in characters, after whitespace is collapsed, and the most
 # facts one chat turn may ask to remember / forget (the contract's bounds).
 MAX_FACT_CHARS: Final = 200
@@ -351,6 +358,7 @@ ATTR_PROMPT: Final = "prompt"
 ATTR_MODE: Final = "mode"
 ATTR_INTENTS: Final = "intents"
 ATTR_NOTIFY: Final = "notify"
+ATTR_WEB: Final = "web"
 ATTR_LANGUAGE: Final = "language"
 ATTR_STT_MODEL: Final = "stt_model"
 ATTR_TTS_VOICE: Final = "tts_voice"
@@ -371,6 +379,8 @@ ISSUE_ENGINE_MISMATCH: Final = "engine_mismatch"
 # The add-on's usage history was reset (its cache lost or unreadable); raised
 # once per distinct ``history_since`` so a later reset re-notifies.
 ISSUE_USAGE_HISTORY_RESET: Final = "usage_history_reset"
+# A web answer was refused because the add-on's web option is off.
+ISSUE_WEB_DISABLED: Final = "web_disabled"
 # Health-check issues: the chat can reach the add-on but can't see/act on the home.
 ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
 ISSUE_NO_HA_TOKEN: Final = "no_ha_token"

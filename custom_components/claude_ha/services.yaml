@@ -29,6 +29,11 @@ ask:
       example: mobile_app_my_phone
       selector:
         text:
+    web:
+      required: false
+      default: false
+      selector:
+        boolean:
 setup_voice:
   fields:
     config_entry:
