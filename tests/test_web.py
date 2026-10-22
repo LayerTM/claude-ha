@@ -197,7 +197,7 @@ async def test_ask_web_refused_by_the_add_on(
     )
     await setup_integration(hass, web_entry)
 
-    with pytest.raises(ClaudeWebDisabledError):
+    with pytest.raises(ClaudeWebDisabledError) as err:
         await hass.services.async_call(
             DOMAIN,
             SERVICE_ASK,
@@ -205,6 +205,7 @@ async def test_ask_web_refused_by_the_add_on(
             blocking=True,
             return_response=True,
         )
+    assert isinstance(err.value, ServiceValidationError)
     assert _issue(hass, web_entry) is not None
 
     aioclient_mock.clear_requests()
@@ -388,6 +389,14 @@ async def test_web_not_listed_is_refused_without_a_request(
 
     assert "cannot answer from the web" in result.response.speech["plain"]["speech"]
     assert _posts(aioclient_mock) == []
+
+
+@pytest.mark.parametrize(
+    "error_type", [ClaudeWebDisabledError, ClaudeWebUnsupportedError]
+)
+def test_web_refusals_are_validation_errors(error_type: type[ClaudeError]) -> None:
+    """A refused web ask is the caller's to fix, so the service reports it as such."""
+    assert issubclass(error_type, ServiceValidationError)
 
 
 async def test_error_texts_exist(hass: HomeAssistant) -> None:

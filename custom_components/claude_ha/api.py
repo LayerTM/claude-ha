@@ -232,13 +232,13 @@ class ClaudePromptTooLargeError(ClaudeRequestError, ServiceValidationError):
     translation_key = "prompt_too_large"
 
 
-class ClaudeWebDisabledError(ClaudeError):
+class ClaudeWebDisabledError(ClaudeError, ServiceValidationError):
     """The add-on refused a web answer: its web option is off (403 ``web_disabled``)."""
 
     translation_key = "web_disabled"
 
 
-class ClaudeWebUnsupportedError(ClaudeError):
+class ClaudeWebUnsupportedError(ClaudeError, ServiceValidationError):
     """The add-on cannot answer from the web (501, or it does not list the field)."""
 
     translation_key = "web_unsupported"
