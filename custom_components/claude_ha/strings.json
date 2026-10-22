@@ -384,6 +384,9 @@
     "write_unavailable": {
       "message": "The add-on can't make changes because it has no Home Assistant token. Set one in the add-on options."
     },
+    "action_failed": {
+      "message": "The change didn't go through."
+    },
     "addon_timeout": {
       "message": "The add-on took too long to answer. Try again."
     },

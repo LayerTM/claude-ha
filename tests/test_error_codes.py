@@ -64,6 +64,7 @@ _CORE_CODES = {
     "usage_unavailable",
     "limits_unavailable",
     "not_found",
+    "action_failed",
 }
 
 
@@ -74,8 +75,8 @@ def _client(hass: HomeAssistant) -> ClaudeClient:
 
 
 def test_every_core_code_is_mapped() -> None:
-    """The table names exactly the codes the add-on can send."""
-    assert set(_ERROR_CODES) == _CORE_CODES
+    """The table, and the one code built outside it, are exactly the core's."""
+    assert set(_ERROR_CODES) | {"action_failed"} == _CORE_CODES
 
 
 @pytest.mark.parametrize(

@@ -20,6 +20,7 @@ CONF_HOST: Final = "host"
 CONF_PORT: Final = "port"
 CONF_TOKEN: Final = "token"
 CONF_USE_ADDON: Final = "use_addon"
+CONF_VOICE_PIPELINE_ID: Final = "voice_pipeline_id"
 
 # Options (additive; not part of the config-entry data schema).
 CONF_CRITICAL_ENTITIES: Final = "critical_entities"
@@ -78,6 +79,7 @@ RESP_TEXT: Final = "text"
 RESP_PROPOSAL: Final = "proposal"
 RESP_TOOLS_USED: Final = "tools_used"
 RESP_TRUNCATED: Final = "truncated"
+RESP_DEGRADED: Final = "degraded"
 PROPOSAL_SUMMARY: Final = "summary"
 PROPOSAL_INTENTS: Final = "intents"
 # Optional model-drafted automation config (add-on >= 1.34.0): a full HA automation
@@ -90,6 +92,16 @@ RESP_AUTOMATION: Final = "automation"
 # Optional {remember: [text], forget: [id]} when this turn requests to
 # remember or forget something; a suggestion the user still confirms.
 RESP_MEMORY_CHANGE: Final = "memory_change"
+# Optional per-action outcomes of a write (core >= 0.10.0): [{intent, target, ok,
+# error?}], one per intent x target, Home Assistant's own answer to each. Also
+# carried by the 502 ``action_failed`` answer. Absent on an older core, whose
+# 200 then means "accepted", not "every action succeeded".
+RESP_ACTIONS: Final = "actions"
+ACTION_INTENT: Final = "intent"
+ACTION_TARGET: Final = "target"
+ACTION_OK: Final = "ok"
+ACTION_ERROR: Final = "error"
+ERROR_CODE_ACTION_FAILED: Final = "action_failed"
 # Optional reason token on a degraded read's 200 body (or its streaming `done`
 # line): the same token ``chat_health.last_reason`` uses. A sign-in the engine
 # no longer accepts is "auth-expired" — never retried (one engine call, not

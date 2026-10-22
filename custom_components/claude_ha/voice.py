@@ -272,27 +272,37 @@ async def _async_create_pipeline(
     stt_engine: str,
     tts_engine: str,
     tts_voice: str,
+    pipeline_id: str | None,
 ) -> str | None:
-    """Create an Assist pipeline wiring Claude + the discovered engines."""
+    """Create the Assist pipeline wiring Claude + the engines, or re-wire ours.
+
+    ``pipeline_id`` is the pipeline an earlier run created, remembered by the
+    caller: it is updated in place, so running the action again never piles up a
+    second one. Any other pipeline, even one with the same name, is not ours and
+    is left alone.
+    """
     pipeline_data: Any = hass.data.get(ASSIST_PIPELINE_DATA)
     if pipeline_data is None:
         LOGGER.warning("assist_pipeline is not set up; skipping pipeline creation")
         return None
-    pipeline = await pipeline_data.pipeline_store.async_create_item(
-        {
-            "name": name,
-            "conversation_engine": conversation_entity_id,
-            "conversation_language": language,
-            "language": language,
-            "stt_engine": stt_engine,
-            "stt_language": language,
-            "tts_engine": tts_engine,
-            "tts_language": language,
-            "tts_voice": tts_voice,
-            "wake_word_entity": None,
-            "wake_word_id": None,
-        }
-    )
+    store = pipeline_data.pipeline_store
+    settings = {
+        "name": name,
+        "conversation_engine": conversation_entity_id,
+        "conversation_language": language,
+        "language": language,
+        "stt_engine": stt_engine,
+        "stt_language": language,
+        "tts_engine": tts_engine,
+        "tts_language": language,
+        "tts_voice": tts_voice,
+        "wake_word_entity": None,
+        "wake_word_id": None,
+    }
+    if pipeline_id is not None and pipeline_id in store.data:
+        pipeline = await store.async_update_item(pipeline_id, settings)
+    else:
+        pipeline = await store.async_create_item(settings)
     return str(pipeline.id)
 
 
@@ -304,8 +314,13 @@ async def async_setup_voice_pipeline(
     whisper_model: str | None,
     piper_voice: str,
     pipeline_name: str,
+    pipeline_id: str | None = None,
 ) -> VoiceSetupResult:
-    """Install Whisper + Piper, discover their engines and build the pipeline."""
+    """Install Whisper + Piper, discover their engines and build the pipeline.
+
+    ``pipeline_id`` is the pipeline a previous call returned; it is re-wired
+    instead of creating another.
+    """
     # Answer the discovery prompts as they appear; keep a stored model unless
     # the caller named one.
     confirmations: set[asyncio.Task[None]] = set()
@@ -356,9 +371,9 @@ async def async_setup_voice_pipeline(
         if confirmations:
             await asyncio.gather(*confirmations)
 
-    pipeline_id: str | None = None
+    created_id: str | None = None
     if stt_engine is not None and tts_engine is not None:
-        pipeline_id = await _async_create_pipeline(
+        created_id = await _async_create_pipeline(
             hass,
             name=pipeline_name,
             language=language,
@@ -366,5 +381,6 @@ async def async_setup_voice_pipeline(
             stt_engine=stt_engine,
             tts_engine=tts_engine,
             tts_voice=piper_voice,
+            pipeline_id=pipeline_id,
         )
-    return VoiceSetupResult(stt_engine, tts_engine, pipeline_id)
+    return VoiceSetupResult(stt_engine, tts_engine, created_id)

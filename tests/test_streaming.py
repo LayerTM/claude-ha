@@ -466,3 +466,85 @@ async def test_conversation_reply_with_split_emoji_is_valid_utf8(
     result = await _say(hass, mock_config_entry, "weather?")
     assert _speech(result) == "Sunny \U0001f324 today."
     _speech(result).encode("utf-8")
+
+
+_NOTICE = "I couldn't finish that — please try again."
+
+
+def _degraded_done(text: str = _NOTICE, **extra: Any) -> dict[str, Any]:
+    return {
+        "type": "done",
+        "text": text,
+        "proposal": None,
+        "tools_used": [],
+        "truncated": False,
+        "degraded": True,
+        **extra,
+    }
+
+
+@pytest.mark.parametrize("extra", [{}, {"partial": True}, {"reason": "rate-limited"}])
+@pytest.mark.parametrize("satellite_id", [None, "assist_satellite.kitchen"])
+async def test_conversation_degraded_stream_appends_the_notice(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+    extra: dict[str, Any],
+    satellite_id: str | None,
+) -> None:
+    """A degraded stream ends with the add-on's explanation after what streamed."""
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson(
+            {"type": "delta", "text": "The living ro"},
+            _degraded_done(**extra),
+        ),
+        headers=_NDJSON,
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "temperature?",
+        None,
+        context=Context(user_id="u"),
+        agent_id=_agent(hass, mock_config_entry),
+        satellite_id=satellite_id,
+    )
+    assert _speech(result) == f"The living ro\n\n{_NOTICE}"
+
+
+async def test_conversation_degraded_without_deltas_shows_the_notice_once(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A degraded turn that streamed nothing is unchanged: the notice, once."""
+    aioclient_mock.post(_URL, text=_ndjson(_degraded_done()), headers=_NDJSON)
+    await setup_integration(hass, mock_config_entry)
+
+    result = await _say(hass, mock_config_entry, "temperature?")
+    assert _speech(result) == _NOTICE
+
+
+async def test_conversation_non_degraded_stream_ignores_done_text(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A normal streamed turn keeps the streamed text only."""
+    aioclient_mock.post(
+        _URL,
+        text=_ndjson(
+            {"type": "delta", "text": "21 °C."},
+            {**_degraded_done("not shown"), "degraded": False},
+        ),
+        headers=_NDJSON,
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await _say(hass, mock_config_entry, "temperature?")
+    assert _speech(result) == "21 °C."

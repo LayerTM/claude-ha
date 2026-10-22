@@ -23,7 +23,10 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .api import (
+    ActionOutcome,
+    ClaudeActionFailedError,
     ClaudeAuthExpiredError,
+    ClaudeConnectionError,
     ClaudeError,
     MemoryChange,
     MemoryItem,
@@ -267,19 +270,18 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         conv_id = chat_log.conversation_id
         caller = user_input.context.user_id
         text = user_input.text
-        pending_store: dict[str, PendingProposal] = hass.data.setdefault(
-            DATA_PENDING_CHAT, {}
+        pending_store: dict[tuple[str, str | None], PendingProposal] = (
+            hass.data.setdefault(DATA_PENDING_CHAT, {})
         )
 
         # A. Resolve a confirmation that is pending for this conversation. Only the
         # caller it was held for, on this entry, can answer it: a conversation id
         # can be shared, and a yes from someone else is not that caller's yes.
-        pending = pending_store.pop(conv_id, None)
-        if (
-            pending is not None
-            and pending.caller == caller
-            and pending.entry_id == entry.entry_id
-        ):
+        # The hold is keyed by caller too, so another caller's turn never sees,
+        # replaces or discards it.
+        pending = pending_store.get((conv_id, caller))
+        if pending is not None and pending.entry_id == entry.entry_id:
+            del pending_store[conv_id, caller]
             resolved = await self._resolve_pending(user_input, chat_log, text, pending)
             if resolved is not None:
                 return resolved
@@ -336,7 +338,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if result.automation is not None:
             automation = result.automation
             alias = _automation_alias(automation)
-            pending_store[conv_id] = PendingProposal(
+            pending_store[conv_id, user_input.context.user_id] = PendingProposal(
                 entry_id=entry.entry_id,
                 prompt=text,
                 intents=[],
@@ -367,26 +369,15 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         auto_execute = entry.options.get(CONF_AUTO_EXECUTE, True)
         critical = entry.options.get(CONF_CRITICAL_ENTITIES, [])
         if auto_execute and is_auto_ok(hass, proposal.intents, critical):
-            try:
-                await self.coordinator.client.async_prompt(
-                    text,
-                    mode=MODE_WRITE,
-                    intents=proposal.intents,
-                    confirmation=CONFIRMATION_AUTO,
-                    conversation_id=conv_id,
-                    caller=caller,
-                    language=user_input.language,
-                    surface=_surface(user_input),
-                )
-            except ClaudeError:
-                pass  # e.g. the add-on's 403 backstop -> fall through to confirm
-            else:
-                note = self._dropped_memory_note(user_input, result)
-                return self._reply(user_input, chat_log, f"Done: {summary}{note}")
+            written = await self._async_auto_write(
+                user_input, chat_log, result, conv_id, proposal.intents, summary
+            )
+            if written is not None:
+                return written
 
         # E. Hold the exact validated intents and ask for confirmation. The answer
         # already streamed, so append only the proposal + confirmation affordance.
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=text,
             intents=proposal.intents,
@@ -403,6 +394,47 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
         note = self._dropped_memory_note(user_input, result)
         return self._reply(user_input, chat_log, message.strip() + note)
+
+    async def _async_auto_write(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+        read: PromptResult,
+        conv_id: str,
+        intents: list[dict[str, Any]],
+        summary: str,
+    ) -> conversation.ConversationResult | None:
+        """Run an auto-executable write; say what it did, or ``None`` to confirm.
+
+        ``None`` is a refusal before anything ran (e.g. the add-on's 403
+        backstop). A write that ran and failed is said, not asked again; so is one
+        whose outcome is unknown (connection lost or timed out), because a held
+        confirmation would run it twice. An ``action_failed`` that names no
+        action is an error, never "Done".
+        """
+        try:
+            written = await self.coordinator.client.async_prompt(
+                user_input.text,
+                mode=MODE_WRITE,
+                intents=intents,
+                confirmation=CONFIRMATION_AUTO,
+                conversation_id=conv_id,
+                caller=user_input.context.user_id,
+                language=user_input.language,
+                surface=_surface(user_input),
+            )
+        except ClaudeActionFailedError as err:
+            if not err.actions:
+                return await self._error(user_input, chat_log, err)
+            reply = _write_reply(self.coordinator.hass, summary, err.actions)
+        except ClaudeConnectionError:
+            reply = f"I couldn't confirm what happened with: {summary}. Check first."
+        except ClaudeError:
+            return None
+        else:
+            reply = _write_reply(self.coordinator.hass, summary, written.actions)
+        note = self._dropped_memory_note(user_input, read)
+        return self._reply(user_input, chat_log, f"{reply}{note}")
 
     async def _async_stream_read(
         self,
@@ -444,6 +476,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                         yield {"role": "assistant"}
                         started = True
                     yield {"content": chunk.text}
+            # A cut answer always ends with the add-on's explanation, whatever the
+            # reason; without it the user sees only the half sentence.
+            degraded = captured.get("result")
+            if started and degraded is not None and degraded.degraded:
+                yield {"content": f"\n\n{degraded.text}"}
 
         async for content in chat_log.async_add_delta_content_stream(
             user_input.agent_id, _deltas()
@@ -487,7 +524,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         result: PromptResult,
         streamed: str,
     ) -> conversation.ConversationResult:
@@ -517,7 +554,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         change: MemoryChange,
         text: str,
         streamed: str,
@@ -538,7 +575,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if not change.remember and not change.forget:
             return self._answer_reply(user_input, chat_log, text, streamed)
         answer = "" if streamed else text
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=self.coordinator.config_entry.entry_id,
             prompt=user_input.text,
             intents=[],
@@ -640,7 +677,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         entry: ClaudeConfigEntry,
         caller: str | None,
         query: str,
@@ -685,7 +722,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             return self._answer_reply(user_input, chat_log, result.text, streamed)
         updated = result.automation
         alias = _automation_alias(updated)
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=user_input.text,
             intents=[],
@@ -764,7 +801,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
         conv_id: str,
-        pending_store: dict[str, PendingProposal],
+        pending_store: dict[tuple[str, str | None], PendingProposal],
         entry: ClaudeConfigEntry,
         caller: str | None,
         query: str,
@@ -781,7 +818,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 user_input, chat_log, f"I found more than one — which? {names}"
             )
         match = matches[0]
-        pending_store[conv_id] = PendingProposal(
+        pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=user_input.text,
             intents=[],
@@ -819,8 +856,9 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         summary: str,
     ) -> conversation.ConversationResult:
         """Run a confirmed write with the stored, validated intents."""
+        hass = self.coordinator.hass
         try:
-            await self.coordinator.client.async_prompt(
+            result = await self.coordinator.client.async_prompt(
                 prompt,
                 mode=MODE_WRITE,
                 intents=intents,
@@ -830,9 +868,17 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 language=user_input.language,
                 surface=_surface(user_input),
             )
+        except ClaudeActionFailedError as err:
+            if err.actions:
+                return self._reply(
+                    user_input, chat_log, _write_reply(hass, summary, err.actions)
+                )
+            return await self._error(user_input, chat_log, err)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, f"Done: {summary}")
+        return self._reply(
+            user_input, chat_log, _write_reply(hass, summary, result.actions)
+        )
 
     def _reply(
         self,
@@ -910,6 +956,41 @@ _MEMORY_NEEDS_USER = (
     "Not saved to memory: facts are kept from a signed-in chat or the Remember"
     " a fact action."
 )
+
+
+def _write_reply(
+    hass: HomeAssistant, summary: str, actions: list[ActionOutcome] | None
+) -> str:
+    """Say what a write did: "Done" only when every action reported ok.
+
+    A core that sends no ``actions`` (an older one) is taken at its 200, as before.
+    Otherwise each failed action is named by its target's friendly name with Home
+    Assistant's own reason, and the ones that went through are named too.
+    """
+    failed = [action for action in actions or () if not action.ok]
+    if not failed:
+        return f"Done: {summary}"
+    done = [action for action in actions or () if action.ok]
+    text = f"Not done: {summary}. Failed: " + "; ".join(
+        _failure(hass, action) for action in failed
+    )
+    if done:
+        text += ". Went through: " + ", ".join(
+            _target_name(hass, action.target) for action in done
+        )
+    return f"{text}."
+
+
+def _failure(hass: HomeAssistant, action: ActionOutcome) -> str:
+    """Name one failed action: its target, and the reason Home Assistant gave."""
+    name = _target_name(hass, action.target)
+    return f"{name} ({action.error})" if action.error else name
+
+
+def _target_name(hass: HomeAssistant, target: str) -> str:
+    """Return the friendly name of an entity target, or the target as given."""
+    state = hass.states.get(target)
+    return state.name if state is not None else target or "the target"
 
 
 def _spoken_confirm(answer: str, summary: str) -> str:

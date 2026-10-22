@@ -11,7 +11,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.claude_ha import voice
-from custom_components.claude_ha.const import DOMAIN
+from custom_components.claude_ha.const import CONF_VOICE_PIPELINE_ID, DOMAIN
 from custom_components.claude_ha.engines import engine_for_entry
 from custom_components.claude_ha.voice import (
     ASSIST_PIPELINE_DATA,
@@ -70,9 +70,22 @@ def _install_pipeline_store(hass: HomeAssistant, captured: dict[str, Any]) -> No
     """Install a fake assist_pipeline store that records created pipelines."""
 
     class _Store:
+        def __init__(self) -> None:
+            self.data: dict[str, SimpleNamespace] = {}
+
         async def async_create_item(self, data: dict[str, Any]) -> SimpleNamespace:
             captured.update(data)
-            return SimpleNamespace(id="pipeline-1")
+            item = SimpleNamespace(id=f"pipeline-{len(self.data) + 1}", **data)
+            self.data[item.id] = item
+            return item
+
+        async def async_update_item(
+            self, item_id: str, updates: dict[str, Any]
+        ) -> SimpleNamespace:
+            captured.update(updates)
+            item = self.data[item_id]
+            item.__dict__.update(updates)
+            return item
 
     hass.data[ASSIST_PIPELINE_DATA] = SimpleNamespace(pipeline_store=_Store())
 
@@ -141,6 +154,59 @@ async def test_ensure_addon_wraps_error(
 
     with pytest.raises(HomeAssistantError):
         await voice._async_ensure_addon(hass, WHISPER_ADDON_SLUG, "Whisper", {})
+
+
+async def test_setup_pipeline_twice_reuses_the_pipeline(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Running the setup again re-wires the pipeline it made instead of adding one."""
+    captured: dict[str, Any] = {}
+    _install_pipeline_store(hass, captured)
+
+    async def _fake_ensure(
+        _hass: HomeAssistant, slug: str, _name: str, _options: dict[str, Any]
+    ) -> None:
+        if slug == WHISPER_ADDON_SLUG:
+            _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
+        else:
+            _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
+
+    monkeypatch.setattr(voice, "_async_ensure_addon", _fake_ensure)
+
+    async def _run(
+        name: str, piper_voice: str, entity: str, remembered: str | None = None
+    ) -> str | None:
+        result = await voice.async_setup_voice_pipeline(
+            hass,
+            entity,
+            language="fr",
+            whisper_model=None,
+            piper_voice=piper_voice,
+            pipeline_name=name,
+            pipeline_id=remembered,
+        )
+        return result.pipeline_id
+
+    store = hass.data[ASSIST_PIPELINE_DATA].pipeline_store
+    # A pipeline of the user's own, same name and same agent, made by hand.
+    store.data["hand-made"] = SimpleNamespace(
+        id="hand-made",
+        name="Claude (fr)",
+        conversation_engine="conversation.claude",
+        tts_voice="mine",
+    )
+
+    first = await _run("Claude (fr)", "fr_FR-a", "conversation.claude")
+    again = await _run("Claude (fr)", "fr_FR-b", "conversation.claude", first)
+    gone = await _run("Claude (fr)", "fr_FR-c", "conversation.claude", "deleted")
+
+    assert first != "hand-made"
+    assert store.data["hand-made"].tts_voice == "mine"
+    assert again == first
+    assert store.data[first].tts_voice == "fr_FR-b"
+    # A remembered id the user has since deleted is made again, not guessed.
+    assert gone not in (first, "hand-made", "deleted")
+    assert len(store.data) == 3
 
 
 async def test_setup_pipeline_full(
@@ -486,6 +552,40 @@ async def test_setup_pipeline_without_assist_pipeline(
     assert result.pipeline_id is None
 
 
+async def test_service_setup_voice_reuse_is_not_created(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Re-wiring the remembered pipeline reports created_pipeline false."""
+    await setup_integration(hass, mock_config_entry)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, CONF_VOICE_PIPELINE_ID: "pipeline-1"},
+    )
+
+    async def _fake_pipeline(
+        _hass: HomeAssistant, conv_id: str, **kwargs: Any
+    ) -> VoiceSetupResult:
+        return VoiceSetupResult("stt.whisper", "tts.piper", "pipeline-1")
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.services.async_setup_voice_pipeline",
+        _fake_pipeline,
+    )
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "setup_voice",
+        {"language": "uk"},
+        blocking=True,
+        return_response=True,
+    )
+    assert response["created_pipeline"] is False
+    assert response["pipeline_id"] == "pipeline-1"
+
+
 async def test_service_setup_voice_success(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -522,6 +622,13 @@ async def test_service_setup_voice_success(
     engine = engine_for_entry(mock_config_entry)
     assert engine is not None
     assert captured["pipeline_name"] == f"{engine.name} (uk)"
+    # The pipeline is remembered, so the next run re-wires it.
+    assert captured["pipeline_id"] is None
+    assert mock_config_entry.data[CONF_VOICE_PIPELINE_ID] == "pipeline-1"
+    await hass.services.async_call(
+        DOMAIN, "setup_voice", {"language": "uk"}, blocking=True, return_response=True
+    )
+    assert captured["pipeline_id"] == "pipeline-1"
 
 
 @pytest.mark.parametrize("service", ["ask", "setup_voice"])

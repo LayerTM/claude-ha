@@ -29,6 +29,10 @@ from homeassistant.helpers import translation
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ACTION_ERROR,
+    ACTION_INTENT,
+    ACTION_OK,
+    ACTION_TARGET,
     ADDON_MIN_EDIT_VERSION,
     ADDON_MIN_SURFACE_VERSION,
     API_ACCOUNT_LIMITS,
@@ -42,6 +46,7 @@ from .const import (
     CONTENT_TYPE_NDJSON,
     DOMAIN,
     ERROR_CODE,
+    ERROR_CODE_ACTION_FAILED,
     ERROR_FIELD,
     ERROR_LIMIT_BYTES,
     HEADER_CALLER,
@@ -72,7 +77,9 @@ from .const import (
     REQUEST_STREAM,
     REQUEST_SURFACE,
     REQUEST_TIMEOUT,
+    RESP_ACTIONS,
     RESP_AUTOMATION,
+    RESP_DEGRADED,
     RESP_MEMORY_CHANGE,
     RESP_PROPOSAL,
     RESP_REASON,
@@ -224,6 +231,21 @@ class ClaudePromptTooLargeError(ClaudeRequestError, ServiceValidationError):
     translation_key = "prompt_too_large"
 
 
+class ClaudeActionFailedError(ClaudeError):
+    """A write ran and at least one of its actions failed (502 ``action_failed``).
+
+    ``actions`` is each action's outcome, so a caller can name what failed; it is
+    empty when the answer carried none, and the translation then says so.
+    """
+
+    translation_key = "action_failed"
+
+    def __init__(self, message: str, actions: list[ActionOutcome]) -> None:
+        """Init with log detail and the outcomes the add-on reported."""
+        super().__init__(message)
+        self.actions = actions
+
+
 class ClaudeEngineMismatchError(ClaudeError):
     """The add-on runs a different engine than the client was made for."""
 
@@ -300,6 +322,38 @@ def parse_memory_change(raw: object) -> MemoryChange | None:
     return MemoryChange(tuple(remember), tuple(forget))
 
 
+@dataclass(frozen=True, slots=True)
+class ActionOutcome:
+    """What Home Assistant answered to one intent on one target of a write."""
+
+    intent: str
+    target: str
+    ok: bool
+    error: str | None = None
+
+
+def parse_actions(raw: Any) -> list[ActionOutcome] | None:
+    """Return the per-action outcomes of a write answer, or ``None`` if it has none.
+
+    ``None`` is an answer without ``actions`` (an older core); an empty list is
+    never returned, because a write with no outcome says nothing either way.
+    An entry counts as done only when it says ``ok: true`` itself.
+    """
+    if not isinstance(raw, list):
+        return None
+    outcomes = [
+        ActionOutcome(
+            intent=str(item.get(ACTION_INTENT, "")),
+            target=str(item.get(ACTION_TARGET, "")),
+            ok=item.get(ACTION_OK) is True,
+            error=str(item[ACTION_ERROR]) if item.get(ACTION_ERROR) else None,
+        )
+        for item in raw
+        if isinstance(item, dict)
+    ]
+    return outcomes or None
+
+
 @dataclass(slots=True)
 class PromptResult:
     """Parsed 200 response of ``POST /api/prompt``."""
@@ -310,6 +364,8 @@ class PromptResult:
     truncated: bool
     automation: dict[str, Any] | None = None
     memory_change: MemoryChange | None = None
+    actions: list[ActionOutcome] | None = None
+    degraded: bool = False
 
 
 @dataclass(slots=True)
@@ -1249,6 +1305,8 @@ def _parse_prompt_result(data: dict[str, Any], engine: Engine) -> PromptResult:
         truncated=bool(data.get(RESP_TRUNCATED, False)),
         automation=automation,
         memory_change=parse_memory_change(data.get(RESP_MEMORY_CHANGE)),
+        actions=parse_actions(data.get(RESP_ACTIONS)),
+        degraded=data.get(RESP_DEGRADED) is True,
     )
 
 
@@ -1315,6 +1373,8 @@ _ERROR_CODES: Final[Mapping[str, tuple[type[ClaudeError], str]]] = {
     "limits_unavailable": (ClaudeRateLimitError, "unknown"),
     "not_found": (ClaudeNotFoundError, "unknown"),
 }
+# ``action_failed`` is not in the table: it carries the outcomes, so
+# :func:`_coded_error` builds its error itself.
 
 # What a translation needs from the answer: key → (answer field, placeholder).
 _ERROR_PLACEHOLDERS: Final[Mapping[str, tuple[str, str]]] = {
@@ -1343,10 +1403,17 @@ def _coded_error(
     back to what it knew before codes existed. ``engine`` is the caller's own,
     named by ``auth_expired``'s placeholders (the only code that needs it).
     """
-    if not isinstance(body, dict) or body.get(ERROR_CODE) not in _ERROR_CODES:
+    if not isinstance(body, dict):
         return None
-    code = body[ERROR_CODE]
-    error, key = _ERROR_CODES[code]
+    code = body.get(ERROR_CODE)
+    if code == ERROR_CODE_ACTION_FAILED:
+        return ClaudeActionFailedError(
+            f"{status or 'stream'} {code}",
+            parse_actions(body.get(RESP_ACTIONS)) or [],
+        )
+    if code not in _ERROR_CODES:
+        return None
+    error, key = _ERROR_CODES[body[ERROR_CODE]]
     placeholders: dict[str, str] | None = None
     if key == "auth_expired":
         placeholders = engine.placeholders

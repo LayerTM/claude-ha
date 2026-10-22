@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A streamed answer that the add-on cut short now ends with the add-on's
+  explanation, after the text already shown, instead of stopping mid-sentence.
+- `claude_ha.setup_voice` reports `created_pipeline: false` when it re-wired
+  the pipeline it had already created.
+- A confirmed or automatic change no longer answers "Done" when Home Assistant
+  refused it. With an add-on release that reports each action's outcome, the
+  reply says "Done" only when every action went through; otherwise it names
+  the targets that failed, with Home Assistant's reason, and the ones that
+  worked. Older add-ons keep the previous reply.
+- An automatic change whose result could not be read back (connection lost or
+  timed out) now says it could not confirm what happened instead of asking
+  "Confirm?", since a "yes" would have run every action again.
+- A failure that names no action is reported as an error, never as "Done".
+- A "yes" from someone else in a shared conversation no longer discards the
+  confirmation held for another user; it stays pending until its owner answers.
+  Each user's held confirmation is kept separately, so a proposal made by
+  someone else in the same conversation no longer replaces it.
+- Running `claude_ha.setup_voice` again no longer adds another pipeline. The
+  pipeline it created is remembered and updated in place with the current
+  engines and voice. A pipeline you made yourself is never modified, even if it
+  has the same name.
+
+## [1.16.0] - 2026-10-22
+
 ### Added
 
 - Memory between conversations: ask the agent to remember a short fact ("my
@@ -776,7 +802,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/LayerTM/claude-ha/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/LayerTM/claude-ha/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/LayerTM/claude-ha/compare/v1.13.2...v1.14.0
 [1.13.2]: https://github.com/LayerTM/claude-ha/compare/v1.13.1...v1.13.2

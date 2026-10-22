@@ -35,6 +35,7 @@ from .const import (
     ATTR_TEXT,
     ATTR_TTS_VOICE,
     CONF_MEMORY,
+    CONF_VOICE_PIPELINE_ID,
     DOMAIN,
     MAX_WRITE_INTENTS,
     MODE_READ,
@@ -263,13 +264,23 @@ async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:
         piper_voice=voice,
         pipeline_name=call.data.get(ATTR_PIPELINE_NAME)
         or f"{engine.name} ({language})",
+        pipeline_id=entry.data.get(CONF_VOICE_PIPELINE_ID),
     )
+    created = result.pipeline_id is not None and result.pipeline_id != entry.data.get(
+        CONF_VOICE_PIPELINE_ID
+    )
+    if created:
+        # Remember the pipeline made here, so the next run re-wires this one and
+        # never touches a pipeline of the user's own.
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_VOICE_PIPELINE_ID: result.pipeline_id}
+        )
     return {
         "stt_engine": result.stt_engine,
         "tts_engine": result.tts_engine,
         "tts_voice": voice,
         "pipeline_id": result.pipeline_id,
-        "created_pipeline": result.pipeline_id is not None,
+        "created_pipeline": created,
     }
 
 
