@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-22
+
+### Added
+
+- Memory between conversations: ask the agent to remember a short fact ("my
+  room is the office") and later conversations take it into account. A fact is
+  kept only after you confirm it, per Home Assistant user, with a shared
+  household set that only an administrator changes. New actions `claude_ha.remember`,
+  `claude_ha.forget` and `claude_ha.list_memory`; diagnostics show counts only;
+  removing the integration deletes the facts. On by default (option *Remember
+  facts between conversations*). Chat uses the facts with an add-on release that
+  supports them.
+
 ### Fixed
 
 - A streamed answer that the add-on cut short now ends with the add-on's
@@ -29,22 +42,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pipeline it created is remembered and updated in place with the current
   engines and voice. A pipeline you made yourself is never modified, even if it
   has the same name.
-
-## [1.16.0] - 2026-10-22
-
-### Added
-
-- Memory between conversations: ask the agent to remember a short fact ("my
-  room is the office") and later conversations take it into account. A fact is
-  kept only after you confirm it, per Home Assistant user, with a shared
-  household set that only an administrator changes. New actions `claude_ha.remember`,
-  `claude_ha.forget` and `claude_ha.list_memory`; diagnostics show counts only;
-  removing the integration deletes the facts. On by default (option *Remember
-  facts between conversations*). Chat uses the facts with an add-on release that
-  supports them.
-
-### Fixed
-
 - `claude_ha.setup_voice` dismisses a Wyoming discovery prompt it does not
   need (for an add-on that is already set up, or a second prompt for the same
   add-on), so no stale "Discovered" card is left behind.
