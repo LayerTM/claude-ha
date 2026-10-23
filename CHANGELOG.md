@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-23
+
 ### Added
 
 - Web answers: a separate, opt-in "(web)" Assist agent (option *Answer from the
