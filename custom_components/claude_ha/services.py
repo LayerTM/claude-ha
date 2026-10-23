@@ -19,6 +19,7 @@ from homeassistant.helpers import (
     selector,
 )
 
+from .api import ClaudeError
 from .confirm import ConfirmationRequest, async_send_proposal_notification
 from .const import (
     ATTR_ALL,
@@ -34,6 +35,7 @@ from .const import (
     ATTR_STT_MODEL,
     ATTR_TEXT,
     ATTR_TTS_VOICE,
+    ATTR_WEB,
     CONF_MEMORY,
     CONF_VOICE_PIPELINE_ID,
     DOMAIN,
@@ -56,6 +58,7 @@ from .engines import engine_for_entry
 from .memory import Fact, async_may_edit_household
 from .schema import vol
 from .voice import async_setup_voice_pipeline, default_voice
+from .web import async_note_web_outcome
 
 ASK_SCHEMA = vol.Schema(
     {
@@ -66,6 +69,7 @@ ASK_SCHEMA = vol.Schema(
         vol.Optional(ATTR_MODE, default=MODE_READ): vol.In(MODES),
         vol.Optional(ATTR_INTENTS): vol.All(cv.ensure_list, [dict]),
         vol.Optional(ATTR_NOTIFY): cv.string,
+        vol.Optional(ATTR_WEB, default=False): cv.boolean,
     }
 )
 
@@ -178,6 +182,10 @@ async def _async_handle_ask(call: ServiceCall) -> ServiceResponse:
     mode: str = call.data[ATTR_MODE]
     intents: list[dict[str, Any]] | None = call.data.get(ATTR_INTENTS)
 
+    # A web answer is text from the web alone: no home, no action, nothing to confirm.
+    if call.data[ATTR_WEB]:
+        return await _async_ask_web(call, entry, prompt, mode, intents)
+
     # Contract §2: write requires the user-confirmed proposal intents (max 5);
     # read forbids them. This keeps writes scoped to a prior read-mode proposal
     # rather than free-text.
@@ -230,6 +238,36 @@ async def _async_handle_ask(call: ServiceCall) -> ServiceResponse:
         RESP_TRUNCATED: result.truncated,
     }
     return response
+
+
+async def _async_ask_web(
+    call: ServiceCall,
+    entry: ClaudeConfigEntry,
+    prompt: str,
+    mode: str,
+    intents: list[dict[str, Any]] | None,
+) -> ServiceResponse:
+    """Answer ``claude_ha.ask`` with ``web: true``: text only, never a proposal."""
+    if mode != MODE_READ or intents or call.data.get(ATTR_NOTIFY):
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="web_requires_plain_read"
+        )
+    engine = engine_for_entry(entry)
+    assert engine is not None
+    try:
+        result = await entry.runtime_data.client.async_prompt_web(
+            prompt, caller=call.context.user_id
+        )
+    except ClaudeError as err:
+        async_note_web_outcome(call.hass, entry.entry_id, engine, err)
+        raise
+    async_note_web_outcome(call.hass, entry.entry_id, engine, None)
+    return {
+        RESP_TEXT: result.text,
+        RESP_PROPOSAL: None,
+        RESP_TOOLS_USED: [],
+        RESP_TRUNCATED: result.truncated,
+    }
 
 
 async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:

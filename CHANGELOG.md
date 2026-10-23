@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-23
+
+### Added
+
+- Web answers: a separate, opt-in "(web)" Assist agent (option *Answer from the
+  web (separate agent)*, off by default) and `web: true` on `claude_ha.ask`
+  answer from the web alone — text only, no view of the home, no memory, no
+  proposals, never confirmed or executed. The home agent never uses the web.
+  Needs an add-on release that supports web answers, switched on in its
+  options; when it is off the agent says so and a repair appears until the next
+  web answer succeeds. `claude_ha.ask` with `web: true` reports a switched-off
+  or unsupported web option as a validation error that says what to change in
+  the add-on.
+
 ## [1.16.0] - 2026-10-22
 
 ### Added

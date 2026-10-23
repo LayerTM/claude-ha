@@ -65,6 +65,8 @@ _CORE_CODES = {
     "limits_unavailable",
     "not_found",
     "action_failed",
+    "web_disabled",
+    "web_unsupported",
 }
 
 

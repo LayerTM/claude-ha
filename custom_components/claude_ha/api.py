@@ -77,6 +77,7 @@ from .const import (
     REQUEST_STREAM,
     REQUEST_SURFACE,
     REQUEST_TIMEOUT,
+    REQUEST_WEB,
     RESP_ACTIONS,
     RESP_AUTOMATION,
     RESP_DEGRADED,
@@ -229,6 +230,18 @@ class ClaudePromptTooLargeError(ClaudeRequestError, ServiceValidationError):
     """The prompt is longer than the add-on accepts; the caller must shorten it."""
 
     translation_key = "prompt_too_large"
+
+
+class ClaudeWebDisabledError(ClaudeError, ServiceValidationError):
+    """The add-on refused a web answer: its web option is off (403 ``web_disabled``)."""
+
+    translation_key = "web_disabled"
+
+
+class ClaudeWebUnsupportedError(ClaudeError, ServiceValidationError):
+    """The add-on cannot answer from the web (501, or it does not list the field)."""
+
+    translation_key = "web_unsupported"
 
 
 class ClaudeActionFailedError(ClaudeError):
@@ -689,6 +702,11 @@ class ClaudeClient:
         return self.accepts(REQUEST_MEMORY, listed_only=True)
 
     @property
+    def supports_web(self) -> bool:
+        """Whether the connected add-on lists web answers among its request fields."""
+        return self.accepts(REQUEST_WEB, listed_only=True)
+
+    @property
     def supports_edit_automation(self) -> bool:
         """Whether the connected add-on accepts ``edit_automation``."""
         return self.accepts(REQUEST_EDIT_AUTOMATION, ADDON_MIN_EDIT_VERSION)
@@ -843,6 +861,54 @@ class ClaudeClient:
             timeout_s=self._read_timeout,
         )
         return _parse_prompt_result(data, self._engine)
+
+    async def async_prompt_web(
+        self,
+        prompt: str,
+        *,
+        caller: str | None = None,
+        language: str | None = None,
+        surface: str | None = None,
+    ) -> PromptResult:
+        """Ask for an answer from the web alone and keep nothing but its text.
+
+        The request carries only the prompt, ``language`` and ``surface``: no
+        conversation, intents, image or memory. An add-on that does not list
+        the ``web`` field is never sent the request, which it would otherwise
+        answer from the home.
+        """
+        self._check_prompt(prompt)
+        if not self.supports_web:
+            raise ClaudeWebUnsupportedError("The add-on does not list the web field")
+        payload: dict[str, object] = {
+            "prompt": prompt,
+            "mode": MODE_READ,
+            REQUEST_WEB: True,
+        }
+        self._put(payload, REQUEST_LANGUAGE, language)
+        self._put(payload, REQUEST_SURFACE, surface, ADDON_MIN_SURFACE_VERSION)
+        headers = self._auth_headers
+        if caller:
+            headers[HEADER_CALLER] = caller
+        try:
+            data = await self._request(
+                "POST",
+                API_PROMPT,
+                json=payload,
+                headers=headers,
+                timeout_s=self._read_timeout,
+            )
+        except ClaudeRequestError as err:
+            raise ClaudeRequestError(str(err), translation_key="web_rejected") from err
+        result = _parse_prompt_result(data, self._engine)
+        # Answer-only: whatever else the answer carried is not this turn's to act on.
+        return PromptResult(
+            text=result.text,
+            proposal=None,
+            tools_used=[],
+            truncated=result.truncated,
+            degraded=result.degraded,
+        )
 
     async def async_prompt_stream(
         self,
@@ -1360,6 +1426,8 @@ _ERROR_CODES: Final[Mapping[str, tuple[type[ClaudeError], str]]] = {
     "unknown_field": (ClaudeRequestError, "request_field_rejected"),
     "invalid_field": (ClaudeRequestError, "request_field_rejected"),
     "mode_mismatch": (ClaudeRequestError, "request_field_rejected"),
+    "web_disabled": (ClaudeWebDisabledError, "web_disabled"),
+    "web_unsupported": (ClaudeWebUnsupportedError, "web_unsupported"),
     "prompt_too_large": (ClaudePromptTooLargeError, "prompt_too_large"),
     "body_too_large": (ClaudeRequestError, "request_too_large"),
     "confirmation_required": (ClaudeRequestError, "confirmation_required"),

@@ -18,7 +18,7 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow
@@ -41,6 +41,7 @@ from .const import (
     CONF_PORT,
     CONF_TOKEN,
     CONF_USE_ADDON,
+    CONF_WEB,
     CONFIG_ENTRY_MINOR_VERSION,
     DEFAULT_PORT,
     DOMAIN,
@@ -427,7 +428,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         }
 
 
-class ClaudeOptionsFlow(OptionsFlow):
+class ClaudeOptionsFlow(OptionsFlowWithReload):
     """Options for how chat-driven actions are confirmed."""
 
     async def async_step_init(
@@ -459,6 +460,10 @@ class ClaudeOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_MEMORY,
                     default=options.get(CONF_MEMORY, True),
+                ): bool,
+                vol.Required(
+                    CONF_WEB,
+                    default=options.get(CONF_WEB, False),
                 ): bool,
             }
         )
