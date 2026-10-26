@@ -11,61 +11,61 @@
       },
       "on_supervisor": {
         "title": "Set up {engine}",
-        "description": "{engine} for Home Assistant runs through the {addon} app. Do you want to set it up using the app?",
+        "description": "{engine} for Home Assistant runs through the {addon} add-on. Do you want to set it up using the add-on?",
         "data": {
-          "use_addon": "Use the {addon} app"
+          "use_addon": "Use the {addon} add-on"
         },
         "data_description": {
-          "use_addon": "The app runs {engine} on your Home Assistant host and is required by this integration."
+          "use_addon": "The add-on runs {engine} on your Home Assistant host and is required by this integration."
         }
       },
       "pick_addon": {
-        "title": "Choose the {addon} app",
-        "description": "More than one {addon} app is available. Choose the one to set up.",
+        "title": "Choose the {addon} add-on",
+        "description": "More than one {addon} add-on is available. Choose the one to set up.",
         "data": {
-          "addon": "App"
+          "addon": "Add-on"
         },
         "data_description": {
-          "addon": "The app's slug, which starts with the repository it comes from."
+          "addon": "The add-on's slug, which starts with the repository it comes from."
         }
       },
       "add_repository": {
-        "title": "Add the {addon} app's repository",
-        "description": "The {addon} app was not found in your app store. Add its repository ({repository_url}) so it can be installed?",
+        "title": "Add the {addon} add-on's repository",
+        "description": "The {addon} add-on was not found in your add-on store. Add its repository ({repository_url}) so it can be installed?",
         "data": {
           "confirm": "Add the repository"
         },
         "data_description": {
-          "confirm": "Adds {repository_url} to your Supervisor app store and refreshes it, then looks for the {addon} app again."
+          "confirm": "Adds {repository_url} to your Supervisor add-on store and refreshes it, then looks for the {addon} add-on again."
         }
       },
       "hassio_confirm": {
-        "title": "Set up {engine} with the {addon} app",
-        "description": "Do you want to set up {engine} using the discovered {addon} app?"
+        "title": "Set up {engine} with the {addon} add-on",
+        "description": "Do you want to set up {engine} using the discovered {addon} add-on?"
       },
       "install_addon": {
-        "title": "Installing the {addon} app"
+        "title": "Installing the {addon} add-on"
       },
       "start_addon": {
-        "title": "Starting the {addon} app"
+        "title": "Starting the {addon} add-on"
       }
     },
     "progress": {
-      "install_addon": "Please wait while the {addon} app is installed. This can take several minutes.",
-      "start_addon": "Please wait while the {addon} app starts."
+      "install_addon": "Please wait while the {addon} add-on is installed. This can take several minutes.",
+      "start_addon": "Please wait while the {addon} add-on starts."
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
-      "not_hassio": "This integration requires the Home Assistant Supervisor and a companion app.",
-      "unsupported_addon": "The discovered app is not one this integration supports.",
-      "engine_mismatch": "The app runs a different AI engine than expected, so it was not set up.",
-      "addon_not_found": "The {addon} app could not be found even after adding its repository. Check that {repository_url} is a valid app repository and try again.",
-      "repository_not_added": "The {addon} app's repository was not added, so it can't be installed automatically here. Add {repository_url} to your app store yourself, then try again.",
-      "addon_required": "The {addon} app is required to use this integration.",
-      "addon_info_failed": "Failed to get the {addon} app info.",
-      "addon_install_failed": "Failed to install the {addon} app.",
-      "addon_start_failed": "Failed to start the {addon} app.",
-      "addon_get_discovery_info_failed": "Failed to get the {addon} app connection details.",
+      "not_hassio": "This integration requires the Home Assistant Supervisor and a companion add-on.",
+      "unsupported_addon": "The discovered add-on is not one this integration supports.",
+      "engine_mismatch": "The add-on runs a different AI engine than expected, so it was not set up.",
+      "addon_not_found": "The {addon} add-on could not be found even after adding its repository. Check that {repository_url} is a valid add-on repository and try again.",
+      "repository_not_added": "The {addon} add-on's repository was not added, so it can't be installed automatically here. Add {repository_url} to your add-on store yourself, then try again.",
+      "addon_required": "The {addon} add-on is required to use this integration.",
+      "addon_info_failed": "Failed to get the {addon} add-on info.",
+      "addon_install_failed": "Failed to install the {addon} add-on.",
+      "addon_start_failed": "Failed to start the {addon} add-on.",
+      "addon_get_discovery_info_failed": "Failed to get the {addon} add-on connection details.",
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
     }
   },
@@ -85,7 +85,7 @@
           "critical_entities": "Entities that always require confirmation, on top of the automatic per-action risk checks.",
           "camera_vision": "When on, a clearly visual question (e.g. 'who's at the door?') may send one snapshot of an Assist-exposed camera to {engine}. Off by default; snapshots are more sensitive than state.",
           "memory": "When on, {engine} can keep short facts you ask it to remember ('remember that my room is the office') and uses them in later conversations. Each fact is saved only after you confirm it.",
-          "web_answers": "When on, a second Assist agent, \"(web)\", answers questions from the web alone. It never sees your home, remembers nothing and cannot act on anything; your home agent never uses the web. Needs web answers switched on in the app's options."
+          "web_answers": "When on, a second Assist agent, \"(web)\", answers questions from the web alone. It never sees your home, remembers nothing and cannot act on anything; your home agent never uses the web. Needs web answers switched on in the add-on's options."
         }
       }
     }
@@ -177,13 +177,13 @@
         },
         "web": {
           "name": "Web",
-          "description": "Answer from the web alone: text only, no view of your home, no memory, no proposed changes. Cannot be combined with write mode, intents or a notify service. Needs web answers switched on in the app's options."
+          "description": "Answer from the web alone: text only, no view of your home, no memory, no proposed changes. Cannot be combined with write mode, intents or a notify service. Needs web answers switched on in the add-on's options."
         }
       }
     },
     "setup_voice": {
       "name": "Set up local voice",
-      "description": "Installs the Whisper (speech-to-text) and Piper (text-to-speech) apps for a language and creates an Assist pipeline that talks to Claude. Whisper on CPU takes a few seconds per phrase, and some voices (e.g. Ukrainian) are weaker than others — override the voice or use Cloud TTS if needed.",
+      "description": "Installs the Whisper (speech-to-text) and Piper (text-to-speech) add-ons for a language and creates an Assist pipeline that talks to Claude. Whisper on CPU takes a few seconds per phrase, and some voices (e.g. Ukrainian) are weaker than others — override the voice or use Cloud TTS if needed.",
       "fields": {
         "config_entry": {
           "name": "Claude",
@@ -195,7 +195,7 @@
         },
         "stt_model": {
           "name": "Whisper model",
-          "description": "The Whisper speech-to-text model. Leave empty to keep the app's current model."
+          "description": "The Whisper speech-to-text model. Leave empty to keep the add-on's current model."
         },
         "tts_voice": {
           "name": "Piper voice",
@@ -245,7 +245,7 @@
     },
     "list_memory": {
       "name": "List remembered facts",
-      "description": "Returns the facts the calling user can see, with their IDs, and whether the app uses them in chat.",
+      "description": "Returns the facts the calling user can see, with their IDs, and whether the add-on uses them in chat.",
       "fields": {
         "config_entry": {
           "name": "Claude",
@@ -256,22 +256,22 @@
   },
   "exceptions": {
     "unknown": {
-      "message": "Unexpected error talking to the app."
+      "message": "Unexpected error talking to the add-on."
     },
     "cannot_connect": {
-      "message": "The app is not reachable."
+      "message": "The add-on is not reachable."
     },
     "auth_error": {
-      "message": "The app rejected the request. The shared token may be out of date."
+      "message": "The add-on rejected the request. The shared token may be out of date."
     },
     "auth_expired": {
       "message": "{engine}'s sign-in has expired. Sign in again: {login_fix}, or {durable_login} so it survives idle spells."
     },
     "rate_limited": {
-      "message": "The app is busy or rate-limited. Try again shortly."
+      "message": "The add-on is busy or rate-limited. Try again shortly."
     },
     "request_rejected": {
-      "message": "The app rejected the request as invalid."
+      "message": "The add-on rejected the request as invalid."
     },
     "invalid_config_entry": {
       "message": "Claude configuration {config_entry} not found."
@@ -295,28 +295,28 @@
       "message": "Intents can only be sent with mode 'write'."
     },
     "addon_not_ready": {
-      "message": "The {addon} app is not ready yet."
+      "message": "The {addon} add-on is not ready yet."
     },
     "engine_mismatch": {
-      "message": "The app runs a different AI engine than this entry was set up for."
+      "message": "The add-on runs a different AI engine than this entry was set up for."
     },
     "unsupported_engine": {
       "message": "This entry was set up for an AI engine that this version of the integration does not support."
     },
     "addon_info_failed": {
-      "message": "Failed to get the {addon} app info."
+      "message": "Failed to get the {addon} add-on info."
     },
     "addon_not_installed": {
-      "message": "The {addon} app is being installed."
+      "message": "The {addon} add-on is being installed."
     },
     "addon_not_running": {
-      "message": "The {addon} app is not running yet."
+      "message": "The {addon} add-on is not running yet."
     },
     "voice_unknown_language": {
       "message": "No default Piper voice is known for the language {language}. Pass a voice via the tts_voice field."
     },
     "no_result": {
-      "message": "The app returned no answer."
+      "message": "The add-on returned no answer."
     },
     "automation_action_not_allowed": {
       "message": "The drafted automation uses an action type ({action}) that isn't permitted for an automation created from chat; not created."
@@ -376,28 +376,28 @@
       "message": "Couldn't delete the automation."
     },
     "request_field_rejected": {
-      "message": "The app rejected the request field {field}."
+      "message": "The add-on rejected the request field {field}."
     },
     "request_too_large": {
-      "message": "The request is too large for the app. The maximum size is {max_bytes} bytes."
+      "message": "The request is too large for the add-on. The maximum size is {max_bytes} bytes."
     },
     "request_too_large_unsized": {
-      "message": "The request is too large for the app."
+      "message": "The request is too large for the add-on."
     },
     "confirmation_required": {
       "message": "This action needs your explicit confirmation before it runs."
     },
     "write_unavailable": {
-      "message": "The app can't make changes because it has no Home Assistant token. Set one in the app options."
+      "message": "The add-on can't make changes because it has no Home Assistant token. Set one in the add-on options."
     },
     "action_failed": {
       "message": "The change didn't go through."
     },
     "addon_timeout": {
-      "message": "The app took too long to answer. Try again."
+      "message": "The add-on took too long to answer. Try again."
     },
     "voice_addon_failed": {
-      "message": "Failed to set up the {addon} app: {error}"
+      "message": "Failed to set up the {addon} add-on: {error}"
     },
     "memory_full": {
       "message": "Claude already remembers {max} facts here. Forget some before adding more."
@@ -409,16 +409,16 @@
       "message": "Name the facts to forget, or choose All."
     },
     "voice_engine_disabled": {
-      "message": "The Wyoming entry for the {addon} app is disabled. Enable it under Settings → Devices & services → Wyoming Protocol, then run the action again."
+      "message": "The Wyoming entry for the {addon} add-on is disabled. Enable it under Settings → Devices & services → Wyoming Protocol, then run the action again."
     },
     "web_disabled": {
-      "message": "Web answers are switched off in the app. Turn on the web option in the app's options, then ask again."
+      "message": "Web answers are switched off in the add-on. Turn on the web option in the add-on's options, then ask again."
     },
     "web_unsupported": {
-      "message": "This app cannot answer from the web. Update the app, then ask again."
+      "message": "This add-on cannot answer from the web. Update the add-on, then ask again."
     },
     "web_rejected": {
-      "message": "The app rejected the web question."
+      "message": "The add-on rejected the web question."
     },
     "web_requires_plain_read": {
       "message": "A web answer is text only: leave mode on read and do not pass intents or a notify service."
@@ -426,42 +426,42 @@
   },
   "issues": {
     "engine_mismatch": {
-      "title": "The app runs a different AI engine",
-      "description": "This entry was set up for {engine}, but its app now reports `{reported_engine}`. The entry stays unavailable until they match: restore the app it was set up for, or delete this entry and add the app again."
+      "title": "The add-on runs a different AI engine",
+      "description": "This entry was set up for {engine}, but its add-on now reports `{reported_engine}`. The entry stays unavailable until they match: restore the add-on it was set up for, or delete this entry and add the add-on again."
     },
     "addon_not_running": {
-      "title": "The {addon} app is not running",
+      "title": "The {addon} add-on is not running",
       "fix_flow": {
         "step": {
           "confirm": {
-            "title": "Start the {addon} app",
-            "description": "The {addon} app is installed but not running, so {engine} is unavailable. Do you want to start it now?"
+            "title": "Start the {addon} add-on",
+            "description": "The {addon} add-on is installed but not running, so {engine} is unavailable. Do you want to start it now?"
           }
         },
         "abort": {
-          "start_failed": "Failed to start the {addon} app. Check the app logs and try again."
+          "start_failed": "Failed to start the {addon} add-on. Check the add-on logs and try again."
         }
       }
     },
     "addon_not_installed": {
-      "title": "The {addon} app is not installed",
-      "description": "{engine} is unavailable because the {addon} app is not installed. Home Assistant is trying to install it; check the app for progress."
+      "title": "The {addon} add-on is not installed",
+      "description": "{engine} is unavailable because the {addon} add-on is not installed. Home Assistant is trying to install it; check the add-on for progress."
     },
     "not_logged_in": {
       "title": "{engine} isn't logged in",
-      "description": "The {addon} app is running but {engine} isn't authenticated, so chat can't answer. Open the {addon} app, {login_fix}, or {durable_login}, then check again."
+      "description": "The {addon} add-on is running but {engine} isn't authenticated, so chat can't answer. Open the {addon} add-on, {login_fix}, or {durable_login}, then check again."
     },
     "signin_expired": {
       "title": "{engine}'s sign-in has expired",
-      "description": "{engine}'s sign-in to its model provider has expired, so chat can't answer until it's renewed. Open the {addon} app, {login_fix}, or {durable_login} (which survives idle spells), then check again."
+      "description": "{engine}'s sign-in to its model provider has expired, so chat can't answer until it's renewed. Open the {addon} add-on, {login_fix}, or {durable_login} (which survives idle spells), then check again."
     },
     "no_ha_token": {
       "title": "{engine} has no token to read your home",
-      "description": "{engine} is logged in but has no Home Assistant token, so chat can answer general questions but can't see or control your home. Set the 'Prompt API HA Token' (or 'HA Token') in the {addon} app options, then check again."
+      "description": "{engine} is logged in but has no Home Assistant token, so chat can answer general questions but can't see or control your home. Set the 'Prompt API HA Token' (or 'HA Token') in the {addon} add-on options, then check again."
     },
     "mcp_unauthorized": {
       "title": "Home Assistant refuses {engine}'s token",
-      "description": "Home Assistant answered {engine}'s token on the Model Context Protocol Server with 'not authorized', so chat can't see your home. Use an administrator's token in the {addon} app options, or turn off 'Require an administrator account' in the Model Context Protocol Server options. After fixing Home Assistant's side, restart the {addon} app, then check again."
+      "description": "Home Assistant answered {engine}'s token on the Model Context Protocol Server with 'not authorized', so chat can't see your home. Use an administrator's token in the {addon} add-on options, or turn off 'Require an administrator account' in the Model Context Protocol Server options. After fixing Home Assistant's side, restart the {addon} add-on, then check again."
     },
     "mcp_unreachable": {
       "title": "{engine} can't reach the Model Context Protocol Server",
@@ -477,11 +477,11 @@
     },
     "usage_history_reset": {
       "title": "Usage history was reset",
-      "description": "The app lost its usage history and could not recover it; the token and cost totals shown here now count from {history_since}. Nothing you did caused this."
+      "description": "The add-on lost its usage history and could not recover it; the token and cost totals shown here now count from {history_since}. Nothing you did caused this."
     },
     "web_disabled": {
-      "title": "Web answers are switched off in the app",
-      "description": "The \"(web)\" agent asked {engine} for a web answer and the app refused: its web option is off. Turn it on in the app's options, then ask again. This hint clears itself after the next web answer."
+      "title": "Web answers are switched off in the add-on",
+      "description": "The \"(web)\" agent asked {engine} for a web answer and the add-on refused: its web option is off. Turn it on in the add-on's options, then ask again. This hint clears itself after the next web answer."
     }
   }
 }
