@@ -520,13 +520,15 @@ does the least it can.
   diagnostics.
 - **Read-only by default.** Chat is treated as untrusted input and runs
   deny-by-default; state changes require explicit, scoped, confirmed intents.
-- **What leaves Home Assistant.** Only to the local app: your message, the
-  conversation id, the language, which surface it came from, the facts you chose
+- **What leaves Home Assistant.** The integration sends these to the local app:
+  your message, the conversation id, the language, which surface it came from, the facts you chose
   to remember, and — only if you turned on camera vision — the id of the camera
-  to look at. The integration itself attaches no entity states.
+  to look at. The integration itself attaches no entity states. The app then sends
+  the prompt to Claude (Anthropic) to answer it.
   Claude reads and controls only the entities you have exposed to Assist, and
   anything that changes state waits for your `yes` unless it is judged benign.
-- **No cloud calls from HA.** The integration only talks to the local app.
+- **No cloud calls from the integration.** It only talks to the local app; the app
+  is what calls Claude.
 
 See [SECURITY.md](SECURITY.md) for the reporting policy, and the app for the
 full picture (env-scrubbed child processes, per-call statelessness, rate
