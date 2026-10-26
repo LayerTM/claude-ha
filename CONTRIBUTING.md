@@ -7,7 +7,7 @@ platinum), so contributions are expected to keep it there.
 ## Architecture in one paragraph
 
 The integration is the **client** half of a small, versioned HTTP contract with
-the [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA) (a separate
+the [Claude Code app](https://github.com/LayerTM/ClaudeInHA) (a separate
 repository). The two are developed independently and connect only through that
 contract. Changes to the wire format must be agreed on the contract first, then
 implemented on both sides — do not add request/response fields unilaterally.

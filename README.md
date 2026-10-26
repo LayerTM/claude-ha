@@ -5,7 +5,8 @@
 # Claude for Home Assistant
 
 **Chat with Claude from Home Assistant Assist, and call it from your automations** —
-powered by the companion Claude Code add-on running on your own hardware.
+powered by the companion Claude Code app (a Home Assistant app, formerly called an add-on)
+running on your own hardware.
 Requires **Home Assistant OS or Supervised**. Home Assistant lists the
 integration as **AI Agent**.
 
@@ -38,8 +39,8 @@ integration as **AI Agent**.
 ---
 
 `claude_ha` exposes Claude to Home Assistant itself. It talks to Claude through
-the [Claude Code add-on](https://github.com/LayerTM/ClaudeInHA) over Home
-Assistant's internal network — the add-on holds the login and runs Claude, while
+the [Claude Code app](https://github.com/LayerTM/ClaudeInHA) over Home
+Assistant's internal network — the app holds the login and runs Claude, while
 this integration is a thin, secure client. **Nothing here calls the Anthropic
 cloud directly.**
 
@@ -51,7 +52,7 @@ cloud directly.**
 | 👁️ **Camera vision** | Optionally, a visual question ("who's at the door?") sends one snapshot of an Assist-exposed camera to Claude. Off by default. |
 | 🗨️ **Dashboard chat card** | A bundled Lovelace card to chat with Claude and Apply/Dismiss its suggestions. |
 | ⚙️ **`claude_ha.ask` action** | Send a prompt to Claude from automations, optionally confirming changes via a phone notification. |
-| 📟 **Sensors** | Add-on readiness, active model, and Claude token usage + prompt-API cost. |
+| 📟 **Sensors** | App readiness, active model, and Claude token usage + prompt-API cost. |
 | 🩺 **Health checks** | Detects the "chat can't see your home" gaps and raises a repair with the exact fix. |
 | 🎙️ **Local voice one-click** | `claude_ha.setup_voice` installs Whisper + Piper and builds an Assist pipeline for your language. |
 | 🔒 **Secure by design** | Read-only by default, bearer-token auth, scoped writes, no cloud calls. |
@@ -76,27 +77,33 @@ cloud directly.**
 
 ```text
 HA Assist ─┐
-           ├─► claude_ha (this integration) ──HTTP + bearer──► Claude Code add-on ──► Claude
+           ├─► claude_ha (this integration) ──HTTP + bearer──► Claude Code app ──► Claude
 Automation ┘        conversation entity                        (own agentic loop,
                     claude_ha.ask action                         scoped HA access)
 ```
 
-The integration and the add-on are separate projects that connect through a
+The integration and the app are separate projects that connect through a
 small, versioned HTTP contract (a bearer-authenticated prompt server on the
-add-on's internal port). The connection details — host, port and a shared token —
+app's internal port). The connection details — host, port and a shared token —
 are handed to the integration automatically through Supervisor discovery, so
 there is nothing to type in.
 
 ## Requirements
 
-- Home Assistant OS or Supervised (the integration manages a Supervisor add-on).
-- One companion add-on for the AI agent you want to talk to — Home Assistant
-  doesn't ship either, so add the repository URL for the one you want to your
-  add-on store once, then install the add-on from there:
+- Home Assistant OS or Supervised (the integration manages a Supervisor app).
+- One companion app for the AI agent you want to talk to — Home Assistant
+  doesn't ship either. Add the repository URL of the one you want once, then
+  install the app from the App store:
   - [Claude Code](https://github.com/LayerTM/ClaudeInHA) —
     `https://github.com/LayerTM/ClaudeInHA`
   - [Codex](https://github.com/LayerTM/CodexInHA) —
     `https://github.com/LayerTM/CodexInHA`
+
+  To add a repository by hand: **Settings → Apps → Install app**, then **⋮**
+  (top right) → **Repositories**, paste the URL and select **Add**. Open the
+  app in the App store, select **Install**, then **Start**. To keep it one click
+  away, turn on **Show in sidebar** on the app's **Info** tab; **Open Web UI**
+  is there too.
 
   The integration's setup flow can also add the repository for you once you
   pick which agent to set up (Settings → Devices & services → Add integration).
@@ -116,7 +123,7 @@ yet, it offers to add it.
    HACS asks to add the repository first.) You can also search HACS for
    `claude-ha`, which matches only this integration.
 2. Restart Home Assistant.
-3. Install the Claude Code or Codex add-on. Once it starts, Home Assistant
+3. Install the Claude Code or Codex app. Once it starts, Home Assistant
    offers to set up the **AI Agent** integration automatically — accept it. No
    configuration needed.
 
@@ -131,18 +138,18 @@ Copy `custom_components/claude_ha` into your Home Assistant
 
 ## Configuration
 
-Setup is zero-touch: when a companion add-on starts it advertises its host,
+Setup is zero-touch: when a companion app starts it advertises its host,
 port and a freshly generated token through Supervisor discovery, and Home
 Assistant surfaces a one-click setup. You can also add it from **Settings →
 Devices & services → Add integration → AI Agent**, which first asks which
 agent to set up, then finds, installs (offering to add its repository if
-needed) and starts the add-on for you. There are no options to fill in. If
-more than one add-on of the chosen agent is installed (for example a store
+needed) and starts the app for you. There are no options to fill in. If
+more than one app of the chosen agent is installed (for example a store
 build and a local build), setup asks which one to use; each one can be set up
 as its own entry, one agent per entry.
 
-Each entry remembers which AI engine its add-on runs and checks it on every
-status poll. If the add-on ever reports a different engine, the entry goes
+Each entry remembers which AI engine its app runs and checks it on every
+status poll. If the app ever reports a different engine, the entry goes
 unavailable and a repair explains why; nothing is sent to it until the engines
 match again.
 
@@ -157,8 +164,8 @@ commands it recognises exactly (such as "turn off the kitchen light") itself,
 without the confirmation described below, and passes everything else — state
 questions included — on to Claude. Leave it off to have every request go
 through Claude.
-Answers **stream in live**, token by token (with the Claude Code add-on ≥ 1.17.0;
-older add-ons return the whole answer at once).
+Answers **stream in live**, token by token (with the Claude Code app ≥ 1.17.0;
+older apps return the whole answer at once).
 
 Every request is read first. If it would change state, Claude proposes the exact
 actions, and the integration decides — **per action, from live entity metadata** —
@@ -166,7 +173,7 @@ whether to carry it out immediately or confirm:
 
 - **Benign, low-risk actions run right away** (e.g. turning a light on) and reply
   `Done: …`. If Home Assistant refuses an action, the reply names the targets
-  that failed instead (with an add-on that reports each action's outcome).
+  that failed instead (with an app that reports each action's outcome).
 - **Important actions are held and confirmed** with a plain `yes` / `no` — anything
   the deterministic classifier flags (locks, alarms, garage/door/gate covers,
   firmware updates, router/AP and other config entities, and opaque-effect
@@ -178,7 +185,7 @@ whether to carry it out immediately or confirm:
 
 Criticality is judged per action, not per domain — a shade and a garage door are
 both `cover`, but only the garage door is confirmed. Requires the Claude Code
-add-on ≥ 1.8.0 (older add-ons simply confirm everything). Tune it under the
+app ≥ 1.8.0 (older apps simply confirm everything). Tune it under the
 integration's **Configure** options: turn off *auto-execute* to confirm every
 change, or list entities that must always be confirmed.
 
@@ -191,21 +198,21 @@ shows what it would do and which entities it affects, and waits for your
 > Claude can only ever touch entities you have exposed to Assist — that exposure
 > list is the outer ceiling; the per-action classifier is the inner gate.
 
-**Camera vision** (opt-in, off by default; add-on ≥ 1.17.0). Turn on *Let Claude
+**Camera vision** (opt-in, off by default; app ≥ 1.17.0). Turn on *Let Claude
 look at cameras* in the options and a clearly visual question — "who's at the
 door?", "look at the backyard camera" — sends **one** snapshot to Claude. Only a
 camera you have exposed to Assist is ever sent, only when the message is visual
 and exactly one camera resolves (by name, area or floor); it never guesses
-between cameras. The add-on fetches and downscales the snapshot itself; the
+between cameras. The app fetches and downscales the snapshot itself; the
 integration passes only the entity id.
 
-**Web answers** (opt-in, off by default; needs an add-on release that supports
-them, switched on in the add-on's options). Turn on *Answer from the web
+**Web answers** (opt-in, off by default; needs an app release that supports
+them, switched on in the app's options). Turn on *Answer from the web
 (separate agent)* in the options and a second Assist agent, **Claude (web)**,
 appears next to the first. It answers a question from the web alone: it never
 sees your home, remembers nothing, is not part of the conversation history and
-cannot act on anything — whatever the add-on sends back, only its text is
-shown. Your home agent never uses the web. If the add-on has web answers
+cannot act on anything — whatever the app sends back, only its text is
+shown. Your home agent never uses the web. If the app has web answers
 switched off, the agent says so and Home Assistant shows a repair until the
 next web answer succeeds.
 
@@ -240,7 +247,7 @@ it the same way, after a `yes`.
   remember something, the action is confirmed and the fact is not kept — the
   reply says so; ask to remember it on its own.
 
-Chat uses the facts with a Claude Code or Codex add-on release that supports
+Chat uses the facts with a Claude Code or Codex app release that supports
 them; with an older one they are still kept and listed, and
 `claude_ha.list_memory` reports `used_in_chat: false`.
 
@@ -285,13 +292,13 @@ response_variable: claude
 described state change, or `null`), `tools_used`, and `truncated`.
 
 Add `web: true` for an answer from the web alone: text only, no view of your
-home, no memory, and `proposal` is always `null`. It needs an add-on that
+home, no memory, and `proposal` is always `null`. It needs an app that
 supports web answers with the option switched on, and cannot be combined with
 `mode: write`, `intents` or `notify`.
 
 To act on something, use the two-phase flow: a read call returns a `proposal`
 with `intents`; after your own confirmation, echo those exact `intents` back in a
-`write` call. Writes are scoped by the Claude Code add-on to just those confirmed
+`write` call. Writes are scoped by the Claude Code app to just those confirmed
 intents — only use `write` from automations you control, never on untrusted input.
 
 ```yaml
@@ -329,17 +336,17 @@ the device's main controls by default.
   under **Settings → Voice assistants**, or target it from a script or automation.
   See [Conversation agent](#conversation-agent).
 - **Active alerts** (`binary_sensor.claude_code_active_alerts`) — a `problem`
-  binary sensor, on while the add-on has any active proactive alert (leak,
-  offline, battery, CO₂ and the rest). It mirrors the add-on's own alert set, so
+  binary sensor, on while the app has any active proactive alert (leak,
+  offline, battery, CO₂ and the rest). It mirrors the app's own alert set, so
   your automations and your history can react to it instead of only the push
   notification. `active_count`, `critical_count` and an `items` list (each with
   its `key`, a `critical` flag and the one-line reading) are the attributes;
-  `critical` marks the alerts the add-on always sends. The lines are your own
+  `critical` marks the alerts the app always sends. The lines are your own
   entity names and readings — home data you already have in Home Assistant, never
-  chat content. Needs add-on ≥ 1.39.0, and stays unavailable while proactive
+  chat content. Needs app ≥ 1.39.0, and stays unavailable while proactive
   alerts are off or have not run yet.
 - **Status** (`sensor.claude_code_status`) — `ready` / `initializing`, with the
-  add-on version, Claude version, the engine and its version, active model, whether a scoped HA MCP is
+  app version, Claude version, the engine and its version, active model, whether a scoped HA MCP is
   configured and reachable, a `health` summary and the count of entities exposed
   to Assist as attributes.
 - **Chat health** (`sensor.claude_code_chat_health`) — a rolling summary of recent
@@ -354,34 +361,34 @@ the device's main controls by default.
   The attributes show the working: recent/ok/degraded/recovered counts, the
   `failure_rate` the state turns on, `consecutive_ok` and `consecutive_failed`
   (chats since the last failure, and since the last success), the last degrade
-  reason (a token, never prompt content) and the window's timestamps. Needs add-on
-  ≥ 1.20.0; unavailable otherwise. The run counters and the timestamps need add-on
-  ≥ 1.49.0 and are null without it — an add-on that reports none of them is judged
+  reason (a token, never prompt content) and the window's timestamps. Needs app
+  ≥ 1.20.0; unavailable otherwise. The run counters and the timestamps need app
+  ≥ 1.49.0 and are null without it — an app that reports none of them is judged
   on the rate alone, so a missing field neither quiets a warning nor invents one.
-  `window_dated` (add-on ≥ 1.55.0, null without it) is how many of the `recent`
+  `window_dated` (app ≥ 1.55.0, null without it) is how many of the `recent`
   chats carried a stamp, and it is what makes the two timestamps readable: equal
   to `recent` they span the whole window, and at 1 they are a single instant
   printed twice rather than a range.
 - **Daily budget spend** (`sensor.claude_code_daily_budget_spend`) — today's spend
-  in USD against the add-on's daily budget, with `limit` / `remaining` /
+  in USD against the app's daily budget, with `limit` / `remaining` /
   `fraction_used` / a soft `near_cap` flag as attributes (a limit of 0 = unlimited
-  leaves those null). Diagnostic; never a repair. Needs add-on ≥ 1.21.0. If the
-  add-on reports a spend or a cap that cannot be read as a plain amount, the
+  leaves those null). Diagnostic; never a repair. Needs app ≥ 1.21.0. If the
+  app reports a spend or a cap that cannot be read as a plain amount, the
   sensor goes unavailable rather than showing a figure nobody can stand behind —
   an unreadable cap is never treated as no cap.
 - **Token usage today** (`sensor.claude_code_token_usage_today`) — today's input +
   output tokens (unit `tokens`), with the full usage report (per-period and
   per-model token totals, message counts) as attributes. Polled slowly (~5 min;
-  the add-on caches it). If the add-on's usage history was lost and could not be
+  the app caches it). If the app's usage history was lost and could not be
   recovered, the report carries `history_reset` and `history_since`, and a
   one-time repair notice under Settings → Repairs names the day totals now count
   from.
 - **Prompt API cost** (`sensor.claude_code_prompt_api_cost`) — the total prompt-API
   cost in USD (interactive-console use is measured in tokens, not dollars). The
-  usage/cost sensors need the Claude Code add-on ≥ 1.7.0 and stay unavailable
+  usage/cost sensors need the Claude Code app ≥ 1.7.0 and stay unavailable
   otherwise.
 - **Account limits** — how much of your Claude **account's** rate limits is used,
-  across every machine and session signed in to it, not just this add-on:
+  across every machine and session signed in to it, not just this app:
   **Session limit** (`sensor.claude_code_session_limit`), **Weekly limit**
   (`sensor.claude_code_weekly_limit`) and one **Weekly limit (model)** sensor per
   model the account limits separately (e.g.
@@ -389,7 +396,7 @@ the device's main controls by default.
   `severity` and `kind` as attributes. The sensors are built from what the account
   reports, so a new limit appears on its own and one that stops being reported
   goes unavailable rather than disappearing. Accounts signed in with an API key
-  have no such limits and get no sensors at all. Needs an add-on that provides
+  have no such limits and get no sensors at all. Needs an app that provides
   account limits; older ones simply don't create these sensors.
 - **Check Claude health** (`button.claude_code_check_claude_health`) — runs the
   deeper probe described under [Health checks](#health-checks) on demand.
@@ -402,7 +409,7 @@ your own if you've renamed them.
 A ready-made overview using only built-in cards — paste it into a dashboard (**Edit
 dashboard → Add card → Manual**) to see cost, budget, chat health and MCP state at a
 glance. No extra install; adjust the entity ids if yours differ, and set the gauge
-`max` to your add-on's daily budget cap.
+`max` to your app's daily budget cap.
 
 ```yaml
 type: vertical-stack
@@ -424,7 +431,7 @@ cards:
     entity: sensor.claude_code_daily_budget_spend
     name: Daily budget
     needle: true
-    max: 5 # set to your add-on's daily budget cap
+    max: 5 # set to your app's daily budget cap
     severity:
       green: 0
       yellow: 3.5
@@ -443,7 +450,7 @@ cards:
 
 Cost (USD) and tokens are on **separate** graphs on purpose — a single graph shares
 one y-axis, so the small USD range would be flattened against the much larger token
-count. The budget gauge is only meaningful with a daily budget set on the add-on;
+count. The budget gauge is only meaningful with a daily budget set on the app;
 with no budget (unlimited) the spend still shows but the gauge scale is arbitrary.
 
 ### Health checks
@@ -452,39 +459,39 @@ The most common "dead on arrival" failure is a chat that reaches Claude but can'
 actually *see* your home. The integration checks for this on every status poll and
 raises a repair with the exact fix when it finds:
 
-- Claude isn't logged in (the add-on is up but unauthenticated);
+- Claude isn't logged in (the app is up but unauthenticated);
 - Claude has no Home Assistant token to read your home;
 - the **Model Context Protocol Server** integration is missing or unreachable;
-- Home Assistant **refuses the add-on's token** on the Model Context Protocol
+- Home Assistant **refuses the app's token** on the Model Context Protocol
   Server (a revoked token, or a non-administrator token while the server
-  requires an administrator account) — needs an add-on that reports it;
+  requires an administrator account) — needs an app that reports it;
 - nothing is exposed to Assist (so there's nothing to see or control).
 
 Separately, **a sign-in that has expired** is raised the moment a chat turn
 hits it, or from the next status poll, whichever comes first — the shared
-subscription token's refresh window is short, so an add-on asked only rarely
+subscription token's refresh window is short, so an app asked only rarely
 can lose it between chats. The repair and the chat reply both point at the
-configured engine's own fix: for the Claude Code add-on, sign in again
+configured engine's own fix: for the Claude Code app, sign in again
 (`/login`) in its console, or set a `claude setup-token` token as its OAuth
-Token option; for the Codex add-on, run `codex logout` then `codex login` in
+Token option; for the Codex app, run `codex logout` then `codex login` in
 a console shell tab, or set an API key as its API Key option. Either durable
-option survives idle spells. It clears once the add-on reports the sign-in
+option survives idle spells. It clears once the app reports the sign-in
 is good again.
 
 These checks cost nothing (they read the status poll, not Claude). Press the
 **Check Claude health** button (`button.claude_code_check_claude_health`) to run a
 deeper probe — a tiny read that confirms
-Claude can actually reach the MCP server right now. Needs the add-on ≥ 1.14.0 for
+Claude can actually reach the MCP server right now. Needs the app ≥ 1.14.0 for
 the reachability signal.
 
 ### Local voice (one-click)
 
 `claude_ha.setup_voice` turns local voice chat with Claude into one action. Give
 it a language and it installs and starts the official **Whisper** (speech-to-text)
-and **Piper** (text-to-speech) add-ons, then creates an Assist pipeline whose
+and **Piper** (text-to-speech) apps, then creates an Assist pipeline whose
 conversation agent is Claude (it also confirms the Wyoming prompts for those two
-add-ons and dismisses any duplicate prompt, so nothing is left to click). Whisper
-and Piper already set up in Wyoming — by discovery or by hand with the add-on's
+apps and dismisses any duplicate prompt, so nothing is left to click). Whisper
+and Piper already set up in Wyoming — by discovery or by hand with the app's
 internal address — are reused; if their Wyoming entry is disabled, the action says so:
 
 ```yaml
@@ -492,7 +499,7 @@ action: claude_ha.setup_voice
 data:
   language: uk        # uk, pl, en, de, …
   # tts_voice: uk_UA-ukrainian_tts-medium   # override the default voice
-  # stt_model: small-int8                    # set the Whisper model (default: keep the add-on's)
+  # stt_model: small-int8                    # set the Whisper model (default: keep the app's)
 ```
 
 Running it again updates the pipeline it created (the integration remembers it)
@@ -505,7 +512,7 @@ with `response_variable` to read it).
 
 ## Security model
 
-The security-critical work lives in the add-on; this integration deliberately
+The security-critical work lives in the app; this integration deliberately
 does the least it can.
 
 - **Bearer token, not network trust.** Every request carries a token issued via
@@ -513,50 +520,56 @@ does the least it can.
   diagnostics.
 - **Read-only by default.** Chat is treated as untrusted input and runs
   deny-by-default; state changes require explicit, scoped, confirmed intents.
-- **No cloud calls from HA.** The integration only talks to the local add-on.
+- **What leaves Home Assistant.** Only to the local app: your message, the
+  conversation id, the language, which surface it came from, the facts you chose
+  to remember, and — only if you turned on camera vision — the id of the camera
+  to look at. The integration itself attaches no entity states.
+  Claude reads and controls only the entities you have exposed to Assist, and
+  anything that changes state waits for your `yes` unless it is judged benign.
+- **No cloud calls from HA.** The integration only talks to the local app.
 
-See [SECURITY.md](SECURITY.md) for the reporting policy, and the add-on for the
+See [SECURITY.md](SECURITY.md) for the reporting policy, and the app for the
 full picture (env-scrubbed child processes, per-call statelessness, rate
 limiting, output redaction and audit logging).
 
 ## How data is updated
 
 The status sensor is refreshed by a `DataUpdateCoordinator` that polls the
-add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
+app's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
 `ask` action) are sent on demand.
 
 ## Known limitations
 
-- Requires Home Assistant OS / Supervised — the add-on is a Supervisor add-on and
+- Requires Home Assistant OS / Supervised — the app is a Supervisor app and
   is not available on Home Assistant Container or Core installs.
-- One Claude instance per Home Assistant (one add-on → one config entry).
+- One Claude instance per Home Assistant (one app → one config entry).
 - A remembered fact is sent with every chat turn as background for Claude, so
-  it counts towards what the add-on processes; keep facts short.
+  it counts towards what the app processes; keep facts short.
 
 ## Troubleshooting
 
-- **Entities unavailable for a few seconds after an add-on update or restart.**
-  Expected: while the add-on restarts its entities are unavailable and the log
-  carries one INFO line, not an error; they come back within seconds of the add-on
+- **Entities unavailable for a few seconds after an app update or restart.**
+  Expected: while the app restarts its entities are unavailable and the log
+  carries one INFO line, not an error; they come back within seconds of the app
   answering.
-- **"The Claude Code add-on is not running".** Raised when the add-on has been
-  stopped for 10 minutes. The integration does not start the add-on on its own:
-  the repair offers to start it, or start it from the add-on page. Home Assistant
+- **"The Claude Code app is not running".** Raised when the app has been
+  stopped for 10 minutes. The integration does not start the app on its own:
+  the repair offers to start it, or start it from the app page. Home Assistant
   retries setup automatically once it runs.
-- **"The add-on runs a different AI engine".** The entry was set up for one
-  engine and its add-on now reports another. Restore the add-on the entry was
-  set up for, or delete the entry and add the add-on again.
+- **"The app runs a different AI engine".** The entry was set up for one
+  engine and its app now reports another. Restore the app the entry was
+  set up for, or delete the entry and add the app again.
 - **Chat suddenly only says it couldn't finish, with no reason given.** The
-  add-on hasn't told this integration why yet (an older add-on reports every
-  failed model call the same generic way). Update the add-on; a current one
+  app hasn't told this integration why yet (an older app reports every
+  failed model call the same generic way). Update the app; a current one
   names an expired sign-in specifically and raises the repair above instead.
 - **A request is refused with a reason.** "The request is too large" means the
-  prompt or request exceeds the add-on's size limit (shown when the add-on
+  prompt or request exceeds the app's size limit (shown when the app
   publishes one); shorten it. "Can't make changes because it has no Home
-  Assistant token" means the add-on options need a token before `mode: write`
+  Assistant token" means the app options need a token before `mode: write`
   works. "Needs your explicit confirmation" means the action must be confirmed
   before it runs. "Took too long to answer" is a timeout; try again.
-- **Setup keeps retrying.** Check that the add-on is installed, started and
+- **Setup keeps retrying.** Check that the app is installed, started and
   healthy; the status endpoint must be reachable on the internal network.
 - **Diagnostics.** Download diagnostics from the integration's device page (the
   token is redacted) to inspect the last known status.
@@ -564,8 +577,8 @@ add-on's `/api/status` endpoint every 60 seconds. Prompts (chat turns and the
 ## Removal
 
 Delete the **Claude** integration from **Settings → Devices & services**. If Home
-Assistant installed the Claude Code add-on for you, remove it separately from the
-add-on store.
+Assistant installed the Claude Code app for you, remove it separately under
+**Settings → Apps**.
 
 ## Development
 
