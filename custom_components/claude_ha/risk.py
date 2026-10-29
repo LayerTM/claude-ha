@@ -2,7 +2,7 @@
 
 Judges whether a proposed Home Assistant action is important enough to require
 explicit confirmation, per ACTION from live entity metadata (not per domain).
-This is the INNER gate: the add-on's coarse per-domain 403 is a backstop beneath
+This is the INNER gate: the app's coarse per-domain 403 is a backstop beneath
 it, and Assist entity exposure is the OUTER, HA-controlled ceiling. The model's
 ``risk`` hint is advisory only — never the sole gate.
 

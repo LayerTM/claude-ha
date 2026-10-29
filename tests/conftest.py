@@ -30,7 +30,7 @@ TEST_TOKEN = "s3cr3t-bearer-token"
 TEST_SLUG = "abcd1234_claude-code"
 TEST_BASE_URL = f"http://{TEST_HOST}:{TEST_PORT}"
 
-# What an add-on that predates the engine fields reports.
+# What an app that predates the engine fields reports.
 LEGACY_STATUS_PAYLOAD = {
     "ready": True,
     "version": "1.14.0",
@@ -39,7 +39,7 @@ LEGACY_STATUS_PAYLOAD = {
     "ha_mcp": True,
     "ha_mcp_connected": True,
 }
-# Every request field the add-on's POST /api/prompt accepts.
+# Every request field the app's POST /api/prompt accepts.
 REQUEST_FIELDS = [
     "prompt",
     "mode",

@@ -1,4 +1,4 @@
-"""The AI Agent integration: Home Assistant's side of a companion add-on."""
+"""The AI Agent integration: Home Assistant's side of a companion app."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_migrate_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
     """Migrate an entry to the current config-entry version.
 
-    1.1 -> 1.2 stores the engine; every 1.1 entry was made for a Claude add-on.
+    1.1 -> 1.2 stores the engine; every 1.1 entry was made for a Claude app.
     Home Assistant refuses a newer major version before calling this, and a
     newer minor version of major 1 needs nothing from here.
     """
@@ -104,7 +104,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> 
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bool:
-    """Set up an entry: its add-on, its client, its coordinators, its platforms."""
+    """Set up an entry: its app, its client, its coordinators, its platforms."""
     engine = engine_for_entry(entry)
     if engine is None:
         # Made by a newer version that knows more engines than this one.
@@ -112,7 +112,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
             translation_domain=DOMAIN, translation_key="unsupported_engine"
         )
     await async_ensure_card_resource(hass)
-    # The add-on is Supervisor-managed only on a Supervisor install with a slug.
+    # The app is Supervisor-managed only on a Supervisor install with a slug.
     slug: str | None = entry.data.get(CONF_ADDON_SLUG) if is_hassio(hass) else None
     if slug:
         await _async_ensure_addon_running(hass, entry, slug)
@@ -131,12 +131,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> bo
     status = ClaudeStatusCoordinator(hass, entry, client, watch)
     await status.async_config_entry_first_refresh()
 
-    # Usage is supplementary and needs add-on >= 1.7.0; a non-blocking refresh
+    # Usage is supplementary and needs app >= 1.7.0; a non-blocking refresh
     # keeps setup working (its sensors just stay unavailable) if it is missing.
     usage = ClaudeUsageCoordinator(hass, entry, client, watch)
     await usage.async_refresh()
 
-    # Account-wide limits need an add-on new enough to have the endpoint; an older
+    # Account-wide limits need an app new enough to have the endpoint; an older
     # one answers 404 and its sensors simply never appear.
     limits = ClaudeAccountLimitsCoordinator(hass, entry, client, watch)
     await limits.async_refresh()
@@ -203,11 +203,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: ClaudeConfigEntry) -> N
 async def _async_ensure_addon_running(
     hass: HomeAssistant, entry: ClaudeConfigEntry, slug: str
 ) -> None:
-    """Make sure the companion add-on is installed and running before setup.
+    """Make sure the companion app is installed and running before setup.
 
-    Raises :class:`ConfigEntryNotReady` (so HA retries) while the add-on is
+    Raises :class:`ConfigEntryNotReady` (so HA retries) while the app is
     missing or down: a missing one is installed and raises a repair at once, a
-    stopped one is left to the Supervisor and reported by the add-on watch.
+    stopped one is left to the Supervisor and reported by the app watch.
     Clears the issues once it is running.
     """
     engine = engine_for_slug(slug)
@@ -242,7 +242,7 @@ async def _async_ensure_addon_running(
         )
 
     if info.state is not AddonState.RUNNING:
-        # Not ours to start: at boot the Supervisor starts the add-on right
+        # Not ours to start: at boot the Supervisor starts the app right
         # after Core, and one the user stopped stays stopped. The watch raises
         # the repair (which offers to start it) only if it stays down.
         get_addon_watch(hass, entry.entry_id, slug).async_down(info.state)

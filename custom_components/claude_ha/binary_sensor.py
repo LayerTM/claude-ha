@@ -35,15 +35,15 @@ async def async_setup_entry(
 class ClaudeAlertsBinarySensor(
     CoordinatorEntity[ClaudeStatusCoordinator], BinarySensorEntity
 ):
-    """On while the add-on has any active proactive alert (add-on >= 1.39.0).
+    """On while the app has any active proactive alert (app >= 1.39.0).
 
-    A queryable mirror of the add-on's deterministic alert set (leak / offline /
+    A queryable mirror of the app's deterministic alert set (leak / offline /
     battery / CO2 / …), so the user's own automations and history can react to it,
     not just the push notification. ``critical_count`` and each item's ``critical``
     flag distinguish always-sent alerts (leak, offline) from the rest.
 
     Primary (no diagnostic category) because it is meant to be acted on. Unavailable
-    on add-ons that don't report the field and while ``alerts`` is null (proactive
+    on apps that don't report the field and while ``alerts`` is null (proactive
     alerts off or not yet run) — both fold to ``data.alerts is None``.
     """
 
@@ -60,7 +60,7 @@ class ClaudeAlertsBinarySensor(
 
     @property
     def available(self) -> bool:
-        """Unavailable on add-ons that don't report alerts (< 1.39.0) or when null."""
+        """Unavailable on apps that don't report alerts (< 1.39.0) or when null."""
         data = self.coordinator.data
         return super().available and data is not None and data.alerts is not None
 

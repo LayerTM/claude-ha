@@ -1,10 +1,10 @@
-"""The AI engines a companion add-on can run, and how each one is presented.
+"""The AI engines a companion app can run, and how each one is presented.
 
-An entry talks to one add-on, and that add-on runs one engine. The engine of an
+An entry talks to one app, and that app runs one engine. The engine of an
 entry is stored once, in ``entry.data[CONF_ENGINE]``, and checked against the
-``engine`` the add-on reports in ``/api/status``. Everything engine-shaped
-(names, the add-on slug suffix, the device's manufacturer) is looked up here by
-that key. What an engine can do is not listed here: the add-on reports it
+``engine`` the app reports in ``/api/status``. Everything engine-shaped
+(names, the app slug suffix, the device's manufacturer) is looked up here by
+that key. What an engine can do is not listed here: the app reports it
 (inbound fields by their presence, request fields in ``request_fields``).
 """
 
@@ -21,24 +21,24 @@ from .const import CONF_ENGINE
 
 @dataclass(frozen=True, slots=True)
 class Engine:
-    """How one engine and its add-on are identified and shown."""
+    """How one engine and its app are identified and shown."""
 
     # Token in /api/status ``engine`` and in the entry's data.
     key: str
     # The engine as a user names it.
     name: str
-    # The add-on's name: device name, entry title, add-on log lines.
+    # The app's name: device name, entry title, app log lines.
     addon_name: str
-    # The add-on's Supervisor slug is repository-prefixed and therefore varies
+    # The app's Supervisor slug is repository-prefixed and therefore varies
     # per install (e.g. "abc123de_claude-code", "local_claude-code"), so it is
     # matched by this suffix, never hardcoded.
     slug_suffix: str
     manufacturer: str
     device_model: str
-    # Public GitHub repo URL: where to point a user who lacks the add-on.
+    # Public GitHub repo URL: where to point a user who lacks the app.
     repository_url: str
     # How to renew THIS engine's own sign-in to its model provider, from its
-    # add-on's own docs. A full clause ("run ...", naming where), so every
+    # app's own docs. A full clause ("run ...", naming where), so every
     # string that tells a user how to sign in reads it through a placeholder
     # instead of naming an engine's command itself.
     login_fix: str
@@ -62,9 +62,9 @@ CLAUDE: Final = Engine(
     addon_name="Claude Code",
     slug_suffix="_claude-code",
     manufacturer="Anthropic",
-    device_model="Claude Code add-on",
+    device_model="Claude Code app",
     repository_url="https://github.com/LayerTM/ClaudeInHA",
-    login_fix="run `/login` in the add-on's console",
+    login_fix="run `/login` in the app's console",
     durable_login="set a `claude setup-token` token as its OAuth Token option",
 )
 
@@ -74,7 +74,7 @@ CODEX: Final = Engine(
     addon_name="Codex",
     slug_suffix="_codex",
     manufacturer="OpenAI",
-    device_model="Codex add-on",
+    device_model="Codex app",
     repository_url="https://github.com/LayerTM/CodexInHA",
     login_fix="run `codex logout` then `codex login` in a console shell tab",
     durable_login="set an API key as its API Key option",
@@ -85,13 +85,13 @@ ENGINES: Final[Mapping[str, Engine]] = {
 }
 
 # The engine of everything that predates the engine field: entries created
-# before it was stored, and add-ons whose /api/status does not report one. Only
-# Claude add-ons existed then.
+# before it was stored, and apps whose /api/status does not report one. Only
+# Claude apps existed then.
 LEGACY_ENGINE: Final = CLAUDE
 
 
 def engine_for_slug(slug: str) -> Engine | None:
-    """Return the engine whose add-on has slug ``slug``, if any."""
+    """Return the engine whose app has slug ``slug``, if any."""
     for engine in ENGINES.values():
         if slug.endswith(engine.slug_suffix):
             return engine

@@ -50,7 +50,7 @@ _PROPOSAL = {
     "summary": "Turn off the heater",
     "intents": [{"intent": "HassTurnOff", "targets": ["switch.heater"], "data": {}}],
 }
-# What a misbehaving add-on could answer a web question with.
+# What a misbehaving app could answer a web question with.
 _LOADED_ANSWER = {
     "text": "Sunrise is at 06:12.",
     "proposal": _PROPOSAL,
@@ -63,7 +63,7 @@ _LOADED_ANSWER = {
 
 @pytest.fixture
 def web_status(aioclient_mock: AiohttpClientMocker) -> None:
-    """Mock an add-on that lists the web and memory request fields."""
+    """Mock an app that lists the web and memory request fields."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={**STATUS_PAYLOAD, "request_fields": [*REQUEST_FIELDS, "web", "memory"]},
@@ -328,19 +328,19 @@ async def test_house_agent_never_sends_web(
         (
             403,
             {"code": "web_disabled"},
-            "Web answers are switched off in the add-on.",
+            "Web answers are switched off in the app.",
             True,
         ),
         (
             501,
             {"code": "web_unsupported"},
-            "This add-on cannot answer from the web.",
+            "This app cannot answer from the web.",
             False,
         ),
         (
             400,
             {"code": "mode_mismatch", "field": "web"},
-            "The add-on rejected the web question.",
+            "The app rejected the web question.",
             False,
         ),
     ],
@@ -373,7 +373,7 @@ async def test_web_not_listed_is_refused_without_a_request(
     aioclient_mock: AiohttpClientMocker,
     mock_status: None,
 ) -> None:
-    """An add-on that does not list `web` is never sent the question to answer."""
+    """An app that does not list `web` is never sent the question to answer."""
     aioclient_mock.clear_requests()
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=STATUS_PAYLOAD)
     aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)

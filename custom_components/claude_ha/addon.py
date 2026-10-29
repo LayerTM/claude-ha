@@ -1,8 +1,8 @@
-"""Supervisor add-on management for the companion add-ons.
+"""Supervisor app management for the companion apps.
 
-The add-on slug is repository-prefixed and varies per install, so it is resolved
+The app slug is repository-prefixed and varies per install, so it is resolved
 at runtime (from discovery, or by matching each engine's slug suffix against the
-installed/store add-on lists) rather than hardcoded. More than one add-on can
+installed/store app lists) rather than hardcoded. More than one app can
 match (e.g. a store build and a local build), so lookups return every match and
 the caller decides; nothing here picks one silently.
 """
@@ -40,11 +40,11 @@ DATA_ADDON_WATCHES = f"{DOMAIN}_addon_watches"
 def get_addon_manager(
     hass: HomeAssistant, slug: str, name: str | None = None
 ) -> AddonManager:
-    """Return a cached :class:`AddonManager` for an add-on slug.
+    """Return a cached :class:`AddonManager` for an app slug.
 
     Cached per slug in ``hass.data`` (rather than via ``@singleton``) because the
-    slug is only known at runtime. An engine's add-on (from discovery or a
-    lookup) is named by its engine; any other add-on (Whisper, Piper) must be
+    slug is only known at runtime. An engine's app (from discovery or a
+    lookup) is named by its engine; any other app (Whisper, Piper) must be
     named by the caller.
     """
     managers: dict[str, AddonManager] = hass.data.setdefault(DATA_ADDON_MANAGERS, {})
@@ -56,7 +56,7 @@ def get_addon_manager(
 
 
 def _engine(slug: str) -> Engine:
-    """Return the engine of a slug already known to be an engine's add-on."""
+    """Return the engine of a slug already known to be an engine's app."""
     engine = engine_for_slug(slug)
     assert engine is not None
     return engine
@@ -65,14 +65,14 @@ def _engine(slug: str) -> Engine:
 async def async_find_addon_slugs(
     hass: HomeAssistant, engine: Engine | None = None
 ) -> list[str]:
-    """Return every slug a companion add-on could have, sorted.
+    """Return every slug a companion app could have, sorted.
 
-    ``engine`` narrows the search to that engine's add-on only; the default
-    ``None`` matches any engine's add-on.
+    ``engine`` narrows the search to that engine's app only; the default
+    ``None`` matches any engine's app.
 
-    Installed add-ons win (the common case: the user installed the add-on,
+    Installed apps win (the common case: the user installed the app,
     which then advertised itself via discovery); only when none is installed
-    is the add-on store searched, so the config flow can offer to install one.
+    is the app store searched, so the config flow can offer to install one.
     """
     installed = _find_installed(hass, engine)
     if installed:
@@ -81,7 +81,7 @@ async def async_find_addon_slugs(
 
 
 def _matches(slug: str, engine: Engine | None) -> bool:
-    """Whether ``slug`` is an add-on of ``engine`` (any engine if ``None``)."""
+    """Whether ``slug`` is an app of ``engine`` (any engine if ``None``)."""
     found = engine_for_slug(slug)
     if engine is None:
         return found is not None
@@ -90,7 +90,7 @@ def _matches(slug: str, engine: Engine | None) -> bool:
 
 @callback
 def _find_installed(hass: HomeAssistant, engine: Engine | None = None) -> list[str]:
-    """Match the slug suffix against installed add-ons (sync Supervisor cache)."""
+    """Match the slug suffix against installed apps (sync Supervisor cache)."""
     try:
         addons = get_addons_info(hass)
     except Exception:  # noqa: BLE001 - Supervisor data may not be loaded yet
@@ -103,7 +103,7 @@ def _find_installed(hass: HomeAssistant, engine: Engine | None = None) -> list[s
 async def _find_in_store(
     hass: HomeAssistant, engine: Engine | None = None
 ) -> list[str]:
-    """Match the slug suffix against store add-ons that are not yet installed."""
+    """Match the slug suffix against store apps that are not yet installed."""
     client = get_supervisor_client(hass)
     try:
         store_addons = await client.store.addons_list()
@@ -118,7 +118,7 @@ async def _find_in_store(
 
 @callback
 def get_addon_watch(hass: HomeAssistant, entry_id: str, slug: str) -> AddonWatch:
-    """Return the entry's add-on watch, kept across setup retries and reloads.
+    """Return the entry's app watch, kept across setup retries and reloads.
 
     An outage that starts while the entry is still retrying its setup must be
     timed from its first sighting, so the watch outlives any one setup attempt.
@@ -139,7 +139,7 @@ def async_drop_addon_watch(hass: HomeAssistant, entry_id: str) -> None:
 def async_create_addon_issue(
     hass: HomeAssistant, entry_id: str, issue: str, slug: str, *, fixable: bool
 ) -> None:
-    """Raise one entry's repair issue for its missing/stopped add-on."""
+    """Raise one entry's repair issue for its missing/stopped app."""
     engine = _engine(slug)
     async_raise_issue(
         hass,
@@ -158,24 +158,24 @@ def async_create_addon_issue(
 
 @callback
 def async_clear_addon_issues(hass: HomeAssistant, entry_id: str) -> None:
-    """Remove one entry's add-on availability repair issues."""
+    """Remove one entry's app availability repair issues."""
     async_clear_issues(
         hass, entry_id, ISSUE_ADDON_NOT_RUNNING, ISSUE_ADDON_NOT_INSTALLED
     )
 
 
 class AddonWatch:
-    """Tell an expected add-on restart apart from an outage.
+    """Tell an expected app restart apart from an outage.
 
-    An update, a restart from the add-on page and a host reboot all leave the
-    add-on's API refusing connections for a few seconds; that is a normal event,
-    not an error. While the Supervisor still manages the add-on, a failed poll
+    An update, a restart from the app page and a host reboot all leave the
+    app's API refusing connections for a few seconds; that is a normal event,
+    not an error. While the Supervisor still manages the app, a failed poll
     is therefore reported once at INFO and the entities just go unavailable. If
-    the add-on has not answered for :data:`ADDON_OUTAGE_GRACE`, it is an outage:
+    the app has not answered for :data:`ADDON_OUTAGE_GRACE`, it is an outage:
     one WARNING, plus a repair offering to start it when it is not running.
 
-    The setup of an entry reports a stopped add-on here too, rather than
-    starting it: the Supervisor starts the add-on itself (at boot, right after
+    The setup of an entry reports a stopped app here too, rather than
+    starting it: the Supervisor starts the app itself (at boot, right after
     Core), and one the user stopped stays stopped until the repair is used.
 
     One watch is shared by setup and every poller of an entry, so the INFO, the
@@ -183,7 +183,7 @@ class AddonWatch:
     """
 
     def __init__(self, hass: HomeAssistant, entry_id: str, slug: str | None) -> None:
-        """Watch entry ``entry_id``'s add-on ``slug``; ``None`` without Supervisor."""
+        """Watch entry ``entry_id``'s app ``slug``; ``None`` without Supervisor."""
         self._hass = hass
         self._entry_id = entry_id
         self._slug = slug
@@ -192,7 +192,7 @@ class AddonWatch:
 
     @property
     def _engine(self) -> Engine:
-        """The watched add-on's engine (only asked once a slug is known)."""
+        """The watched app's engine (only asked once a slug is known)."""
         assert self._slug is not None
         return _engine(self._slug)
 
@@ -204,8 +204,8 @@ class AddonWatch:
     async def async_unreachable(self) -> bool:
         """Record a failed poll; return ``True`` if it is an expected restart.
 
-        ``False`` means the Supervisor cannot vouch for the add-on (no
-        Supervisor, its info is unreadable, or the add-on is gone), and the
+        ``False`` means the Supervisor cannot vouch for the app (no
+        Supervisor, its info is unreadable, or the app is gone), and the
         failure must be reported as an error by the caller as usual.
         """
         if self._slug is None:
@@ -223,13 +223,13 @@ class AddonWatch:
 
     @callback
     def async_down(self, state: AddonState) -> None:
-        """Record that the add-on is not answering, in Supervisor ``state``."""
+        """Record that the app is not answering, in Supervisor ``state``."""
         now = dt_util.utcnow()
         if self._down_since is None:
             self._down_since = now
             engine = self._engine
             LOGGER.info(
-                "The %s add-on is not answering (Supervisor state: %s); %s "
+                "The %s app is not answering (Supervisor state: %s); %s "
                 "is unavailable until it is back",
                 engine.addon_name,
                 state.value,
@@ -250,20 +250,20 @@ class AddonWatch:
         self._outage_reported = False
 
     def _report_outage(self, state: AddonState) -> None:
-        """Surface an add-on that stayed unreachable past the grace period."""
+        """Surface an app that stayed unreachable past the grace period."""
         assert self._slug is not None
         engine = self._engine
         minutes = int(ADDON_OUTAGE_GRACE.total_seconds() // 60)
         if state is AddonState.RUNNING:
             LOGGER.warning(
-                "The %s add-on is running but its API has not answered for %d "
-                "minutes; check the add-on log",
+                "The %s app is running but its API has not answered for %d "
+                "minutes; check the app log",
                 engine.addon_name,
                 minutes,
             )
             return
         LOGGER.warning(
-            "The %s add-on has not been running for %d minutes (Supervisor "
+            "The %s app has not been running for %d minutes (Supervisor "
             "state: %s); %s is unavailable until it is started",
             engine.addon_name,
             minutes,

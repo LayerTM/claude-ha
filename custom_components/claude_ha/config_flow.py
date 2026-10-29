@@ -53,12 +53,12 @@ from .schema import vol
 ON_SUPERVISOR_SCHEMA = vol.Schema({vol.Required(CONF_USE_ADDON, default=True): bool})
 ADD_REPOSITORY_SCHEMA = vol.Schema({vol.Required("confirm", default=False): bool})
 
-# The add-on slug picked in the "pick_addon" step.
+# The app slug picked in the "pick_addon" step.
 CONF_ADDON = "addon"
 
 
 class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for an AI agent, backed by its companion add-on."""
+    """Handle a config flow for an AI agent, backed by its companion app."""
 
     VERSION = 1
     MINOR_VERSION = CONFIG_ENTRY_MINOR_VERSION
@@ -81,7 +81,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle a user-initiated flow. Requires Supervisor + the add-on."""
+        """Handle a user-initiated flow. Requires Supervisor + the app."""
         if not is_hassio(self.hass):
             return self.async_abort(reason="not_hassio")
         return await self.async_step_engine()
@@ -114,19 +114,19 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_resolve_engine(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Resolve the chosen engine's add-on slug, then continue the flow."""
+        """Resolve the chosen engine's app slug, then continue the flow."""
         result = await self._async_resolve_slug()
         if result is not None:
             return result
         return await self.async_step_on_supervisor()
 
     async def _async_resolve_slug(self) -> ConfigFlowResult | None:
-        """Find the chosen engine's add-on slug.
+        """Find the chosen engine's app slug.
 
         On success, sets ``self._addon_slug`` and returns ``None`` (the caller
         proceeds); otherwise returns the step the caller should show instead:
         a choice between several candidates, or an offer to add the engine's
-        add-on repository when none was found.
+        app repository when none was found.
         """
         assert self._engine_key is not None
         engine = ENGINES[self._engine_key]
@@ -147,7 +147,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_add_repository(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Offer to add the chosen engine's add-on repository to the store."""
+        """Offer to add the chosen engine's app repository to the store."""
         engine = self._engine
         if user_input is None:
             return self.async_show_form(
@@ -169,7 +169,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
             await client.store.reload()
         except Exception as err:  # noqa: BLE001 - Supervisor store may be unavailable
             LOGGER.error(
-                "Failed to add the %s add-on repository: %s", engine.addon_name, err
+                "Failed to add the %s app repository: %s", engine.addon_name, err
             )
             return self.async_abort(reason="addon_get_discovery_info_failed")
 
@@ -183,7 +183,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_hassio(
         self, discovery_info: HassioServiceInfo
     ) -> ConfigFlowResult:
-        """Handle add-on discovery (the add-on advertised host/port/token)."""
+        """Handle app discovery (the app advertised host/port/token)."""
         if engine_for_slug(discovery_info.slug) is None:
             return self.async_abort(reason="unsupported_addon")
 
@@ -204,7 +204,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_hassio_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Confirm setup of the discovered add-on."""
+        """Confirm setup of the discovered app."""
         if user_input is not None:
             return await self.async_step_on_supervisor({CONF_USE_ADDON: True})
         # The hassio_confirm title/description use both {engine} and {addon};
@@ -221,7 +221,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_on_supervisor(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Branch on the (already-resolved) add-on's install/run state."""
+        """Branch on the (already-resolved) app's install/run state."""
         if user_input is None:
             return self.async_show_form(
                 step_id="on_supervisor",
@@ -237,9 +237,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             info = await self._addon_manager.async_get_addon_info()
         except AddonError as err:
-            LOGGER.error(
-                "Failed to get %s add-on info: %s", self._engine.addon_name, err
-            )
+            LOGGER.error("Failed to get %s app info: %s", self._engine.addon_name, err)
             raise AbortFlow("addon_info_failed") from err
 
         if info.state is AddonState.RUNNING:
@@ -251,7 +249,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_pick_addon(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user choose when more than one add-on could be meant."""
+        """Let the user choose when more than one app could be meant."""
         if user_input is not None:
             self._addon_slug = user_input[CONF_ADDON]
             return await self.async_step_on_supervisor()
@@ -270,7 +268,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_install_addon(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Install the add-on, showing progress."""
+        """Install the app, showing progress."""
         if self.install_task is None:
             self.install_task = self.hass.async_create_task(self._async_install_addon())
         if not self.install_task.done():
@@ -283,9 +281,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await self.install_task
         except AddonError as err:
-            LOGGER.error(
-                "Failed to install %s add-on: %s", self._engine.addon_name, err
-            )
+            LOGGER.error("Failed to install %s app: %s", self._engine.addon_name, err)
             return self.async_show_progress_done(next_step_id="install_failed")
         finally:
             self.install_task = None
@@ -300,7 +296,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_start_addon(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Start the add-on, showing progress."""
+        """Start the app, showing progress."""
         if self.start_task is None:
             self.start_task = self.hass.async_create_task(self._async_start_addon())
         if not self.start_task.done():
@@ -313,7 +309,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await self.start_task
         except AddonError as err:
-            LOGGER.error("Failed to start %s add-on: %s", self._engine.addon_name, err)
+            LOGGER.error("Failed to start %s app: %s", self._engine.addon_name, err)
             return self.async_show_progress_done(next_step_id="start_failed")
         finally:
             self.start_task = None
@@ -328,7 +324,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_finish(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Read the add-on's connection details, test them, and create the entry."""
+        """Read the app's connection details, test them, and create the entry."""
         if self._discovery is None:
             self._discovery = await self._async_addon_connection_info()
 
@@ -351,14 +347,14 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
             await client.async_get_status()
         except ClaudeEngineMismatchError as err:
             LOGGER.error(
-                "The %s add-on reports engine %r, not %r",
+                "The %s app reports engine %r, not %r",
                 engine.addon_name,
                 err.reported,
                 engine.key,
             )
             return self.async_abort(reason="engine_mismatch")
         except ClaudeError as err:
-            LOGGER.error("Could not reach the %s add-on: %s", engine.addon_name, err)
+            LOGGER.error("Could not reach the %s app: %s", engine.addon_name, err)
             return self.async_abort(reason="cannot_connect")
 
         return self.async_create_entry(
@@ -374,9 +370,9 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @property
     def _engine(self) -> Engine:
-        """The engine of the add-on this flow sets up.
+        """The engine of the app this flow sets up.
 
-        Resolved from the add-on slug once it is known; before that (only
+        Resolved from the app slug once it is known; before that (only
         while ``add_repository`` is showing its form, ahead of a slug) it is
         the engine chosen in the ``engine`` step.
         """
@@ -399,7 +395,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         await self._addon_manager.async_schedule_start_addon()
 
     async def _async_addon_connection_info(self) -> dict[str, Any]:
-        """Obtain host/port/token from add-on discovery, falling back to options."""
+        """Obtain host/port/token from app discovery, falling back to options."""
         addon = self._addon_manager
         try:
             discovery = await addon.async_get_addon_discovery_info()
@@ -411,7 +407,7 @@ class ClaudeConfigFlow(ConfigFlow, domain=DOMAIN):
         ):
             return dict(discovery)
 
-        # Fallback (contract §1): read the token from add-on options + derive
+        # Fallback (contract §1): read the token from app options + derive
         # host/port.
         try:
             info: AddonInfo = await addon.async_get_addon_info()

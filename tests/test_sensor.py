@@ -56,7 +56,7 @@ async def test_status_sensor_initializing(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A not-ready add-on reports the initializing state."""
+    """A not-ready app reports the initializing state."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={
@@ -100,7 +100,7 @@ async def test_chat_health_sensor_unavailable_without_field(
     mock_config_entry: MockConfigEntry,
     mock_status: None,
 ) -> None:
-    """An add-on that doesn't report chat_health leaves the sensor unavailable."""
+    """An app that doesn't report chat_health leaves the sensor unavailable."""
     await setup_integration(hass, mock_config_entry)
     state = hass.states.get(_sensor(hass, mock_config_entry, "chat_health"))
     assert state is not None
@@ -140,7 +140,7 @@ async def test_chat_health_sensor_ok(
     assert state.attributes["last_failure"] is None
     assert state.attributes["window_from"] is None
     assert state.attributes["window_to"] is None
-    # The add-on here predates 1.55.0 and sends no `window_dated`.
+    # The app here predates 1.55.0 and sends no `window_dated`.
     assert state.attributes["window_dated"] is None
 
 
@@ -162,7 +162,7 @@ async def test_chat_health_window_dated_says_how_much_of_the_window_is_stamped(
     sent: object,
     expected: int | None,
 ) -> None:
-    """`window_dated` is surfaced when the add-on sends it, and only then.
+    """`window_dated` is surfaced when the app sends it, and only then.
 
     Without it the two window stamps cannot be read: identical ends mean either a
     single stamped run or a window that truly spans an instant, and there is
@@ -171,9 +171,9 @@ async def test_chat_health_window_dated_says_how_much_of_the_window_is_stamped(
     six days.
 
     Both directions are exercised, because the absent case is the one that has to
-    keep working: an add-on older than 1.55.0 sends no such key, and the
+    keep working: an app older than 1.55.0 sends no such key, and the
     attribute must then be `None` rather than an invented 0 — 0 is a real answer
-    here, meaning the add-on stamped nothing. The malformed values ride the same
+    here, meaning the app stamped nothing. The malformed values ride the same
     coercion as every other count, so an unreadable one reads as unknown rather
     than raising out of the poll.
     """
@@ -206,7 +206,7 @@ async def test_chat_health_sensor_degraded(
 ) -> None:
     """A failure rate over the threshold reads degraded, with the reason token.
 
-    No stamps here, so this is also the fail-closed path: an add-on older than
+    No stamps here, so this is also the fail-closed path: an app older than
     1.49.0 is judged on the rate alone and keeps warning.
     """
     aioclient_mock.get(
@@ -698,7 +698,7 @@ async def test_budget_sensor_unavailable_without_field(
     mock_config_entry: MockConfigEntry,
     mock_status: None,
 ) -> None:
-    """An add-on that doesn't report a budget leaves the sensor unavailable."""
+    """An app that doesn't report a budget leaves the sensor unavailable."""
     await setup_integration(hass, mock_config_entry)
     state = hass.states.get(_sensor(hass, mock_config_entry, "budget"))
     assert state is not None
@@ -728,7 +728,7 @@ async def test_status_poll_updates_client_read_timeout(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A status poll feeds the add-on's prompt budget into the client's timeout."""
+    """A status poll feeds the app's prompt budget into the client's timeout."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={"ready": True, "prompt_timeout_ms": 200000},

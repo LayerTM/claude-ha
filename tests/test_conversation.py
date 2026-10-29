@@ -72,7 +72,7 @@ async def test_conversation_reply(
     mock_status: None,
     mock_prompt: None,
 ) -> None:
-    """A chat turn forwards to the add-on and returns Claude's answer."""
+    """A chat turn forwards to the app and returns Claude's answer."""
     await setup_integration(hass, mock_config_entry)
 
     result = await conversation.async_converse(
@@ -93,7 +93,7 @@ async def test_conversation_forwards_language(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """The turn's language is forwarded so the add-on can localize its messages."""
+    """The turn's language is forwarded so the app can localize its messages."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
@@ -236,7 +236,7 @@ async def test_answer_after_failed_local_intent_is_not_an_error(
 
     A failed local attempt must not turn Claude's answer into an error response
     (the Assist dialog shows an error response as a second, red bubble), in
-    this turn or in a later turn of the same conversation. The add-on may
+    this turn or in a later turn of the same conversation. The app may
     stream deltas, stream only its final line, or answer with plain JSON.
     """
     done = json.dumps({"type": "done", **PROMPT_PAYLOAD}) + "\n"
@@ -301,7 +301,7 @@ async def test_conversation_error(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """An add-on error is returned as an error response, not an exception."""
+    """An app error is returned as an error response, not an exception."""
     aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", status=503)
     await setup_integration(hass, mock_config_entry)
 
@@ -330,7 +330,7 @@ async def test_conversation_names_an_expired_signin_and_raises_the_repair(
 ) -> None:
     """A degraded read that ended auth-expired gets the sign-in sentence, and a repair.
 
-    Not the add-on's own "couldn't finish that response" apology: the reason
+    Not the app's own "couldn't finish that response" apology: the reason
     the wire carries is read before anything else in the body.
     """
     aioclient_mock.post(
@@ -455,7 +455,7 @@ async def test_conversation_forwards_surface(
     satellite_id: str | None,
     expected: str,
 ) -> None:
-    """A new-enough add-on gets surface=voice for satellite turns, text otherwise."""
+    """A new-enough app gets surface=voice for satellite turns, text otherwise."""
     _mock_status(aioclient_mock, "1.28.0")
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
@@ -481,7 +481,7 @@ async def test_conversation_omits_surface_for_old_addon(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """An add-on below 1.28.0 rejects unknown keys, so surface is never sent."""
+    """An app below 1.28.0 rejects unknown keys, so surface is never sent."""
     _mock_status(aioclient_mock, "1.27.9")
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
@@ -1058,7 +1058,7 @@ async def test_modify_not_intercepted_on_old_addon(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A pre-1.36.0 add-on makes a modify a normal read (no edit_automation)."""
+    """A pre-1.36.0 app makes a modify a normal read (no edit_automation)."""
     _mock_status(aioclient_mock, "1.14.0")
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",

@@ -3,7 +3,7 @@
 Vision is opt-in and privacy-bounded: a camera is only ever attached when the
 message is clearly visual AND exactly one camera can be resolved AND that camera
 is exposed to Assist — the same ceiling as everything else Claude can see. The
-integration passes only the entity_id; the add-on fetches and downscales the
+integration passes only the entity_id; the app fetches and downscales the
 snapshot itself.
 """
 

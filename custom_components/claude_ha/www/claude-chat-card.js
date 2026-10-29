@@ -1,7 +1,7 @@
 /**
  * Claude chat card for Home Assistant.
  *
- * Talks to HA (not the add-on directly — the add-on port is internal-only) via
+ * Talks to HA (not the app directly — the app port is internal-only) via
  * the `claude_ha.ask` service, which returns Claude's answer plus any structured
  * `proposal`. Read mode is always used for typed messages; a proposal is offered
  * as an inline Apply/Dismiss, and Apply issues the confirmed `mode: "write"` call

@@ -64,7 +64,7 @@ def _serve(
     *,
     status: int = 200,
 ) -> None:
-    """Answer the add-on endpoints, with the given account-limits response."""
+    """Answer the app endpoints, with the given account-limits response."""
     aioclient_mock.clear_requests()
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=STATUS_PAYLOAD)
     aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
@@ -152,7 +152,7 @@ async def test_api_key_account_creates_no_limit_entities(
 ) -> None:
     """An API-key account has no limits: no entities, nothing unavailable, no noise.
 
-    Such an account genuinely has no rate-limit buckets upstream, so the add-on
+    Such an account genuinely has no rate-limit buckets upstream, so the app
     answers 200 with an empty list. Nothing about that is a failure, and the
     usage sensors must keep working exactly as before.
     """
@@ -180,7 +180,7 @@ async def test_endpoint_without_an_answer_is_quiet(
     caplog: pytest.LogCaptureFixture,
     status: int,
 ) -> None:
-    """An add-on without the endpoint (404) or without upstream (503) is quiet."""
+    """An app without the endpoint (404) or without upstream (503) is quiet."""
     _serve(aioclient_mock, status=status)
     await setup_integration(hass, mock_config_entry)
 

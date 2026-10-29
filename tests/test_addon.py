@@ -1,4 +1,4 @@
-"""Tests for add-on slug resolution."""
+"""Tests for app slug resolution."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ OTHER_ENGINE = Engine(
     addon_name="Other Agent",
     slug_suffix="_other-agent",
     manufacturer="Someone",
-    device_model="Other Agent add-on",
+    device_model="Other Agent app",
     repository_url="https://github.com/LayerTM/OtherInHA",
     login_fix="run its own login command",
     durable_login="set its own durable token",
@@ -47,7 +47,7 @@ def test_get_addon_manager_for_a_third_party_addon(hass: HomeAssistant) -> None:
 
 
 async def test_resolve_from_installed(hass: HomeAssistant) -> None:
-    """An installed add-on is matched by slug suffix."""
+    """An installed app is matched by slug suffix."""
     with patch(
         "custom_components.claude_ha.addon.get_addons_info",
         return_value={"other_addon": {}, TEST_SLUG: {}},
@@ -74,7 +74,7 @@ def _engine_for_slug(slug: str) -> Engine | None:
 
 
 async def test_resolve_installed_filters_by_engine(hass: HomeAssistant) -> None:
-    """Passing ``engine`` returns only that engine's installed add-ons."""
+    """Passing ``engine`` returns only that engine's installed apps."""
     with (
         patch(
             "custom_components.claude_ha.addon.get_addons_info",
@@ -88,7 +88,7 @@ async def test_resolve_installed_filters_by_engine(hass: HomeAssistant) -> None:
 
 
 async def test_resolve_store_filters_by_engine(hass: HomeAssistant) -> None:
-    """Passing ``engine`` returns only that engine's store add-ons."""
+    """Passing ``engine`` returns only that engine's store apps."""
     client = MagicMock()
     client.store.addons_list = _async_return(
         [
@@ -138,7 +138,7 @@ def test_addon_watch_is_per_entry(hass: HomeAssistant) -> None:
 
 
 async def test_resolve_from_store(hass: HomeAssistant) -> None:
-    """A not-installed store add-on is matched when nothing is installed."""
+    """A not-installed store app is matched when nothing is installed."""
     store_addon = MagicMock(slug=TEST_SLUG, installed=False)
     client = MagicMock()
     client.store.addons_list = _async_return([store_addon])

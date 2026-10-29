@@ -1,6 +1,6 @@
 """Repair issues owned by one config entry.
 
-Several entries can be loaded at once (one per companion add-on), and each one
+Several entries can be loaded at once (one per companion app), and each one
 raises and clears its own issues on its own schedule. An issue id is therefore
 the issue kind plus the entry id, while the translation key stays the kind, so
 the text a user reads is the same whichever entry raised it.

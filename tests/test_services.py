@@ -67,7 +67,7 @@ async def test_ask_write_mode(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """Write mode forwards the confirmed intents to the add-on (contract §2)."""
+    """Write mode forwards the confirmed intents to the app (contract §2)."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "Done.", "proposal": None, "tools_used": [], "truncated": False},
@@ -95,7 +95,7 @@ async def test_ask_write_requires_intents(
     mock_config_entry: MockConfigEntry,
     mock_status: None,
 ) -> None:
-    """Write mode without intents is rejected before any add-on call."""
+    """Write mode without intents is rejected before any app call."""
     await setup_integration(hass, mock_config_entry)
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
@@ -178,7 +178,7 @@ async def test_ask_prompt_too_large(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A prompt over the add-on's published limit is refused before sending."""
+    """A prompt over the app's published limit is refused before sending."""
     await setup_integration(hass, mock_config_entry)
     calls = len(aioclient_mock.mock_calls)
 
@@ -255,7 +255,7 @@ async def test_ask_add_on_error(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """An add-on failure surfaces as a HomeAssistantError."""
+    """An app failure surfaces as a HomeAssistantError."""
     aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", status=401)
     await setup_integration(hass, mock_config_entry)
 

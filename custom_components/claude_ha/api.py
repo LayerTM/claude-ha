@@ -1,6 +1,6 @@
-"""HTTP client for the Claude Code add-on's bearer-authenticated prompt server.
+"""HTTP client for the Claude Code app's bearer-authenticated prompt server.
 
-This is the CLIENT half of the contract in ``.research/CONTRACT.md``. The add-on
+This is the CLIENT half of the HTTP contract with the Claude Code app. The app
 (repo ``LayerTM/ClaudeInHA``) implements the matching server on an internal-only
 port. The two repos are developed independently and connect ONLY through that
 contract, so keep request/response shapes here in lockstep with it.
@@ -115,7 +115,7 @@ from .engines import LEGACY_ENGINE, Engine
 
 # The English text of the ``unknown`` exception translation, for when no
 # translation can be loaded (a test holds the two equal).
-GENERIC_ERROR_MESSAGE: Final = "Unexpected error talking to the add-on."
+GENERIC_ERROR_MESSAGE: Final = "Unexpected error talking to the app."
 
 
 class ClaudeError(HomeAssistantError):
@@ -176,7 +176,7 @@ def _exception_key(translation_key: str | None) -> str:
 
 
 class ClaudeConnectionError(ClaudeError):
-    """The add-on prompt server is unreachable, timed out, or is busy."""
+    """The app prompt server is unreachable, timed out, or is busy."""
 
     translation_key = "cannot_connect"
 
@@ -188,7 +188,7 @@ PERCENT_MAX: Final = 100
 
 
 class ClaudeNotFoundError(ClaudeError):
-    """The add-on answered 404: it has no such endpoint (an older add-on).
+    """The app answered 404: it has no such endpoint (an older app).
 
     Distinct from a generic failure because a missing endpoint is not a fault —
     the caller reports it by going unavailable rather than by logging an error.
@@ -205,8 +205,8 @@ class ClaudeAuthExpiredError(ClaudeError):
     """The engine's own sign-in to its model provider is no longer accepted.
 
     Distinct from :class:`ClaudeAuthError`, which is the bearer token between
-    this integration and the add-on. Never retried — a human must sign in
-    again — and raised from either wire shape the add-on uses for it: a
+    this integration and the app. Never retried — a human must sign in
+    again — and raised from either wire shape the app uses for it: a
     degraded read's ``reason`` (handled in :func:`_parse_prompt_result`) or a
     write's coded error (handled through ``_ERROR_CODES`` below).
     """
@@ -215,7 +215,7 @@ class ClaudeAuthExpiredError(ClaudeError):
 
 
 class ClaudeRateLimitError(ClaudeError):
-    """The add-on rate-limited or shed the request (429/503)."""
+    """The app rate-limited or shed the request (429/503)."""
 
     translation_key = "rate_limited"
 
@@ -227,19 +227,19 @@ class ClaudeRequestError(ClaudeError):
 
 
 class ClaudePromptTooLargeError(ClaudeRequestError, ServiceValidationError):
-    """The prompt is longer than the add-on accepts; the caller must shorten it."""
+    """The prompt is longer than the app accepts; the caller must shorten it."""
 
     translation_key = "prompt_too_large"
 
 
 class ClaudeWebDisabledError(ClaudeError, ServiceValidationError):
-    """The add-on refused a web answer: its web option is off (403 ``web_disabled``)."""
+    """The app refused a web answer: its web option is off (403 ``web_disabled``)."""
 
     translation_key = "web_disabled"
 
 
 class ClaudeWebUnsupportedError(ClaudeError, ServiceValidationError):
-    """The add-on cannot answer from the web (501, or it does not list the field)."""
+    """The app cannot answer from the web (501, or it does not list the field)."""
 
     translation_key = "web_unsupported"
 
@@ -254,19 +254,19 @@ class ClaudeActionFailedError(ClaudeError):
     translation_key = "action_failed"
 
     def __init__(self, message: str, actions: list[ActionOutcome]) -> None:
-        """Init with log detail and the outcomes the add-on reported."""
+        """Init with log detail and the outcomes the app reported."""
         super().__init__(message)
         self.actions = actions
 
 
 class ClaudeEngineMismatchError(ClaudeError):
-    """The add-on runs a different engine than the client was made for."""
+    """The app runs a different engine than the client was made for."""
 
     translation_key = "engine_mismatch"
 
     def __init__(self, reported: str) -> None:
-        """Init with the engine the add-on reported."""
-        super().__init__(f"The add-on runs engine {reported!r}")
+        """Init with the engine the app reported."""
+        super().__init__(f"The app runs engine {reported!r}")
         self.reported = reported
 
 
@@ -279,7 +279,7 @@ class Proposal:
 
 
 class MemoryItem(TypedDict):
-    """A fact as sent to the add-on: its id and its text."""
+    """A fact as sent to the app: its id and its text."""
 
     id: str
     text: str
@@ -310,9 +310,9 @@ def normalize_fact(text: object) -> str | None:
 
 
 def parse_memory_change(raw: object) -> MemoryChange | None:
-    """Validate the add-on's ``memory_change``; None when it asks for nothing.
+    """Validate the app's ``memory_change``; None when it asks for nothing.
 
-    The add-on bounds it too; anything outside the bounds here is dropped, not
+    The app bounds it too; anything outside the bounds here is dropped, not
     trusted. Ids are checked against the turn's own facts when applied.
     """
     if not isinstance(raw, dict):
@@ -390,21 +390,21 @@ class StreamDelta:
 
 @dataclass(slots=True)
 class ChatHealth:
-    """Rolling chat-reliability summary from ``/api/status`` (add-on >= 1.20.0).
+    """Rolling chat-reliability summary from ``/api/status`` (app >= 1.20.0).
 
-    The timestamps are epoch milliseconds and arrive with add-on 1.49.0; ``None``
-    means UNKNOWN, either because the add-on is older or because the entry was
+    The timestamps are epoch milliseconds and arrive with app 1.49.0; ``None``
+    means UNKNOWN, either because the app is older or because the entry was
     written before it started stamping. ``consecutive_ok`` arrives in the same
     version but is counted by entry order rather than by clock, so it is a plain
-    number even on unstamped history — ``None`` here only ever means "older add-on".
+    number even on unstamped history — ``None`` here only ever means "older app".
 
-    ``window_dated`` (add-on >= 1.55.0) says how many of the ``recent`` runs
+    ``window_dated`` (app >= 1.55.0) says how many of the ``recent`` runs
     carried a stamp, and so how much of the window the two timestamps actually
     span: 1 means they are one instant repeated rather than a range, and a value
-    equal to ``recent`` means the whole window. ``None`` on an older add-on —
+    equal to ``recent`` means the whole window. ``None`` on an older app —
     which is not the same as 0, and is why the two are kept apart here.
 
-    The add-on trims this window by count (cap 50), never by age — deciding what
+    The app trims this window by count (cap 50), never by age — deciding what
     counts as healthy is deliberately left to this side.
 
     ``degraded`` and ``recovered`` are disjoint subsets of ``recent`` (a recovered
@@ -444,15 +444,15 @@ class ChatHealth:
         all-failed window for free, since neither has any clean run at all.
 
         **The count does not exceed the successes that exist.** ``consecutive_ok``
-        cannot be larger than ``recent - degraded`` while the add-on counts
+        cannot be larger than ``recent - degraded`` while the app counts
         correctly, so on valid input this clause never fires; it is here for
         invalid input, where it refuses a count that is too high, and a nonsensical
         ``degraded > recent`` whose success count goes negative. Unreachable on
         valid input is not dead code, and this is the only clause standing between
-        a miscounting add-on and a cleared warning — ``4/4/5``, ``4/4/99`` and
+        a miscounting app and a cleared warning — ``4/4/5``, ``4/4/99`` and
         ``10/2/99`` all read as recovered without it.
 
-        This second clause used to be written as ``==``, and the add-on's owner
+        This second clause used to be written as ``==``, and the app's owner
         measured on a live install what that cost: equality demands that EVERY
         success in the window came after the last failure, which is only true of a
         monotone window — in practice, a nearly-new install. On the case this
@@ -481,11 +481,11 @@ class ChatHealth:
         sensitive to whether it is failing right now, which is the opposite blind
         spot, so the two together cover each other.
 
-        ``None`` on an add-on older than 1.49.0, which raises nothing early — the
+        ``None`` on an app older than 1.49.0, which raises nothing early — the
         same fail-closed direction as every other missing field, since absence
         neither clears a warning nor invents one.
 
-        This is counted by entry ORDER, so it works on history an older add-on
+        This is counted by entry ORDER, so it works on history an older app
         wrote without timestamps — which is its whole value right after an update,
         when no stamp exists yet and the staleness rescue is unavailable in
         principle. It also means a run can be raised on entries whose age is
@@ -509,7 +509,7 @@ class ChatHealth:
     def is_failure_stale(self, now: datetime) -> bool:
         """Whether the last recorded failure is too old to count against health.
 
-        An unknown timestamp is NOT stale: an add-on older than 1.49.0 stamps
+        An unknown timestamp is NOT stale: an app older than 1.49.0 stamps
         nothing, and a missing stamp must never clear a warning on its own.
         """
         if self.last_failure_ts is None:
@@ -521,7 +521,7 @@ class ChatHealth:
 
 @dataclass(slots=True)
 class Budget:
-    """Daily spend cap from ``/api/status`` (add-on >= 1.21.0); limit 0 = unlimited."""
+    """Daily spend cap from ``/api/status`` (app >= 1.21.0); limit 0 = unlimited."""
 
     limit: float
     spent: float
@@ -529,7 +529,7 @@ class Budget:
 
 @dataclass(slots=True)
 class AlertItem:
-    """One active proactive-alert anomaly from ``/api/status`` (add-on >= 1.39.0).
+    """One active proactive-alert anomaly from ``/api/status`` (app >= 1.39.0).
 
     ``line`` is the user's own home-entity string (e.g. "Offline: Router"); it is
     home data the user already sees in HA, NOT chat content.
@@ -542,10 +542,10 @@ class AlertItem:
 
 @dataclass(slots=True)
 class Alerts:
-    """Active proactive-alert set from ``/api/status`` (add-on >= 1.39.0).
+    """Active proactive-alert set from ``/api/status`` (app >= 1.39.0).
 
-    ``None`` (rather than an instance) both when an older add-on omits the field and
-    when the add-on reports ``null`` (proactive_alerts off or not yet ticked); either
+    ``None`` (rather than an instance) both when an older app omits the field and
+    when the app reports ``null`` (proactive_alerts off or not yet ticked); either
     way the alerts binary sensor is unavailable.
     """
 
@@ -559,10 +559,10 @@ class AuthState:
     """The engine's sign-in state, from the status block's ``auth``.
 
     ``state`` is an open token (today "ok"/"expired"/"unknown") read as-is, the
-    same policy as :data:`AccountLimit.kind` — an add-on sending a state this
+    same policy as :data:`AccountLimit.kind` — an app sending a state this
     version does not recognise is still carried rather than dropped, it simply
     matches neither raise nor clear below. ``since`` is when it became true, or
-    ``None`` when the add-on doesn't stamp it.
+    ``None`` when the app doesn't stamp it.
     """
 
     state: str
@@ -579,20 +579,20 @@ class StatusResult:
     model: str | None
     ha_mcp: bool | None
     ha_mcp_connected: bool | None
-    # The defaults are what an add-on that predates these fields means.
+    # The defaults are what an app that predates these fields means.
     engine: str = LEGACY_ENGINE.key
     engine_version: str | None = None
-    # ``None``: the add-on predates the list (see ``ClaudeClient.accepts``).
+    # ``None``: the app predates the list (see ``ClaudeClient.accepts``).
     request_fields: frozenset[str] | None = None
-    # ``None``: the add-on predates the field; the prompt is not checked locally.
+    # ``None``: the app predates the field; the prompt is not checked locally.
     prompt_max_bytes: int | None = None
     chat_health: ChatHealth | None = None
     prompt_timeout_ms: int | None = None
     budget: Budget | None = None
     alerts: Alerts | None = None
-    # ``None``: the add-on predates it, or sends nothing readable -> unknown, no repair.
+    # ``None``: the app predates it, or sends nothing readable -> unknown, no repair.
     auth: AuthState | None = None
-    # Whether Home Assistant accepts the add-on's token on MCP, read as an open token
+    # Whether Home Assistant accepts the app's token on MCP, read as an open token
     # ("ok"/"unauthorized"/"unreachable"). ``None``: absent, null or unreadable.
     ha_mcp_auth: str | None = None
 
@@ -634,12 +634,12 @@ class AccountLimitsResult:
 
 
 class ClaudeClient:
-    """Thin async client over the add-on's internal prompt server."""
+    """Thin async client over the app's internal prompt server."""
 
     def __init__(
         self, session: ClientSession, base_url: str, token: str, engine: Engine
     ) -> None:
-        """Store the session, the add-on's address and token, and its engine."""
+        """Store the session, the app's address and token, and its engine."""
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._token = token
@@ -648,7 +648,7 @@ class ClaudeClient:
         self._addon_version: str | None = None
         self._request_fields: frozenset[str] | None = None
         self._prompt_max_bytes: int | None = None
-        # The engine the add-on last reported when it was not ours, until a
+        # The engine the app last reported when it was not ours, until a
         # status reports ours again (see ``_ensure_identity``).
         self._foreign_engine: str | None = None
 
@@ -658,11 +658,11 @@ class ClaudeClient:
 
     @property
     def read_timeout(self) -> float:
-        """The current prompt-read wall-clock (tracks the add-on's budget)."""
+        """The current prompt-read wall-clock (tracks the app's budget)."""
         return self._read_timeout
 
     def _addon_at_least(self, min_version: str) -> bool:
-        """Whether the last-observed add-on version is >= ``min_version``.
+        """Whether the last-observed app version is >= ``min_version``.
 
         Absent/unparseable version -> False.
         """
@@ -680,15 +680,15 @@ class ClaudeClient:
         *,
         listed_only: bool = False,
     ) -> bool:
-        """Whether the add-on accepts optional request field ``field``.
+        """Whether the app accepts optional request field ``field``.
 
-        The add-on rejects a request with a key it does not know (400), so an
-        optional field is only put on the wire when it is accepted. An add-on
+        The app rejects a request with a key it does not know (400), so an
+        optional field is only put on the wire when it is accepted. An app
         that reports ``request_fields`` says so itself. One that predates the
-        list is a Claude add-on, and for it the field's first accepting version
+        list is a Claude app, and for it the field's first accepting version
         decides: ``legacy_min_version``, or ``None`` for a field every such
-        add-on accepts. A ``listed_only`` field is newer than the list, so no
-        such add-on accepts it.
+        app accepts. A ``listed_only`` field is newer than the list, so no
+        such app accepts it.
         """
         if self._request_fields is not None:
             return field in self._request_fields
@@ -698,30 +698,30 @@ class ClaudeClient:
 
     @property
     def supports_memory(self) -> bool:
-        """Whether the connected add-on accepts remembered facts."""
+        """Whether the connected app accepts remembered facts."""
         return self.accepts(REQUEST_MEMORY, listed_only=True)
 
     @property
     def supports_web(self) -> bool:
-        """Whether the connected add-on lists web answers among its request fields."""
+        """Whether the connected app lists web answers among its request fields."""
         return self.accepts(REQUEST_WEB, listed_only=True)
 
     @property
     def supports_edit_automation(self) -> bool:
-        """Whether the connected add-on accepts ``edit_automation``."""
+        """Whether the connected app accepts ``edit_automation``."""
         return self.accepts(REQUEST_EDIT_AUTOMATION, ADDON_MIN_EDIT_VERSION)
 
     def note_status(self, status: StatusResult) -> None:
-        """Record what the last ``/api/status`` said the add-on accepts."""
+        """Record what the last ``/api/status`` said the app accepts."""
         self._addon_version = status.version
         self._request_fields = status.request_fields
         self._prompt_max_bytes = status.prompt_max_bytes
 
     def _check_prompt(self, prompt: str) -> None:
-        """Refuse a prompt longer than the add-on's published limit, before sending.
+        """Refuse a prompt longer than the app's published limit, before sending.
 
-        The add-on refuses it too, with the same limit; checking here only saves
-        the round trip. Without a published limit, the add-on's answer decides.
+        The app refuses it too, with the same limit; checking here only saves
+        the round trip. Without a published limit, the app's answer decides.
         """
         limit = self._prompt_max_bytes
         if limit is not None and len(prompt.encode("utf-8")) > limit:
@@ -731,12 +731,12 @@ class ClaudeClient:
             )
 
     def note_prompt_timeout(self, prompt_timeout_ms: int | None) -> None:
-        """Track the add-on's prompt budget so our wall-clock stays just above it.
+        """Track the app's prompt budget so our wall-clock stays just above it.
 
         Keeps the read timeout at ``max(REQUEST_TIMEOUT, budget + margin)`` so the
-        add-on's graceful timeout answer always lands before the client gives up,
-        even if the user raises the add-on's prompt timeout. Falls back to the floor
-        when the add-on doesn't report a budget.
+        app's graceful timeout answer always lands before the client gives up,
+        even if the user raises the app's prompt timeout. Falls back to the floor
+        when the app doesn't report a budget.
         """
         if prompt_timeout_ms is None:
             self._read_timeout = float(REQUEST_TIMEOUT)
@@ -746,9 +746,9 @@ class ClaudeClient:
             )
 
     async def async_get_status(self) -> StatusResult:
-        """Fetch add-on readiness/versions (contract §3).
+        """Fetch app readiness/versions (contract §3).
 
-        Raises :class:`ClaudeEngineMismatchError` when the add-on runs another
+        Raises :class:`ClaudeEngineMismatchError` when the app runs another
         engine than this client's: nothing it reports is this entry's.
         """
         data = await self._request("GET", API_STATUS, timeout_s=STATUS_TIMEOUT)
@@ -834,9 +834,9 @@ class ClaudeClient:
         ``intents`` (the user-confirmed proposal intents) and ``confirmation``
         ("auto"/"confirmed") are sent only for ``mode="write"``, never for read.
         ``image_entity`` (an Assist-exposed camera) is a read-only visual hint.
-        ``language`` (the HA conversation language) lets the add-on localize its
-        server-authored messages; additive, ignored by older add-ons.
-        Each optional field is sent only if the add-on accepts it (see
+        ``language`` (the HA conversation language) lets the app localize its
+        server-authored messages; additive, ignored by older apps.
+        Each optional field is sent only if the app accepts it (see
         :meth:`accepts`).
         """
         self._check_prompt(prompt)
@@ -873,13 +873,13 @@ class ClaudeClient:
         """Ask for an answer from the web alone and keep nothing but its text.
 
         The request carries only the prompt, ``language`` and ``surface``: no
-        conversation, intents, image or memory. An add-on that does not list
+        conversation, intents, image or memory. An app that does not list
         the ``web`` field is never sent the request, which it would otherwise
         answer from the home.
         """
         self._check_prompt(prompt)
         if not self.supports_web:
-            raise ClaudeWebUnsupportedError("The add-on does not list the web field")
+            raise ClaudeWebUnsupportedError("The app does not list the web field")
         payload: dict[str, object] = {
             "prompt": prompt,
             "mode": MODE_READ,
@@ -924,14 +924,14 @@ class ClaudeClient:
     ) -> AsyncIterator[StreamDelta | PromptResult]:
         """Stream a read: yield text deltas, then one final ``PromptResult``.
 
-        Requests the add-on's NDJSON stream (add-on >= 1.17.0). An add-on that
+        Requests the app's NDJSON stream (app >= 1.17.0). An app that
         can't stream answers a normal JSON body instead — detected by
         Content-Type — so a single ``PromptResult`` is yielded and no deltas.
         Streaming is read-only (contract §2). The last item is always the
         authoritative ``PromptResult`` (its proposal drives auto/confirm).
         ``edit_automation`` is the current config of an automation to modify.
         ``memory`` is the remembered facts to send (only when non-empty).
-        Each optional field is sent only if the add-on accepts it (see
+        Each optional field is sent only if the app accepts it (see
         :meth:`accepts`).
         """
         self._check_prompt(prompt)
@@ -971,15 +971,15 @@ class ClaudeClient:
                 async for chunk in _iter_ndjson(resp.content, self._engine):
                     yield chunk
         except TimeoutError as err:
-            raise ClaudeConnectionError("Timed out talking to the add-on") from err
+            raise ClaudeConnectionError("Timed out talking to the app") from err
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
 
     def _ensure_identity(self, path: str) -> None:
-        """Refuse every request but the status check to another engine's add-on.
+        """Refuse every request but the status check to another engine's app.
 
         Once a status poll has found another engine, nothing else is sent to the
-        add-on (no prompt, no write, no usage read) until a poll finds this
+        app (no prompt, no write, no usage read) until a poll finds this
         client's engine again. Every caller of the client is covered here, not
         only the ones that look at the status coordinator.
         """
@@ -1012,7 +1012,7 @@ class ClaudeClient:
                     await _raise_for_answer(resp, self._engine)
                 return await resp.json(content_type=None) or {}
         except TimeoutError as err:
-            raise ClaudeConnectionError("Timed out talking to the add-on") from err
+            raise ClaudeConnectionError("Timed out talking to the app") from err
         except ClientError as err:
             raise ClaudeConnectionError(str(err)) from err
 
@@ -1139,7 +1139,7 @@ def _parse_alerts(raw: Any) -> Alerts | None:
     not a bad count, it is nothing to iterate, and ``items: null`` raised
     ``TypeError`` out of the comprehension while both counts were perfectly
     readable. The alert set is then honestly empty rather than absent, since the
-    counts still say what the add-on found.
+    counts still say what the app found.
     """
     if not isinstance(raw, dict):
         return None
@@ -1247,10 +1247,10 @@ def _epoch_ms(raw: Any) -> int | None:
 
 
 def _parse_request_fields(data: dict[str, Any]) -> frozenset[str] | None:
-    """Read ``request_fields``; ``None`` only when the add-on does not report it.
+    """Read ``request_fields``; ``None`` only when the app does not report it.
 
     A value that is not a list of strings accepts nothing: sending a field the
-    add-on may reject would fail the request, while withholding one only loses
+    app may reject would fail the request, while withholding one only loses
     that field's refinement.
     """
     if STATUS_REQUEST_FIELDS not in data:
@@ -1262,7 +1262,7 @@ def _parse_request_fields(data: dict[str, Any]) -> frozenset[str] | None:
 
 
 def _positive_int(raw: Any) -> int | None:
-    """Return a size limit the add-on states if it is above zero, else ``None``."""
+    """Return a size limit the app states if it is above zero, else ``None``."""
     value = _non_negative_int(raw)
     return value if value else None
 
@@ -1270,7 +1270,7 @@ def _positive_int(raw: Any) -> int | None:
 def _non_negative_int(raw: Any) -> int | None:
     """Coerce a contract whole number to an int, or ``None`` when it says nothing.
 
-    Absent means an add-on that does not report the field yet. Anything else that
+    Absent means an app that does not report the field yet. Anything else that
     isn't a non-negative number is read as unknown, which withholds the recovery
     rescue rather than granting it on a value nobody can explain.
 
@@ -1295,7 +1295,7 @@ def _non_negative_int(raw: Any) -> int | None:
 
     Both bounds come from the consumers rather than from a number someone picked,
     which is the only reason either can be defended. Neither is reachable for a
-    window the add-on caps at 50 runs; they are here because every earlier version
+    window the app caps at 50 runs; they are here because every earlier version
     of this guard predicted which values would survive a later step, and each
     prediction missed a family.
     """
@@ -1342,11 +1342,11 @@ def _parse_prompt_result(data: dict[str, Any], engine: Engine) -> PromptResult:
     """Build a ``PromptResult`` from a 200 body or a stream's ``done`` object.
 
     A read is still answered 200 (or ``done``) when the engine's sign-in has
-    expired — the add-on cannot retry it into success, so it reports the
+    expired — the app cannot retry it into success, so it reports the
     outcome rather than failing the transport. ``reason`` carries that outcome
     the same way ``chat_health.last_reason`` does; this is the one place a
     read is checked for it, so every caller gets the same typed error instead
-    of the add-on's own apology text. ``engine`` is the caller's own, so the
+    of the app's own apology text. ``engine`` is the caller's own, so the
     raised error already names its own sign-in fix.
     """
     data = _valid_json(data)
@@ -1393,7 +1393,7 @@ async def _iter_ndjson(
         try:
             event = json.loads(line)
         except json.JSONDecodeError as err:
-            raise ClaudeConnectionError("Malformed stream from the add-on") from err
+            raise ClaudeConnectionError("Malformed stream from the app") from err
         kind = event.get(STREAM_KIND)
         if kind == STREAM_KIND_DELTA:
             text = held + str(event.get(RESP_TEXT, ""))
@@ -1414,7 +1414,7 @@ async def _iter_ndjson(
     raise ClaudeConnectionError("Stream ended without a final result")
 
 
-# The add-on's error ``code`` → the error that carries its meaning for callers,
+# The app's error ``code`` → the error that carries its meaning for callers,
 # and the translation a user reads. The error class keeps today's behaviour per
 # kind (a quiet coordinator error, a retry); the key says what to do about it.
 _ERROR_CODES: Final[Mapping[str, tuple[type[ClaudeError], str]]] = {
@@ -1453,7 +1453,7 @@ _ERROR_PLACEHOLDERS: Final[Mapping[str, tuple[str, str]]] = {
 
 
 async def _raise_for_answer(resp: ClientResponse, engine: Engine) -> NoReturn:
-    """Raise the error an add-on's failed HTTP answer describes."""
+    """Raise the error an app's failed HTTP answer describes."""
     try:
         body = await resp.json(content_type=None)
     except ClientError, ValueError:
@@ -1466,7 +1466,7 @@ def _coded_error(
 ) -> ClaudeError | None:
     """Return the error a coded answer names, or ``None`` if it names none usable.
 
-    ``None`` covers an add-on that predates codes, a code this version does not
+    ``None`` covers an app that predates codes, a code this version does not
     know, and a code without the value its message needs; the caller then falls
     back to what it knew before codes existed. ``engine`` is the caller's own,
     named by ``auth_expired``'s placeholders (the only code that needs it).
@@ -1518,6 +1518,6 @@ def _status_error(status: int) -> ClaudeError:
     if status == HTTPStatus.GATEWAY_TIMEOUT:
         return ClaudeConnectionError(f"HTTP {status}", translation_key="addon_timeout")
     if status == HTTPStatus.BAD_GATEWAY:
-        # What a proxy answers while the add-on is down or restarting.
+        # What a proxy answers while the app is down or restarting.
         return ClaudeConnectionError(f"HTTP {status}")
     return ClaudeError()

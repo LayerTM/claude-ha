@@ -14,7 +14,7 @@ CONFIG_ENTRY_MINOR_VERSION: Final = 2
 
 # Config-entry data keys.
 CONF_ADDON_SLUG: Final = "addon_slug"
-# The engine the entry's add-on runs; a key of ``engines.ENGINES``.
+# The engine the entry's app runs; a key of ``engines.ENGINES``.
 CONF_ENGINE: Final = "engine"
 CONF_HOST: Final = "host"
 CONF_PORT: Final = "port"
@@ -25,7 +25,7 @@ CONF_VOICE_PIPELINE_ID: Final = "voice_pipeline_id"
 # Options (additive; not part of the config-entry data schema).
 CONF_CRITICAL_ENTITIES: Final = "critical_entities"
 CONF_AUTO_EXECUTE: Final = "auto_execute"
-# Camera vision (add-on >= 1.17.0): opt-in, off by default because a snapshot is
+# Camera vision (app >= 1.17.0): opt-in, off by default because a snapshot is
 # more sensitive than state. Only ever an Assist-exposed camera is sent.
 CONF_CAMERA_VISION: Final = "camera_vision"
 # Memory between conversations: on by default, because nothing is stored without
@@ -38,11 +38,11 @@ CONF_WEB: Final = "web_answers"
 # Default prompt-server port (contract §4; bound 0.0.0.0, not published to host).
 DEFAULT_PORT: Final = 8126
 
-# The add-on option that holds the shared bearer token in the discovery-less
+# The app option that holds the shared bearer token in the discovery-less
 # fallback path (contract §1).
 ADDON_OPTION_API_TOKEN: Final = "api_token"
 
-# --- Add-on HTTP contract (see .research/CONTRACT.md) -----------------------
+# --- App HTTP contract -----------------------------------------------------
 API_PROMPT: Final = "/api/prompt"
 API_STATUS: Final = "/api/status"
 API_USAGE: Final = "/api/usage"
@@ -60,8 +60,8 @@ MODES: Final = (MODE_READ, MODE_WRITE)
 # are forbidden for `mode:"read"`.
 MAX_WRITE_INTENTS: Final = 5
 
-# Write confirmation levels (contract, add-on >= 1.8.0). "auto" is refused by the
-# add-on's coarse domain backstop for inherently critical domains.
+# Write confirmation levels (contract, app >= 1.8.0). "auto" is refused by the
+# app's coarse domain backstop for inherently critical domains.
 CONFIRMATION_AUTO: Final = "auto"
 CONFIRMATION_CONFIRMED: Final = "confirmed"
 
@@ -85,11 +85,11 @@ RESP_TRUNCATED: Final = "truncated"
 RESP_DEGRADED: Final = "degraded"
 PROPOSAL_SUMMARY: Final = "summary"
 PROPOSAL_INTENTS: Final = "intents"
-# Optional model-drafted automation config (add-on >= 1.34.0): a full HA automation
+# Optional model-drafted automation config (app >= 1.34.0): a full HA automation
 # dict (alias/triggers/conditions/actions/mode) on a read where the user asked to
 # create one. OMITTED when there's no draft (absent-not-null), so key on presence.
 # The integration only DISPLAYS the draft; committing it (after a confirmation) is a
-# later capability that re-validates and writes it in-process — the add-on never
+# later capability that re-validates and writes it in-process — the app never
 # writes it.
 RESP_AUTOMATION: Final = "automation"
 # Optional {remember: [text], forget: [id]} when this turn requests to
@@ -108,16 +108,16 @@ ERROR_CODE_ACTION_FAILED: Final = "action_failed"
 # Optional reason token on a degraded read's 200 body (or its streaming `done`
 # line): the same token ``chat_health.last_reason`` uses. A sign-in the engine
 # no longer accepts is "auth-expired" — never retried (one engine call, not
-# two). Absent on an add-on that predates it.
+# two). Absent on an app that predates it.
 RESP_REASON: Final = "reason"
 REASON_AUTH_EXPIRED: Final = "auth-expired"
 
-# POST /api/prompt request keys every add-on accepts (besides "prompt"/"mode").
+# POST /api/prompt request keys every app accepts (besides "prompt"/"mode").
 REQUEST_CONVERSATION_ID: Final = "conversation_id"
 REQUEST_INTENTS: Final = "intents"
 REQUEST_CONFIRMATION: Final = "confirmation"
 
-# Streaming read (add-on >= 1.17.0): opt-in via this request field; the add-on
+# Streaming read (app >= 1.17.0): opt-in via this request field; the app
 # answers application/x-ndjson (one JSON object per line) or, when it can't
 # stream, a normal JSON body — the client branches on the response Content-Type.
 REQUEST_STREAM: Final = "stream"
@@ -128,34 +128,34 @@ STREAM_KIND_DONE: Final = "done"
 STREAM_KIND_ERROR: Final = "error"
 STREAM_ERROR: Final = "error"
 
-# Optional camera snapshot for a read (add-on >= 1.17.0): a camera entity_id the
-# add-on fetches, downscales and lets Claude see. Only ever an Assist-exposed
+# Optional camera snapshot for a read (app >= 1.17.0): a camera entity_id the
+# app fetches, downscales and lets Claude see. Only ever an Assist-exposed
 # camera; the integration passes the entity_id, never a path.
 REQUEST_IMAGE_ENTITY: Final = "image_entity"
-# Optional HA conversation language (e.g. "uk"/"en"/"pl") so the add-on can localize
+# Optional HA conversation language (e.g. "uk"/"en"/"pl") so the app can localize
 # its server-authored messages (the degraded-read apology, the budget notice). Purely
-# additive: an add-on that doesn't read it — or a missing value — falls back to English.
+# additive: an app that doesn't read it — or a missing value — falls back to English.
 REQUEST_LANGUAGE: Final = "language"
-# Optional surface hint (add-on >= 1.28.0): "voice" when the turn will be spoken aloud
-# by text-to-speech, else "text". On "voice" the add-on tells the model to keep the
+# Optional surface hint (app >= 1.28.0): "voice" when the turn will be spoken aloud
+# by text-to-speech, else "text". On "voice" the app tells the model to keep the
 # answer to one short, plain, speakable sentence. Unlike the older additive fields, a
-# pre-1.28.0 add-on validates request keys against an allowlist and 400s on an unknown
-# one, so the client only sends this when the add-on is new enough (see below).
+# pre-1.28.0 app validates request keys against an allowlist and 400s on an unknown
+# one, so the client only sends this when the app is new enough (see below).
 REQUEST_SURFACE: Final = "surface"
 SURFACE_VOICE: Final = "voice"
 SURFACE_TEXT: Final = "text"
-# First add-on version that accepts REQUEST_SURFACE. Used only for an add-on that
+# First app version that accepts REQUEST_SURFACE. Used only for an app that
 # does not report STATUS_REQUEST_FIELDS (see below); request fields added from now
 # on are gated by that list alone and get no version here.
 ADDON_MIN_SURFACE_VERSION: Final = "1.28.0"
-# Optional current config of the automation the user asked to modify (add-on >=
-# 1.36.0). When present, the add-on tells the model to edit THIS config per the
+# Optional current config of the automation the user asked to modify (app >=
+# 1.36.0). When present, the app tells the model to edit THIS config per the
 # request and return the full updated automation in the `automation` response field.
 # Send-gated on the version below, like REQUEST_SURFACE.
 REQUEST_EDIT_AUTOMATION: Final = "edit_automation"
 ADDON_MIN_EDIT_VERSION: Final = "1.36.0"
 # Optional remembered facts, [{id, text}], on reads only. Gated by
-# STATUS_REQUEST_FIELDS alone: no add-on that predates the list accepts it.
+# STATUS_REQUEST_FIELDS alone: no app that predates the list accepts it.
 REQUEST_MEMORY: Final = "memory"
 # Web answer (listed only, like memory): an answer-only read that sees no home
 # data and acts on nothing. Sent alone: never with memory, history, an image or
@@ -164,7 +164,7 @@ REQUEST_WEB: Final = "web"
 # The longest fact, in characters, after whitespace is collapsed, and the most
 # facts one chat turn may ask to remember / forget (the contract's bounds).
 MAX_FACT_CHARS: Final = 200
-# The id shape the add-on accepts for a fact; it refuses the whole read otherwise.
+# The id shape the app accepts for a fact; it refuses the whole read otherwise.
 MEMORY_ID_PATTERN: Final = r"[A-Za-z0-9_-]{1,32}"
 MAX_REMEMBER_PER_TURN: Final = 3
 MAX_FORGET_PER_TURN: Final = 20
@@ -173,53 +173,53 @@ MAX_FORGET_PER_TURN: Final = 20
 STATUS_READY: Final = "ready"
 STATUS_VERSION: Final = "version"
 STATUS_CLAUDE_VERSION: Final = "claude_version"
-# The engine the add-on runs (a key of ``engines.ENGINES``) and that engine's CLI
-# version. Absent on add-ons that predate them, which all run Claude.
+# The engine the app runs (a key of ``engines.ENGINES``) and that engine's CLI
+# version. Absent on apps that predate them, which all run Claude.
 STATUS_ENGINE: Final = "engine"
 STATUS_ENGINE_VERSION: Final = "engine_version"
-# Every request field POST /api/prompt accepts, from the same allowlist the add-on
-# validates against. An empty list means none. Absent on add-ons that predate it:
+# Every request field POST /api/prompt accepts, from the same allowlist the app
+# validates against. An empty list means none. Absent on apps that predate it:
 # for those the ADDON_MIN_*_VERSION rules above say what is accepted.
 STATUS_REQUEST_FIELDS: Final = "request_fields"
 STATUS_MODEL: Final = "model"
 STATUS_HA_MCP: Final = "ha_mcp"
-# Whether the LAST chat read actually reached the HA MCP server (add-on >= 1.14.0;
+# Whether the LAST chat read actually reached the HA MCP server (app >= 1.14.0;
 # null until the first read). Distinct from ha_mcp, which only says a config exists.
 STATUS_HA_MCP_CONNECTED: Final = "ha_mcp_connected"
-# Whether Home Assistant accepts the add-on's token on its MCP endpoint: "ok",
+# Whether Home Assistant accepts the app's token on its MCP endpoint: "ok",
 # "unauthorized" (401/403: unknown/revoked token, or a non-admin token while the MCP
 # Server requires an administrator), "unreachable" (no answer ABOUT the token; not a
-# token problem) or null (no token / nothing answered yet). Absent on older add-ons.
+# token problem) or null (no token / nothing answered yet). Absent on older apps.
 STATUS_HA_MCP_AUTH: Final = "ha_mcp_auth"
 MCP_AUTH_UNAUTHORIZED: Final = "unauthorized"
-# Rolling chat-reliability summary (add-on >= 1.20.0): {recent, degraded, recovered,
+# Rolling chat-reliability summary (app >= 1.20.0): {recent, degraded, recovered,
 # last_reason}. last_reason is a reason TOKEN from the runner's enum, never prompt
-# content. Absent on older add-ons (the chat-health sensor is then unavailable).
-# Add-on >= 1.49.0 stamps each entry and adds {last_failure_ts, window_from_ts,
+# content. Absent on older apps (the chat-health sensor is then unavailable).
+# App >= 1.49.0 stamps each entry and adds {last_failure_ts, window_from_ts,
 # window_to_ts} in epoch MILLISECONDS, where null means UNKNOWN (history written by
-# an older add-on is kept, unstamped) — never "now" and never 0. The same version
+# an older app is kept, unstamped) — never "now" and never 0. The same version
 # adds consecutive_ok: successful runs recorded AFTER the last failure, counted by
 # entry order rather than by clock, so it is a plain number even on unstamped
-# history — never null, and simply absent on an older add-on. consecutive_failed is
+# history — never null, and simply absent on an older app. consecutive_failed is
 # its mirror (failures since the last success); the two are never both non-zero,
 # because the newest run is either a success or it isn't.
 STATUS_CHAT_HEALTH: Final = "chat_health"
-# The add-on's whole-request prompt budget in ms (add-on >= 1.21.0). The client keeps
-# its wall-clock just above this so the add-on's graceful timeout answer always lands.
+# The app's whole-request prompt budget in ms (app >= 1.21.0). The client keeps
+# its wall-clock just above this so the app's graceful timeout answer always lands.
 STATUS_PROMPT_TIMEOUT_MS: Final = "prompt_timeout_ms"
 # The largest prompt POST /api/prompt accepts, in UTF-8 bytes, from the constant the
-# add-on checks against. Absent on add-ons that predate it: no local check then.
+# app checks against. Absent on apps that predate it: no local check then.
 STATUS_PROMPT_MAX_BYTES: Final = "prompt_max_bytes"
-# Daily spend cap (add-on >= 1.21.0): {limit, spent} in USD; limit 0 means unlimited.
+# Daily spend cap (app >= 1.21.0): {limit, spent} in USD; limit 0 means unlimited.
 STATUS_BUDGET: Final = "budget"
-# Active proactive-alert set (add-on >= 1.39.0): {active, critical, items} where each
+# Active proactive-alert set (app >= 1.39.0): {active, critical, items} where each
 # item is {key, critical, line}, or null when proactive_alerts has never run. Absent
-# on older add-ons (the alerts binary sensor is then unavailable). items/line carry
+# on older apps (the alerts binary sensor is then unavailable). items/line carry
 # the user's OWN home entity names and readings — home data, not chat content.
 STATUS_ALERTS: Final = "alerts"
 # The engine's sign-in state: {state: "ok"|"expired"|"unknown", since}. Computed
-# by the add-on without a model call and persisted across its restarts; "since" is
-# ISO-8601 or null. Absent on an add-on that predates it -> treat as unknown (no
+# by the app without a model call and persisted across its restarts; "since" is
+# ISO-8601 or null. Absent on an app that predates it -> treat as unknown (no
 # repair raised from it).
 STATUS_AUTH: Final = "auth"
 AUTH_STATE: Final = "state"
@@ -230,11 +230,11 @@ AUTH_STATE_UNKNOWN: Final = "unknown"
 
 # GET /api/account_limits 200-response keys (account-wide rate-limit utilisation).
 # These figures are the ACCOUNT's, across every machine and session signed in to it
-# — not this add-on's own use, which is what /api/usage reports.
+# — not this app's own use, which is what /api/usage reports.
 LIMITS_MODE: Final = "mode"
 LIMITS_FETCHED_AT: Final = "fetched_at"
 LIMITS_LIST: Final = "limits"
-# An add-on authenticated with an API key answers mode "api_key" and an EMPTY list:
+# An app authenticated with an API key answers mode "api_key" and an EMPTY list:
 # such an account has no rate-limit buckets upstream. That is a fact about the
 # account, not a failure, so the integration creates no limit entities for it.
 LIMITS_MODE_API_KEY: Final = "api_key"
@@ -252,7 +252,7 @@ LIMIT_KIND_WEEKLY_ALL: Final = "weekly_all"
 LIMIT_KIND_WEEKLY_SCOPED: Final = "weekly_scoped"
 
 # --- Chat-health thresholds -------------------------------------------------
-# The add-on trims its chat-health window by COUNT (cap 50), never by age, and
+# The app trims its chat-health window by COUNT (cap 50), never by age, and
 # says so deliberately: it reports what happened and when, and leaves "what counts
 # as healthy" to the consumer — these two constants are that judgement.
 #
@@ -274,7 +274,7 @@ LIMIT_KIND_WEEKLY_SCOPED: Final = "weekly_scoped"
 #
 CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
 # Failures in a row that mean an outage rather than a coincidence, whatever the
-# rate says (add-on >= 1.49.0). This is the ONE signal that raises the state
+# rate says (app >= 1.49.0). This is the ONE signal that raises the state
 # early: a rate over a count-trimmed window cannot see a fresh outage until it has
 # diluted the window, which in a full 50-chat window is five failures deep.
 #
@@ -305,45 +305,45 @@ CHAT_HEALTH_DEGRADED_RATE: Final = 0.1
 # given for it did not.
 CHAT_HEALTH_OUTAGE_RUN: Final = 3
 # How old the last recorded failure must be before it stops counting against health,
-# whatever the rate. Needs `last_failure_ts` (add-on >= 1.49.0); an unstamped window
+# whatever the rate. Needs `last_failure_ts` (app >= 1.49.0); an unstamped window
 # falls back to the rate alone, so a MISSING stamp can never clear a warning by
 # itself.
 CHAT_HEALTH_STALE_FAILURE_S: Final = 6 * 60 * 60
 
 # --- Timings ----------------------------------------------------------------
 # How long the integration waits for a single Claude answer (a full agentic run
-# in the add-on can take a while). Must stay ABOVE the add-on's whole-request
+# in the app can take a while). Must stay ABOVE the app's whole-request
 # budget (`CLAUDE_PROMPT_TIMEOUT_MS`, default 120s — retry runs on the remaining
-# budget, not a fresh one, so the ceiling is 120s not 2x) so the add-on's graceful
+# budget, not a fresh one, so the ceiling is 120s not 2x) so the app's graceful
 # terminal `done` on a timed-out read always arrives before we abort; otherwise the
-# user gets a hard timeout instead of the friendly degraded message (add-on >=1.18.0).
-# If the add-on timeout is raised, raise this to match (budget + ~15s headroom).
-# Floor value; the client tracks the add-on's reported `prompt_timeout_ms` and uses
+# user gets a hard timeout instead of the friendly degraded message (app >=1.18.0).
+# If the app timeout is raised, raise this to match (budget + ~15s headroom).
+# Floor value; the client tracks the app's reported `prompt_timeout_ms` and uses
 # max(REQUEST_TIMEOUT, that + TIMEOUT_MARGIN) so its graceful answer always lands.
 REQUEST_TIMEOUT: Final = 135
-# Headroom (seconds) the client keeps above the add-on's prompt budget.
+# Headroom (seconds) the client keeps above the app's prompt budget.
 TIMEOUT_MARGIN: Final = 15
 # Shorter timeout for the lightweight status poll.
 STATUS_TIMEOUT: Final = 15
 # Coordinator poll interval for the status sensor.
 SCAN_INTERVAL: Final = 60
-# Consecutive status polls that must agree the add-on can't reach the HA MCP
-# before we raise ISSUE_MCP_UNREACHABLE. The add-on's ha_mcp_connected can read
+# Consecutive status polls that must agree the app can't reach the HA MCP
+# before we raise ISSUE_MCP_UNREACHABLE. The app's ha_mcp_connected can read
 # false for a single poll on a transient (e.g. a state-free chat turn just after a
 # restart) even though MCP works; debouncing across polls stops that flap from
 # flashing a scary repair. At SCAN_INTERVAL each extra count is ~1 min of delay
 # for a genuine outage, so keep this small. Only the connected-signal path is
 # debounced — a genuinely-unloaded mcp_server (a hard local fact) still fires now.
 MCP_UNREACHABLE_DEBOUNCE_POLLS: Final = 2
-# How long the add-on may stay unreachable before it counts as an outage rather
-# than a restart. An update or a restart takes seconds, but the add-on is allowed
+# How long the app may stay unreachable before it counts as an outage rather
+# than a restart. An update or a restart takes seconds, but the app is allowed
 # up to 5 minutes to stop (its `timeout` in config.yaml), so the window covers a
 # slow stop plus the start that follows it.
 ADDON_OUTAGE_GRACE: Final = timedelta(minutes=10)
 # Seconds between polls while a restart is in progress, so the entities come
-# back within seconds of the add-on answering rather than a full SCAN_INTERVAL.
+# back within seconds of the app answering rather than a full SCAN_INTERVAL.
 ADDON_RESTART_RETRY: Final = 10
-# The usage report is cached by the add-on and heavy to build, so poll it slowly
+# The usage report is cached by the app and heavy to build, so poll it slowly
 # (contract §3a: no more than ~every 5 minutes).
 USAGE_SCAN_INTERVAL: Final = 300
 
@@ -374,27 +374,27 @@ EVENT_ACTION_EXECUTED: Final = f"{DOMAIN}_action_executed"
 # --- Repair issues ----------------------------------------------------------
 ISSUE_ADDON_NOT_RUNNING: Final = "addon_not_running"
 ISSUE_ADDON_NOT_INSTALLED: Final = "addon_not_installed"
-# The add-on reports a different engine than the entry was created for.
+# The app reports a different engine than the entry was created for.
 ISSUE_ENGINE_MISMATCH: Final = "engine_mismatch"
-# The add-on's usage history was reset (its cache lost or unreadable); raised
+# The app's usage history was reset (its cache lost or unreadable); raised
 # once per distinct ``history_since`` so a later reset re-notifies.
 ISSUE_USAGE_HISTORY_RESET: Final = "usage_history_reset"
-# A web answer was refused because the add-on's web option is off.
+# A web answer was refused because the app's web option is off.
 ISSUE_WEB_DISABLED: Final = "web_disabled"
-# Health-check issues: the chat can reach the add-on but can't see/act on the home.
+# Health-check issues: the chat can reach the app but can't see/act on the home.
 ISSUE_NOT_LOGGED_IN: Final = "not_logged_in"
 ISSUE_NO_HA_TOKEN: Final = "no_ha_token"
 ISSUE_MCP_UNREACHABLE: Final = "mcp_unreachable"
-# Home Assistant answered the add-on's token with 401/403 on the MCP endpoint.
+# Home Assistant answered the app's token with 401/403 on the MCP endpoint.
 ISSUE_MCP_UNAUTHORIZED: Final = "mcp_unauthorized"
 ISSUE_NO_EXPOSED_ENTITIES: Final = "no_exposed_entities"
 # Camera vision is on but no camera is exposed to Assist, so the feature is inert
 # (HA hides cameras from Assist by default as security devices). Independent advisory.
 ISSUE_CAMERA_VISION_NO_CAMERAS: Final = "camera_vision_no_cameras"
 # The engine's sign-in to its model provider has expired (distinct from
-# ISSUE_NOT_LOGGED_IN, which is the add-on's OWN bearer token to this
+# ISSUE_NOT_LOGGED_IN, which is the app's OWN bearer token to this
 # integration). Raised the moment a run reports it, or from the status poll;
-# cleared once the add-on reports the sign-in state ok again. Independent
+# cleared once the app reports the sign-in state ok again. Independent
 # advisory, like the camera one above.
 ISSUE_SIGNIN_EXPIRED: Final = "signin_expired"
 # Health issues cleared together on unload.

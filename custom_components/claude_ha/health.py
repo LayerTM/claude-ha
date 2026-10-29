@@ -1,7 +1,7 @@
 """Proactive health check for the 'chat can't see the home' failure.
 
-The most common dead-on-arrival gap is a chat that reaches the add-on but cannot
-read or act on Home Assistant — the add-on isn't logged in, has no HA token, the
+The most common dead-on-arrival gap is a chat that reaches the app but cannot
+read or act on Home Assistant — the app isn't logged in, has no HA token, the
 Model Context Protocol Server integration is missing, or nothing is exposed to
 Assist. This module turns those states into actionable repair issues.
 
@@ -77,9 +77,9 @@ class HealthReport:
     camera_vision_inert: bool = False
     # Independent of ``problem``, and three-valued rather than a plain flag:
     # True raises the issue, False (status says "ok") clears it, and None ("unknown"
-    # or an add-on that predates the field) leaves it exactly as it is — a
+    # or an app that predates the field) leaves it exactly as it is — a
     # run-reported expiry (raised from conversation.py, faster than a poll) must
-    # survive an old add-on's status poll that says nothing about auth at all.
+    # survive an old app's status poll that says nothing about auth at all.
     signin_expired: bool | None = None
 
 
@@ -153,7 +153,7 @@ def evaluate(
     )
 
     # Three-valued per HealthReport's doc: only an explicit "expired"/"ok" from
-    # the add-on ever touches the issue here; "unknown", an unrecognised token
+    # the app ever touches the issue here; "unknown", an unrecognised token
     # or no block at all (``None``) leaves whatever conversation.py already set.
     auth = status.auth if status is not None else None
     signin_expired: bool | None
@@ -181,9 +181,9 @@ def debounce_mcp_unreachable(
     streak: int,
     threshold: int = MCP_UNREACHABLE_DEBOUNCE_POLLS,
 ) -> tuple[HealthReport, int]:
-    """Withhold a flappy add-on-reported MCP-unreachable until it's confirmed.
+    """Withhold a flappy app-reported MCP-unreachable until it's confirmed.
 
-    The add-on's ``ha_mcp_connected`` can read false for a single poll on a
+    The app's ``ha_mcp_connected`` can read false for a single poll on a
     transient (e.g. a state-free chat turn just after a restart) even though MCP
     works, which used to flash ISSUE_MCP_UNREACHABLE. Only that connected-signal
     path is debounced: the problem is raised once ``threshold`` consecutive polls
@@ -265,10 +265,10 @@ def async_apply(
 
 
 async def async_probe(hass: HomeAssistant, client: ClaudeClient) -> None:
-    """Fire a tiny read so the add-on populates ``ha_mcp_connected``.
+    """Fire a tiny read so the app populates ``ha_mcp_connected``.
 
     A failed probe is swallowed: it just leaves connectivity unknown, and the
-    next status poll re-evaluates whatever the add-on now reports.
+    next status poll re-evaluates whatever the app now reports.
     """
     try:
         await client.async_prompt(HEALTH_PROBE_PROMPT, mode=MODE_READ)

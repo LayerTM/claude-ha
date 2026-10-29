@@ -203,7 +203,7 @@ async def test_auto_403_falls_back_to_confirm(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """If the add-on refuses an auto write (403), confirm instead."""
+    """If the app refuses an auto write (403), confirm instead."""
 
     async def _side_effect(
         method: str, url: str, data: dict

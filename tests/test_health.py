@@ -95,7 +95,7 @@ async def test_evaluate_status_none(hass: HomeAssistant) -> None:
 async def test_evaluate_not_logged_in(
     hass: HomeAssistant, expose: Callable[[bool], None]
 ) -> None:
-    """A not-ready add-on surfaces the not-logged-in problem."""
+    """A not-ready app surfaces the not-logged-in problem."""
     _healthy(hass)
     expose(True)
     assert health.evaluate(hass, _status(ready=False)).problem == ISSUE_NOT_LOGGED_IN
@@ -360,7 +360,7 @@ async def test_apply_raises_and_clears_camera_issue(hass: HomeAssistant) -> None
 async def test_apply_placeholders_name_the_engine_and_addon(
     hass: HomeAssistant,
 ) -> None:
-    """A raised issue's placeholders carry the entry's engine and add-on names."""
+    """A raised issue's placeholders carry the entry's engine and app names."""
     registry = ir.async_get(hass)
     health.async_apply(
         hass, _entry(ENTRY_ID), health.HealthReport(ISSUE_NO_HA_TOKEN, 1, True, True)
@@ -417,7 +417,7 @@ async def test_camera_vision_not_inert_when_exposure_store_unready(
 @pytest.mark.parametrize(
     ("auth", "expired"),
     [
-        (None, None),  # older add-on: no evidence, no repair
+        (None, None),  # older app: no evidence, no repair
         (AuthState(state="unknown"), None),  # explicit "no evidence yet" either
         (AuthState(state="something-new"), None),  # an open token this version misses
         (AuthState(state="ok"), False),
@@ -442,7 +442,7 @@ async def test_evaluate_signin_expired_status_none(hass: HomeAssistant) -> None:
 
 
 async def test_apply_raises_signin_expired(hass: HomeAssistant) -> None:
-    """signin_expired=True raises the issue, with the engine/add-on placeholders."""
+    """signin_expired=True raises the issue, with the engine/app placeholders."""
     registry = ir.async_get(hass)
     health.async_apply(
         hass,
@@ -475,11 +475,11 @@ async def test_apply_clears_signin_expired_on_ok(hass: HomeAssistant) -> None:
 async def test_apply_leaves_signin_expired_alone_when_unknown(
     hass: HomeAssistant,
 ) -> None:
-    """signin_expired=None (unknown, or an old add-on) touches neither call.
+    """signin_expired=None (unknown, or an old app) touches neither call.
 
     This is the regression this three-valued field exists to prevent: a run
     that raised the issue from conversation.py must survive the next status
-    poll of an add-on that says nothing about auth at all.
+    poll of an app that says nothing about auth at all.
     """
     registry = ir.async_get(hass)
     entry = _entry(ENTRY_ID)
@@ -533,7 +533,7 @@ def _mcp_report(
 
 
 def test_debounce_withholds_first_flappy_reading() -> None:
-    """A single add-on-reported disconnect is withheld, not alarmed (threshold 2)."""
+    """A single app-reported disconnect is withheld, not alarmed (threshold 2)."""
     report, streak = health.debounce_mcp_unreachable(_mcp_report(), 0)
     assert report.problem is None  # withheld this poll
     assert streak == 1

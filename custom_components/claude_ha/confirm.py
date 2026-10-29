@@ -3,8 +3,8 @@
 A read call may return a ``proposal``. When the ``claude_ha.ask`` action is given
 a ``notify`` target, the proposal is sent as an actionable mobile notification
 (Approve / Dismiss). On Approve, the confirmed ``intents`` are sent back to the
-add-on in ``mode:"write"`` — the untrusted original prompt is never re-used to
-drive the write (the add-on ignores it in write mode; see CONTRACT §2).
+app in ``mode:"write"`` — the untrusted original prompt is never re-used to
+drive the write (the app ignores it in write mode; see CONTRACT §2).
 """
 
 from __future__ import annotations

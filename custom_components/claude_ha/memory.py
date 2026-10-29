@@ -10,7 +10,7 @@ user's facts, never another user's. Since the household set reaches everyone's
 turns, only an administrator — or a turn without a user, which an administrator
 set up — may change it.
 
-The fact text is personal data: it is sent to the add-on as data for the model
+The fact text is personal data: it is sent to the app as data for the model
 and returned by ``claude_ha.list_memory``, and it never appears in logs or
 diagnostics (counts only).
 """
@@ -88,7 +88,7 @@ class Memory:
         data = await self._store.async_load()
         facts = data.get("facts") if isinstance(data, dict) else None
         self._facts = []
-        # The add-on refuses a whole read over one bad item, so a hand-edited or
+        # The app refuses a whole read over one bad item, so a hand-edited or
         # restored store keeps only what it accepts: a valid id, its first use,
         # and at most MAX_FACTS per set.
         ids: set[str] = set()

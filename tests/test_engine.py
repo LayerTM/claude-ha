@@ -209,7 +209,7 @@ async def test_engine_mismatch_on_a_loaded_entry(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A loaded entry whose add-on changes engine goes unavailable with a repair."""
+    """A loaded entry whose app changes engine goes unavailable with a repair."""
     _mock_addon(aioclient_mock, STATUS_PAYLOAD)
     await setup_integration(hass, mock_config_entry)
     coordinator = mock_config_entry.runtime_data.status
@@ -246,7 +246,7 @@ async def test_discovery_of_an_addon_with_another_engine_aborts(
     mock_addon_manager: MagicMock,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """Setup never creates an entry whose add-on reports a different engine."""
+    """Setup never creates an entry whose app reports a different engine."""
     _mock_addon(aioclient_mock, {**STATUS_PAYLOAD, "engine": "other"})
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
@@ -294,7 +294,7 @@ def test_device_version_prefers_the_engine_version(
     claude_version: str | None,
     sw_version: str | None,
 ) -> None:
-    """The device shows the engine's version, else the Claude version of old add-ons."""
+    """The device shows the engine's version, else the Claude version of old apps."""
     status = StatusResult(
         ready=True,
         version="1.0.0",
@@ -310,13 +310,13 @@ def test_device_version_prefers_the_engine_version(
     assert info["sw_version"] == sw_version
     assert info["name"] == "Claude Code"
     assert info["manufacturer"] == "Anthropic"
-    assert info["model"] == "Claude Code add-on"
+    assert info["model"] == "Claude Code app"
 
 
 async def test_client_rejects_another_engine(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """The client never returns the status of an add-on with another engine."""
+    """The client never returns the status of an app with another engine."""
     aioclient_mock.get(_STATUS_URL, json={**STATUS_PAYLOAD, "engine": "other"})
 
     with pytest.raises(ClaudeEngineMismatchError) as err:
@@ -366,7 +366,7 @@ _OPTIONAL = {
 @pytest.mark.parametrize(
     ("status", "sent"),
     [
-        # A new add-on: exactly the fields it lists, whatever its version.
+        # A new app: exactly the fields it lists, whatever its version.
         (
             {**STATUS_PAYLOAD, "version": "0.0.1"},
             {"conversation_id", "language", "surface", "image_entity"},
@@ -376,7 +376,7 @@ _OPTIONAL = {
             {"surface"},
         ),
         ({**STATUS_PAYLOAD, "request_fields": []}, set()),
-        # An add-on that predates the list: today's version rule.
+        # An app that predates the list: today's version rule.
         (
             {**LEGACY_STATUS_PAYLOAD, "version": "1.27.9"},
             {"conversation_id", "language", "image_entity"},
@@ -393,7 +393,7 @@ async def test_read_sends_only_accepted_fields(
     status: dict[str, Any],
     sent: set[str],
 ) -> None:
-    """A read carries each optional field only when the add-on accepts it."""
+    """A read carries each optional field only when the app accepts it."""
     aioclient_mock.get(_STATUS_URL, json=status)
     aioclient_mock.post(_PROMPT_URL, json=PROMPT_PAYLOAD)
     client = _client(hass)
@@ -459,7 +459,7 @@ _OTHER_URL = "http://local-claude-code:8126"
 def _mock_two_addons(
     aioclient_mock: AiohttpClientMocker, first_status: dict[str, Any]
 ) -> None:
-    """Register the first add-on with ``first_status`` and a healthy second one."""
+    """Register the first app with ``first_status`` and a healthy second one."""
     aioclient_mock.clear_requests()
     _mock_addon(aioclient_mock, first_status)
     aioclient_mock.post(_PROMPT_URL, json=PROMPT_PAYLOAD)
@@ -540,7 +540,7 @@ async def test_nothing_is_sent_to_an_addon_with_another_engine(
     assert result.response.response_type is intent.IntentResponseType.ACTION_DONE
     assert _posts(aioclient_mock, _OTHER_URL) == 2
 
-    # The add-on reports this entry's engine again: requests flow again.
+    # The app reports this entry's engine again: requests flow again.
     _mock_two_addons(aioclient_mock, STATUS_PAYLOAD)
     await mock_config_entry.runtime_data.status.async_refresh()
 

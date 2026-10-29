@@ -52,7 +52,7 @@ class ClaudeRuntimeData:
 
 
 class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
-    """Polls one add-on endpoint, staying quiet through an add-on restart."""
+    """Polls one app endpoint, staying quiet through an app restart."""
 
     config_entry: ClaudeConfigEntry
 
@@ -72,7 +72,7 @@ class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
         interval: int,
         unavailable: str,
     ) -> None:
-        """Init the coordinator with its API client and the entry's add-on watch."""
+        """Init the coordinator with its API client and the entry's app watch."""
         super().__init__(
             hass,
             LOGGER,
@@ -89,7 +89,7 @@ class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
         """Fetch this coordinator's endpoint."""
 
     async def _async_update_data(self) -> DataT:
-        """Fetch the endpoint, telling an add-on restart apart from a failure."""
+        """Fetch the endpoint, telling an app restart apart from a failure."""
         try:
             data = await self._async_fetch()
         except ClaudeConnectionError as err:
@@ -106,7 +106,7 @@ class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
             ) from err
         except ClaudeError as err:
             if isinstance(err, self.quiet_errors):
-                # The add-on answered, and its answer is "no data". Mark the
+                # The app answered, and its answer is "no data". Mark the
                 # failure here for the same reason as above: the ERROR line is
                 # logged only while last_update_success is still True.
                 self.last_update_success = False
@@ -116,7 +116,7 @@ class _AddonCoordinator[DataT](DataUpdateCoordinator[DataT]):
 
 
 class ClaudeStatusCoordinator(_AddonCoordinator[StatusResult]):
-    """Polls the add-on's ``/api/status`` endpoint for the status sensor."""
+    """Polls the app's ``/api/status`` endpoint for the status sensor."""
 
     def __init__(
         self,
@@ -133,14 +133,14 @@ class ClaudeStatusCoordinator(_AddonCoordinator[StatusResult]):
             watch,
             name="status",
             interval=SCAN_INTERVAL,
-            unavailable="Add-on status unavailable",
+            unavailable="App status unavailable",
         )
 
     async def _async_fetch(self) -> StatusResult:
-        """Fetch the latest add-on status.
+        """Fetch the latest app status.
 
-        An add-on that runs another engine than the entry's is not this entry's
-        add-on any more: the poll fails and a repair says so, until it matches.
+        An app that runs another engine than the entry's is not this entry's
+        app any more: the poll fails and a repair says so, until it matches.
         """
         entry_id = self.config_entry.entry_id
         try:
@@ -157,9 +157,9 @@ class ClaudeStatusCoordinator(_AddonCoordinator[StatusResult]):
             )
             raise
         async_clear_issues(self.hass, entry_id, ISSUE_ENGINE_MISMATCH)
-        # Keep the prompt wall-clock just above the add-on's reported budget.
+        # Keep the prompt wall-clock just above the app's reported budget.
         self.client.note_prompt_timeout(status.prompt_timeout_ms)
-        # Only send optional request fields the add-on accepts.
+        # Only send optional request fields the app accepts.
         self.client.note_status(status)
         return status
 
@@ -169,7 +169,7 @@ def _async_note_history_reset(
 ) -> None:
     """Raise ISSUE_USAGE_HISTORY_RESET once per distinct ``history_since``.
 
-    ``history_reset`` never reverts to false once the add-on sets it, so a
+    ``history_reset`` never reverts to false once the app sets it, so a
     plain level check would re-raise on every poll. The issue registry's own
     stored ``history_since`` is the only "already told" state this needs, and
     the issue must be persistent for that memory to survive a real restart
@@ -203,7 +203,7 @@ def _async_note_history_reset(
 
 
 class ClaudeUsageCoordinator(_AddonCoordinator[UsageResult]):
-    """Polls the add-on's ``/api/usage`` endpoint (slow; cached by the add-on)."""
+    """Polls the app's ``/api/usage`` endpoint (slow; cached by the app)."""
 
     def __init__(
         self,
@@ -234,7 +234,7 @@ class ClaudeAccountLimitsCoordinator(_AddonCoordinator[AccountLimitsResult]):
     """Polls ``/api/account_limits`` for the whole account's limit utilisation.
 
     Two answers mean "no figures to show" rather than a fault, and both leave the
-    sensors unavailable with nothing in the log: an add-on too old to have the
+    sensors unavailable with nothing in the log: an app too old to have the
     endpoint (404), and one that has OAuth credentials but cannot reach upstream
     (503). An API-key account is a third case and not a failure at all — it
     answers 200 with an empty list, and no limit entity is created for it.

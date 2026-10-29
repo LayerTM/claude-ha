@@ -1,4 +1,4 @@
-"""Tests for the add-on's error codes and its published prompt limit."""
+"""Tests for the app's error codes and its published prompt limit."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ from .conftest import (
 _STATUS_URL = f"{TEST_BASE_URL}/api/status"
 _PROMPT_URL = f"{TEST_BASE_URL}/api/prompt"
 
-# The codes the add-on's prompt server answers with (core API 3), as its
+# The codes the app's prompt server answers with (core API 3), as its
 # documentation lists them. A code added there needs a row here and in the table.
 _CORE_CODES = {
     "unauthorized",
@@ -99,7 +99,7 @@ def test_every_core_code_is_mapped() -> None:
             413,
             {"error": "body too large", "code": "body_too_large", "limit_bytes": 65536},
             ClaudeRequestError,
-            "The request is too large for the add-on. The maximum size is 65536 bytes.",
+            "The request is too large for the app. The maximum size is 65536 bytes.",
         ),
         (
             400,
@@ -109,7 +109,7 @@ def test_every_core_code_is_mapped() -> None:
                 "field": "surface",
             },
             ClaudeRequestError,
-            "The add-on rejected the request field surface.",
+            "The app rejected the request field surface.",
         ),
         (
             400,
@@ -119,13 +119,13 @@ def test_every_core_code_is_mapped() -> None:
                 "field": "stream",
             },
             ClaudeRequestError,
-            "The add-on rejected the request field stream.",
+            "The app rejected the request field stream.",
         ),
         (
             400,
             {"error": "intent data too large", "code": "invalid_intents"},
             ClaudeRequestError,
-            "The add-on rejected the request as invalid.",
+            "The app rejected the request as invalid.",
         ),
         (
             403,
@@ -141,7 +141,7 @@ def test_every_core_code_is_mapped() -> None:
             403,
             {"error": "forbidden", "code": "forbidden"},
             ClaudeAuthError,
-            "The add-on rejected the request. The shared token may be out of date.",
+            "The app rejected the request. The shared token may be out of date.",
         ),
         (
             503,
@@ -150,40 +150,40 @@ def test_every_core_code_is_mapped() -> None:
                 "code": "write_unavailable",
             },
             ClaudeError,
-            "The add-on can't make changes because it has no Home Assistant token. "
-            "Set one in the add-on options.",
+            "The app can't make changes because it has no Home Assistant token. "
+            "Set one in the app options.",
         ),
         (
             503,
             {"error": "busy", "code": "busy"},
             ClaudeRateLimitError,
-            "The add-on is busy or rate-limited. Try again shortly.",
+            "The app is busy or rate-limited. Try again shortly.",
         ),
         (
             503,
             {"error": "OAuth session expired", "code": "auth_expired"},
             ClaudeAuthExpiredError,
             "Claude's sign-in has expired. Sign in again: run `/login` in "
-            "the add-on's console, or set a `claude setup-token` token as "
+            "the app's console, or set a `claude setup-token` token as "
             "its OAuth Token option so it survives idle spells.",
         ),
         (
             504,
             {"error": "timeout", "code": "timeout"},
             ClaudeConnectionError,
-            "The add-on took too long to answer. Try again.",
+            "The app took too long to answer. Try again.",
         ),
         (
             500,
             {"error": "internal error", "code": "internal"},
             ClaudeError,
-            "Unexpected error talking to the add-on.",
+            "Unexpected error talking to the app.",
         ),
         (
             404,
             {"error": "not found", "code": "not_found"},
             ClaudeNotFoundError,
-            "Unexpected error talking to the add-on.",
+            "Unexpected error talking to the app.",
         ),
     ],
 )
@@ -208,7 +208,7 @@ async def test_coded_answers_name_their_error(
 @pytest.mark.parametrize(
     ("status", "body", "error", "key"),
     [
-        # An add-on that predates codes: the status decides, as before.
+        # An app that predates codes: the status decides, as before.
         (
             413,
             {"error": "prompt too large (max 8 KB)"},
@@ -309,9 +309,9 @@ async def test_degraded_read_names_an_expired_signin(
 ) -> None:
     """A 200 read whose body carries reason "auth-expired" raises the typed error.
 
-    Still a 200: the add-on cannot retry a dead sign-in into success, so it
+    Still a 200: the app cannot retry a dead sign-in into success, so it
     answers rather than failing the transport. The reason is read before the
-    rest of the body, so the add-on's own apology text in ``text`` never
+    rest of the body, so the app's own apology text in ``text`` never
     reaches the caller.
     """
     aioclient_mock.post(
@@ -330,7 +330,7 @@ async def test_degraded_read_names_an_expired_signin(
 
     assert await async_error_message(hass, "en", err.value) == (
         "Claude's sign-in has expired. Sign in again: run `/login` in the "
-        "add-on's console, or set a `claude setup-token` token as its "
+        "app's console, or set a `claude setup-token` token as its "
         "OAuth Token option so it survives idle spells."
     )
 
@@ -414,7 +414,7 @@ async def test_prompt_is_checked_against_the_published_limit(
 async def test_without_a_published_limit_the_addon_decides(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """An add-on that publishes no limit gets the prompt and answers for it."""
+    """An app that publishes no limit gets the prompt and answers for it."""
     aioclient_mock.get(_STATUS_URL, json=LEGACY_STATUS_PAYLOAD)
     aioclient_mock.post(_PROMPT_URL, status=413, json={"error": "too large"})
     client = _client(hass)
@@ -426,7 +426,7 @@ async def test_without_a_published_limit_the_addon_decides(
 
     assert err.value.translation_key == "request_too_large_unsized"
     assert await async_error_message(hass, "en", err.value) == (
-        "The request is too large for the add-on."
+        "The request is too large for the app."
     )
     assert [call[0] for call in aioclient_mock.mock_calls].count("POST") == 1
 
@@ -483,7 +483,7 @@ async def test_stream_error_event_uses_its_code(
     error: type[ClaudeError],
     key: str,
 ) -> None:
-    """A failure the add-on reports inside a stream is read by its code too."""
+    """A failure the app reports inside a stream is read by its code too."""
     aioclient_mock.post(
         _PROMPT_URL,
         text=json.dumps(event) + "\n",
@@ -504,7 +504,7 @@ async def test_stream_error_event_uses_its_code(
 async def test_uncoded_gateway_answers(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, status: int, key: str
 ) -> None:
-    """An uncoded 504 is a timeout; a 502 means the add-on is not reachable."""
+    """An uncoded 504 is a timeout; a 502 means the app is not reachable."""
     aioclient_mock.post(_PROMPT_URL, status=status)
 
     with pytest.raises(ClaudeConnectionError) as err:

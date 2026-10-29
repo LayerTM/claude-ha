@@ -40,6 +40,6 @@ class ClaudeHealthButton(CoordinatorEntity[ClaudeStatusCoordinator], ButtonEntit
         self._attr_device_info = build_device_info(entry)
 
     async def async_press(self) -> None:
-        """Probe the add-on, then refresh status so health is re-evaluated."""
+        """Probe the app, then refresh status so health is re-evaluated."""
         await async_probe(self.hass, self.coordinator.client)
         await self.coordinator.async_request_refresh()

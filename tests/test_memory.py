@@ -51,7 +51,7 @@ SECRET_FACT = "The spare key is under the blue flowerpot."
 
 
 def _mock_status(aioclient_mock: AiohttpClientMocker, *, memory: bool) -> None:
-    """Mock an add-on that does (or does not) take remembered facts."""
+    """Mock an app that does (or does not) take remembered facts."""
     fields = [*REQUEST_FIELDS, "memory"] if memory else REQUEST_FIELDS
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
@@ -68,7 +68,7 @@ def _mock_answer(
 ) -> None:
     """Mock a plain read answer, optionally suggesting a memory change.
 
-    Like the add-on, a suggestion comes back only when the request carried a
+    Like the app, a suggestion comes back only when the request carried a
     ``memory`` key (an empty list included): without it the model is told not to.
     """
     _mock_reply(aioclient_mock, {"proposal": None}, memory_change)
@@ -107,7 +107,7 @@ def _agent_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
 
 
 def _posts(aioclient_mock: AiohttpClientMocker) -> list[dict[str, Any]]:
-    """Return the bodies of every POST sent to the add-on."""
+    """Return the bodies of every POST sent to the app."""
     return [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
 
 
@@ -142,7 +142,7 @@ def _memory(entry: MockConfigEntry) -> Memory:
     return memory
 
 
-# --- validation of what the add-on suggests ---------------------------------
+# --- validation of what the app suggests ---------------------------------
 
 
 def test_normalize_fact() -> None:
@@ -157,7 +157,7 @@ def test_normalize_fact() -> None:
 
 
 def test_parse_memory_change_bounds() -> None:
-    """Bounds are enforced here, not trusted from the add-on."""
+    """Bounds are enforced here, not trusted from the app."""
     assert parse_memory_change(None) is None
     assert parse_memory_change({"remember": [], "forget": []}) is None
     assert parse_memory_change({"remember": "not a list"}) is None
@@ -254,7 +254,7 @@ async def test_store_load_ignores_malformed(
                 {"id": "ok1", "text": "kept", "user_id": None, "created": "t"},
                 {"id": "bad1", "text": "two\nlines"},
                 {"id": 3, "text": "no id"},
-                {"id": "has space", "text": "id the add-on refuses"},
+                {"id": "has space", "text": "id the app refuses"},
                 {"id": "x" * 33, "text": "id too long"},
                 {"id": "ok1", "text": "duplicate id"},
                 {"id": "u1", "text": "bad owner", "user_id": 5},
@@ -325,7 +325,7 @@ async def test_chat_omits_memory_when_not_accepted_or_off(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """No `memory` key for an add-on that does not list it, or with the option off."""
+    """No `memory` key for an app that does not list it, or with the option off."""
     _mock_status(aioclient_mock, memory=False)
     _mock_answer(aioclient_mock, {"remember": ["My room is the office."]})
     await setup_integration(hass, mock_config_entry)
@@ -679,7 +679,7 @@ async def test_action_list_reports_dormant_chat(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """With an add-on that does not take facts, the list says chat is not using them."""
+    """With an app that does not take facts, the list says chat is not using them."""
     _mock_status(aioclient_mock, memory=False)
     await setup_integration(hass, mock_config_entry)
 

@@ -41,7 +41,7 @@ OTHER_SLUG = "local_claude-code"
 
 @pytest.fixture
 def mock_on_supervisor() -> Generator[None]:
-    """Report that HA runs on the Supervisor and the add-on slug resolves."""
+    """Report that HA runs on the Supervisor and the app slug resolves."""
     with (
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         patch(
@@ -325,7 +325,7 @@ async def test_user_flow_addon_running(
     mock_addon_manager: MagicMock,
     mock_status: None,
 ) -> None:
-    """Happy path: the add-on is already running."""
+    """Happy path: the app is already running."""
     result = await _start_and_pick_engine(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "on_supervisor"
@@ -348,7 +348,7 @@ async def test_user_flow_addon_running(
 async def test_user_flow_addon_required(
     hass: HomeAssistant, mock_on_supervisor: None, mock_addon_manager: MagicMock
 ) -> None:
-    """Declining the add-on aborts the flow."""
+    """Declining the app aborts the flow."""
     result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_USE_ADDON: False}
@@ -360,7 +360,7 @@ async def test_user_flow_addon_required(
 async def test_user_flow_addon_info_failed(
     hass: HomeAssistant, mock_on_supervisor: None, mock_addon_manager: MagicMock
 ) -> None:
-    """A Supervisor error while reading add-on info aborts."""
+    """A Supervisor error while reading app info aborts."""
     mock_addon_manager.async_get_addon_info.side_effect = AddonError("boom")
     result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -399,7 +399,7 @@ async def test_user_flow_installs_and_starts(
     mock_addon_manager: MagicMock,
     mock_status: None,
 ) -> None:
-    """A not-installed add-on is installed, started, then configured."""
+    """A not-installed app is installed, started, then configured."""
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_INSTALLED
     )
@@ -421,7 +421,7 @@ async def test_user_flow_starts_stopped_addon(
     mock_addon_manager: MagicMock,
     mock_status: None,
 ) -> None:
-    """A stopped add-on is started, then configured."""
+    """A stopped app is started, then configured."""
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_RUNNING
     )
@@ -480,7 +480,7 @@ async def test_user_flow_cannot_connect(
     mock_addon_manager: MagicMock,
     aioclient_mock,
 ) -> None:
-    """A running add-on that fails the status check aborts."""
+    """A running app that fails the status check aborts."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", status=500)
     result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -496,7 +496,7 @@ async def test_finish_options_fallback(
     mock_addon_manager: MagicMock,
     mock_status: None,
 ) -> None:
-    """When discovery info is empty, host/port/token come from add-on options."""
+    """When discovery info is empty, host/port/token come from app options."""
     mock_addon_manager.async_get_addon_discovery_info.return_value = {}
     result = await _start_and_pick_engine(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -546,7 +546,7 @@ async def test_discovery_flow(
     mock_addon_manager: MagicMock,
     mock_status: None,
 ) -> None:
-    """Add-on discovery skips the engine step and leads straight to confirm."""
+    """App discovery skips the engine step and leads straight to confirm."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_HASSIO}, data=_discovery_info()
     )
@@ -564,7 +564,7 @@ async def test_discovery_flow(
 
 
 async def test_discovery_unsupported_addon(hass: HomeAssistant) -> None:
-    """Discovery of an add-on no engine owns aborts."""
+    """Discovery of an app no engine owns aborts."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
         context={"source": SOURCE_HASSIO},
@@ -606,7 +606,7 @@ async def test_user_flow_already_configured(
 
 
 def _on_supervisor_with(slugs: list[str]) -> Any:
-    """Patch the add-on lookup to return ``slugs``."""
+    """Patch the app lookup to return ``slugs``."""
     return patch(
         "custom_components.claude_ha.config_flow.async_find_addon_slugs",
         return_value=slugs,
@@ -619,7 +619,7 @@ async def test_user_flow_asks_which_addon(
     mock_status: None,
     mock_setup_entry: MagicMock,
 ) -> None:
-    """Two unconfigured add-ons: the user picks one, it is the one set up."""
+    """Two unconfigured apps: the user picks one, it is the one set up."""
     with (
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
         _on_supervisor_with([TEST_SLUG, OTHER_SLUG]),
@@ -647,7 +647,7 @@ async def test_user_flow_skips_the_configured_addon(
     mock_status: None,
     mock_setup_entry: MagicMock,
 ) -> None:
-    """Two add-ons, one already set up: the other is the only choice."""
+    """Two apps, one already set up: the other is the only choice."""
     mock_config_entry.add_to_hass(hass)
     with (
         patch("custom_components.claude_ha.config_flow.is_hassio", return_value=True),
@@ -665,7 +665,7 @@ async def test_user_flow_skips_the_configured_addon(
 async def test_user_flow_every_addon_configured(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Several add-ons, all set up: nothing is left to add."""
+    """Several apps, all set up: nothing is left to add."""
     mock_config_entry.add_to_hass(hass)
     MockConfigEntry(domain=DOMAIN, unique_id=OTHER_SLUG).add_to_hass(hass)
     with (

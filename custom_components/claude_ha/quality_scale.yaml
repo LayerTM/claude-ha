@@ -15,7 +15,7 @@ rules:
   dependency-transparency:
     status: exempt
     comment: >
-      The integration has no PyPI requirements; it talks to the companion add-on
+      The integration has no PyPI requirements; it talks to the companion app
       over HTTP using Home Assistant's own aiohttp client session.
   entity-event-setup:
     status: exempt
@@ -42,14 +42,14 @@ rules:
     status: exempt
     comment: >
       The shared token is provisioned by Supervisor discovery, not entered by the
-      user. If the add-on rotates it, discovery re-advertises and the entry is
+      user. If the app rotates it, discovery re-advertises and the entry is
       updated automatically, so there is no user-facing re-auth step.
   action-exceptions: done
   integration-owner: done
   test-coverage: done
   docs-configuration-parameters:
     status: exempt
-    comment: Setup is zero-touch via the add-on; there are no configurable options.
+    comment: Setup is zero-touch via the app; there are no configurable options.
   docs-installation-parameters: done
 
   # Gold

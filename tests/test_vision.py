@@ -268,8 +268,8 @@ def test_ukrainian_named_among_live_like_set(
 def test_name_without_cue_declines(hass: HomeAssistant, expose_all: None) -> None:
     """A bare camera name with NO visual cue is not visual → declines.
 
-    This is add-on's top hypothesis for the 2nd live question: the message was
-    just the camera's name, so `_is_visual` was False and nothing was attached.
+    A message that is only the camera's name carries no visual cue, so
+    `_is_visual` is False and no image is attached.
     """
     hass.states.async_set("camera.a", "idle", {"friendly_name": "Front Yard"})
     hass.states.async_set("camera.b", "idle", {"friendly_name": "Garage"})
@@ -322,8 +322,8 @@ def test_two_name_matches_returns_none(hass: HomeAssistant, expose_all: None) ->
 
 
 # --- Cue-precision notes (documented current behavior; NOT a unilateral change) -
-# Candidate gaps and over-matches surfaced for add-on-002 §3. We only widen/narrow
-# the cue list once the live result shows a genuine cue-miss — until then these
+# Candidate gaps and over-matches in the cue list. It is only widened or narrowed
+# once a real cue-miss shows up — until then these
 # lock in current behavior so any future change is a conscious, reviewed flip.
 
 

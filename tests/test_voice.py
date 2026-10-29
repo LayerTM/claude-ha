@@ -32,7 +32,7 @@ from .conftest import make_addon_info, setup_integration
 
 @pytest.fixture(autouse=True)
 def addon_addresses(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Answer the add-ons' Supervisor info: no IP unless a test sets one."""
+    """Answer the apps' Supervisor info: no IP unless a test sets one."""
     addresses: dict[str, Any] = {}
 
     async def _addon_info(slug: str) -> SimpleNamespace:
@@ -54,7 +54,7 @@ def _register_wyoming(
     host: str | None = None,
     disabled: bool = False,
 ) -> None:
-    """Register a Wyoming engine of an add-on as if discovery had created it."""
+    """Register a Wyoming engine of an app as if discovery had created it."""
     entry = MockConfigEntry(
         domain="wyoming",
         data={CONF_HOST: host or slug.replace("_", "-"), CONF_PORT: 10200},
@@ -99,7 +99,7 @@ def test_default_voice() -> None:
 async def test_ensure_addon_installs_configures_starts(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A missing add-on is installed, configured and started."""
+    """A missing app is installed, configured and started."""
     manager = MagicMock()
     manager.async_get_addon_info = AsyncMock(
         side_effect=[
@@ -118,7 +118,7 @@ async def test_ensure_addon_installs_configures_starts(
     )
 
     manager.async_install_addon.assert_awaited_once()
-    # The add-on's own defaults (incl. options it requires) are kept.
+    # The app's own defaults (incl. options it requires) are kept.
     manager.async_set_addon_options.assert_awaited_once_with(
         {**make_addon_info().options, "model": "small-int8"}
     )
@@ -128,7 +128,7 @@ async def test_ensure_addon_installs_configures_starts(
 async def test_ensure_addon_already_running(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An installed, running add-on is only reconfigured, not reinstalled."""
+    """An installed, running app is only reconfigured, not reinstalled."""
     manager = MagicMock()
     manager.async_get_addon_info = AsyncMock(
         return_value=make_addon_info(AddonState.RUNNING)
@@ -244,7 +244,7 @@ async def test_setup_pipeline_full(
 
 
 def _flow(flow_id: str, slug: str) -> dict[str, Any]:
-    """Return a pending Wyoming Supervisor-discovery flow for an add-on slug."""
+    """Return a pending Wyoming Supervisor-discovery flow for an app slug."""
     return {
         "flow_id": flow_id,
         "context": {
@@ -379,7 +379,7 @@ def _fake_flow_manager(
 
 
 async def _setup_voice(hass: HomeAssistant) -> VoiceSetupResult:
-    """Run the voice setup with add-ons that are already installed and running."""
+    """Run the voice setup with apps that are already installed and running."""
     return await voice.async_setup_voice_pipeline(
         hass,
         "conversation.claude",
@@ -427,7 +427,7 @@ async def test_setup_pipeline_ignores_other_wyoming_engines(
 async def test_setup_pipeline_does_not_confirm_a_duplicate_entry(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A discovery for an add-on that already has an entry is left unconfirmed."""
+    """A discovery for an app that already has an entry is left unconfirmed."""
     _install_pipeline_store(hass, {})
     _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
     _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
@@ -452,7 +452,7 @@ async def test_setup_pipeline_does_not_confirm_a_duplicate_entry(
 async def test_setup_pipeline_confirms_one_discovery_per_addon(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A stale and a fresh discovery of one add-on make one entry, not two."""
+    """A stale and a fresh discovery of one app make one entry, not two."""
     monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
     configured: list[str] = []
 
@@ -477,7 +477,7 @@ async def test_setup_pipeline_retries_a_discovery_that_failed(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A discovery that cannot be confirmed does not block the add-on's next one."""
+    """A discovery that cannot be confirmed does not block the app's next one."""
     monkeypatch.setattr(voice, "ENGINE_DISCOVERY_TIMEOUT", 0.01)
     configured: list[str] = []
 
@@ -756,7 +756,7 @@ async def test_setup_pipeline_knows_an_entry_by_the_addon_ip(
     monkeypatch: pytest.MonkeyPatch,
     addon_addresses: dict[str, Any],
 ) -> None:
-    """An entry added by hand with the add-on's IP is the add-on's, not a stranger."""
+    """An entry added by hand with the app's IP is the app's, not a stranger."""
     _install_pipeline_store(hass, {})
     addon_addresses[WHISPER_ADDON_SLUG] = "192.0.2.14"
     addon_addresses[PIPER_ADDON_SLUG] = "192.0.2.15"
@@ -793,7 +793,7 @@ async def test_setup_pipeline_without_supervisor_info_uses_the_hostname(
     monkeypatch: pytest.MonkeyPatch,
     addon_addresses: dict[str, Any],
 ) -> None:
-    """When Supervisor cannot say an add-on's IP, its hostname still matches."""
+    """When Supervisor cannot say an app's IP, its hostname still matches."""
     _install_pipeline_store(hass, {})
     addon_addresses["error"] = SupervisorError("unavailable")
     _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
@@ -824,7 +824,7 @@ async def test_setup_pipeline_checks_a_discovery_made_by_starting_the_addon(
     monkeypatch: pytest.MonkeyPatch,
     addon_addresses: dict[str, Any],
 ) -> None:
-    """A discovery that appears while the add-on starts is checked by its IP too."""
+    """A discovery that appears while the app starts is checked by its IP too."""
     _install_pipeline_store(hass, {})
     addon_addresses[WHISPER_ADDON_SLUG] = "192.0.2.14"
     _register_wyoming(hass, "stt", "whisper_ip", WHISPER_ADDON_SLUG, host="192.0.2.14")
@@ -882,7 +882,7 @@ async def test_setup_pipeline_keeps_a_duplicate_when_the_confirm_fails(
 async def test_setup_pipeline_matches_hosts_regardless_of_case(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A hand entry spelled "Core-Whisper" is still the add-on's."""
+    """A hand entry spelled "Core-Whisper" is still the app's."""
     _install_pipeline_store(hass, {})
     _register_wyoming(hass, "stt", "whisper", WHISPER_ADDON_SLUG, host="Core-Whisper")
     _register_wyoming(hass, "tts", "piper", PIPER_ADDON_SLUG)
@@ -896,7 +896,7 @@ async def test_setup_pipeline_matches_hosts_regardless_of_case(
 async def test_setup_pipeline_one_disabled_entry_beside_an_enabled_one_waits(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Only when every entry of the add-on is disabled is that reported."""
+    """Only when every entry of the app is disabled is that reported."""
     _install_pipeline_store(hass, {})
     _register_wyoming(hass, "stt", "old", WHISPER_ADDON_SLUG, disabled=True)
     _register_wyoming(hass, "stt", "faster_whisper", WHISPER_ADDON_SLUG)
