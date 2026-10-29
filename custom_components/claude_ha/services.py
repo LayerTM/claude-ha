@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntryState
@@ -270,6 +271,15 @@ async def _async_ask_web(
     }
 
 
+_VOICE_LOCK = f"{DOMAIN}_voice_lock"
+
+
+def _voice_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Return the one lock every ``setup_voice`` run holds (the engines are shared)."""
+    lock: asyncio.Lock = hass.data.setdefault(_VOICE_LOCK, asyncio.Lock())
+    return lock
+
+
 async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:
     """Handle ``claude_ha.setup_voice``: install Whisper/Piper and wire a pipeline."""
     hass = call.hass
@@ -294,25 +304,30 @@ async def _async_handle_setup_voice(call: ServiceCall) -> ServiceResponse:
 
     engine = engine_for_entry(entry)
     assert engine is not None
-    result = await async_setup_voice_pipeline(
-        hass,
-        conversation_entity_id,
-        language=language,
-        whisper_model=call.data.get(ATTR_STT_MODEL),
-        piper_voice=voice,
-        pipeline_name=call.data.get(ATTR_PIPELINE_NAME)
-        or f"{engine.name} ({language})",
-        pipeline_id=entry.data.get(CONF_VOICE_PIPELINE_ID),
-    )
-    created = result.pipeline_id is not None and result.pipeline_id != entry.data.get(
-        CONF_VOICE_PIPELINE_ID
-    )
-    if created:
-        # Remember the pipeline made here, so the next run re-wires this one and
-        # never touches a pipeline of the user's own.
-        hass.config_entries.async_update_entry(
-            entry, data={**entry.data, CONF_VOICE_PIPELINE_ID: result.pipeline_id}
+    # One run at a time: two overlapping runs would both install the engines and
+    # both read "no pipeline remembered yet", so the second would fail on the
+    # install and, past it, add a second pipeline.
+    async with _voice_lock(hass):
+        result = await async_setup_voice_pipeline(
+            hass,
+            conversation_entity_id,
+            language=language,
+            whisper_model=call.data.get(ATTR_STT_MODEL),
+            piper_voice=voice,
+            pipeline_name=call.data.get(ATTR_PIPELINE_NAME)
+            or f"{engine.name} ({language})",
+            pipeline_id=entry.data.get(CONF_VOICE_PIPELINE_ID),
         )
+        created = (
+            result.pipeline_id is not None
+            and result.pipeline_id != entry.data.get(CONF_VOICE_PIPELINE_ID)
+        )
+        if created:
+            # Remember the pipeline made here, so the next run re-wires this one
+            # and never touches a pipeline of the user's own.
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_VOICE_PIPELINE_ID: result.pipeline_id}
+            )
     return {
         "stt_engine": result.stt_engine,
         "tts_engine": result.tts_engine,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -629,6 +630,59 @@ async def test_service_setup_voice_success(
         DOMAIN, "setup_voice", {"language": "uk"}, blocking=True, return_response=True
     )
     assert captured["pipeline_id"] == "pipeline-1"
+
+
+async def test_service_setup_voice_overlapping_calls_make_one_pipeline(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two overlapping runs are serialised: one pipeline, the second re-wires it."""
+    await setup_integration(hass, mock_config_entry)
+    running = 0
+    overlapped = False
+    made: list[str] = []
+    seen: list[str | None] = []
+
+    async def _fake_pipeline(
+        _hass: HomeAssistant, conv_id: str, **kwargs: Any
+    ) -> VoiceSetupResult:
+        nonlocal running, overlapped
+        running += 1
+        overlapped = overlapped or running > 1
+        seen.append(kwargs["pipeline_id"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        running -= 1
+        if kwargs["pipeline_id"] is None:
+            made.append(f"pipeline-{len(made) + 1}")
+            return VoiceSetupResult("stt.whisper", "tts.piper", made[-1])
+        return VoiceSetupResult("stt.whisper", "tts.piper", kwargs["pipeline_id"])
+
+    monkeypatch.setattr(
+        "custom_components.claude_ha.services.async_setup_voice_pipeline",
+        _fake_pipeline,
+    )
+
+    first, second = await asyncio.gather(
+        *(
+            hass.services.async_call(
+                DOMAIN,
+                "setup_voice",
+                {"language": "uk"},
+                blocking=True,
+                return_response=True,
+            )
+            for _ in range(2)
+        )
+    )
+    assert not overlapped
+    assert made == ["pipeline-1"]
+    assert seen == [None, "pipeline-1"]
+    assert [first["created_pipeline"], second["created_pipeline"]] == [True, False]
+    assert first["pipeline_id"] == second["pipeline_id"] == "pipeline-1"
+    assert mock_config_entry.data[CONF_VOICE_PIPELINE_ID] == "pipeline-1"
 
 
 @pytest.mark.parametrize("service", ["ask", "setup_voice"])
