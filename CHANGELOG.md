@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.17.1] - 2026-10-29
 
+### Fixed
+
+- Two overlapping `claude_ha.setup_voice` runs no longer collide: they now run one
+  after the other, so the second finds the engines installed and re-wires the
+  pipeline the first created instead of failing with "already installed".
+
 ### Changed
 
 - Every message, repair, setup step and action description now says "app" instead of
