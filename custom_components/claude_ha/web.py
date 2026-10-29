@@ -1,4 +1,4 @@
-"""Web answers: the repair hint when the add-on's web option is off."""
+"""Web answers: the repair hint when the app's web option is off."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def async_note_web_outcome(
 ) -> None:
     """Raise the repair hint when web answers are refused, clear it when one lands.
 
-    Only the add-on's own refusal says its web option is off; any other outcome
+    Only the app's own refusal says its web option is off; any other outcome
     leaves the hint as it was.
     """
     if err is None:

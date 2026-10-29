@@ -87,7 +87,7 @@ def _async_add_account_limits(
 
     The set is not fixed — kinds and scoped models come and go upstream — so the
     entities are built from the data rather than from a hardcoded list. An
-    account with no limits at all (an API-key add-on) therefore gets no entity,
+    account with no limits at all (an API-key app) therefore gets no entity,
     so nothing empty is added to a dashboard for it. A limit that later stops
     being reported leaves its sensor unavailable rather than removing an entity
     the user may already have placed somewhere.
@@ -152,7 +152,7 @@ class ClaudeAccountLimitSensor(
     """How much of one of the ACCOUNT's rate limits is used.
 
     Account-wide: every machine and every session signed in to the same account,
-    not just this add-on's own use, which is what the usage sensors report.
+    not just this app's own use, which is what the usage sensors report.
     """
 
     _attr_has_entity_name = True
@@ -217,7 +217,7 @@ class ClaudeAccountLimitSensor(
 
 
 class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):
-    """Reports whether the add-on is ready, plus version/model attributes."""
+    """Reports whether the app is ready, plus version/model attributes."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "status"
@@ -234,7 +234,7 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
 
     @property
     def native_value(self) -> str:
-        """Return whether the add-on reports itself ready."""
+        """Return whether the app reports itself ready."""
         return STATE_READY if self.coordinator.data.ready else STATE_INITIALIZING
 
     @property
@@ -258,15 +258,15 @@ class ClaudeStatusSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
 class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):
     """Soft indicator of recent chat reliability (degraded vs recovered reads).
 
-    A glanceable diagnostic — never a repair — surfacing the add-on's rolling
+    A glanceable diagnostic — never a repair — surfacing the app's rolling
     chat-health summary. ``degraded`` counts reads that failed even after a retry;
     ``recovered`` counts reads a retry rescued (a success, so it stays "ok").
 
     The state asks one question — are the failures still current? — and reads
-    whichever evidence the add-on offers: an unbroken run of failures right now,
+    whichever evidence the app offers: an unbroken run of failures right now,
     the failure RATE across the window, a clean run of successes that outlasts the
     failures before it, and how long ago the last failure was. Never "a failure
-    exists": the add-on trims its window by count, never by age, so a single blip
+    exists": the app trims its window by count, never by age, so a single blip
     used to pin the sensor to "degraded" until fifty further chats pushed it out.
     """
 
@@ -285,10 +285,10 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
 
     @property
     def available(self) -> bool:
-        """Unavailable when the add-on reports no readable chat health.
+        """Unavailable when the app reports no readable chat health.
 
         Two causes, and the second is the one worth knowing while debugging: an
-        add-on older than 1.20.0 doesn't send the block at all, and a block whose
+        app older than 1.20.0 doesn't send the block at all, and a block whose
         counts can't be read is dropped rather than defaulted, because a count
         defaulted to zero would read as "no failures".
         """
@@ -300,8 +300,8 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
         """Degraded while the failures look current, cleared once they don't.
 
         Two clauses raise it and two clear it, and each rests on a different
-        field, so an add-on that reports fewer of them still gets a sound answer
-        from the rest. An add-on older than 1.49.0 reports neither run counter nor
+        field, so an app that reports fewer of them still gets a sound answer
+        from the rest. An app older than 1.49.0 reports neither run counter nor
         stamps and is judged on the rate alone; absence never clears a warning,
         and never invents one.
 
@@ -309,7 +309,7 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
         says — a rate over a count-trimmed window cannot see a fresh outage until
         it has diluted that window. Otherwise the rate itself: frequency is what
         says a problem is real, and it stays the necessary condition for the
-        slower path, because one fresh failure the add-on already retried is
+        slower path, because one fresh failure the app already retried is
         exactly the blip this sensor stopped shouting about.
 
         **Clearing.** A clean run that outlasts the failures behind it has
@@ -333,11 +333,11 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the counts, the rate the state turns on, and the window's clock.
 
-        The timestamps are ``None`` on an add-on older than 1.49.0, and on history
+        The timestamps are ``None`` on an app older than 1.49.0, and on history
         it wrote before it started stamping. ``window_dated`` says how many runs
         those two stamps were taken from, which is what makes them readable: equal
         to ``recent`` they span the window, at 1 they are a single instant printed
-        twice, and ``None`` means an add-on older than 1.55.0 that does not say.
+        twice, and ``None`` means an app older than 1.55.0 that does not say.
         """
         health = self.coordinator.data.chat_health
         if health is None:
@@ -359,11 +359,11 @@ class ClaudeChatHealthSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorE
 
 
 class ClaudeBudgetSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntity):
-    """Today's spend against the add-on's daily budget, with a soft near-cap flag.
+    """Today's spend against the app's daily budget, with a soft near-cap flag.
 
     A diagnostic dollar sensor — never a repair. The value is today's spend;
     attributes carry the cap, remaining, fraction used and a ``near_cap`` flag. An
-    unlimited cap (limit 0) leaves the cap-derived attributes null; an add-on that
+    unlimited cap (limit 0) leaves the cap-derived attributes null; an app that
     reports no budget leaves the sensor unavailable.
     """
 
@@ -382,7 +382,7 @@ class ClaudeBudgetSensor(CoordinatorEntity[ClaudeStatusCoordinator], SensorEntit
 
     @property
     def available(self) -> bool:
-        """Unavailable on add-ons that don't report a budget (< 1.21.0)."""
+        """Unavailable on apps that don't report a budget (< 1.21.0)."""
         data = self.coordinator.data
         return super().available and data is not None and data.budget is not None
 

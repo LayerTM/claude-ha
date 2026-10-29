@@ -58,55 +58,53 @@ def test_strings_json_matches_translations_en() -> None:
 _CONFIG_OLD = {
     "component.claude_ha.config.step.on_supervisor.title": "Set up Claude",
     "component.claude_ha.config.step.on_supervisor.description": (
-        "Claude for Home Assistant runs through the Claude Code add-on. "
-        "Do you want to set it up using the add-on?"
+        "Claude for Home Assistant runs through the Claude Code app. "
+        "Do you want to set it up using the app?"
     ),
     "component.claude_ha.config.step.on_supervisor.data.use_addon": (
-        "Use the Claude Code add-on"
+        "Use the Claude Code app"
     ),
     "component.claude_ha.config.step.on_supervisor.data_description.use_addon": (
-        "The add-on runs Claude on your Home Assistant host and is required "
+        "The app runs Claude on your Home Assistant host and is required "
         "by this integration."
     ),
-    "component.claude_ha.config.step.pick_addon.title": (
-        "Choose the Claude Code add-on"
-    ),
+    "component.claude_ha.config.step.pick_addon.title": ("Choose the Claude Code app"),
     "component.claude_ha.config.step.pick_addon.description": (
-        "More than one Claude Code add-on is available. Choose the one to set up."
+        "More than one Claude Code app is available. Choose the one to set up."
     ),
     "component.claude_ha.config.step.hassio_confirm.title": (
-        "Set up Claude with the Claude Code add-on"
+        "Set up Claude with the Claude Code app"
     ),
     "component.claude_ha.config.step.hassio_confirm.description": (
-        "Do you want to set up Claude using the discovered Claude Code add-on?"
+        "Do you want to set up Claude using the discovered Claude Code app?"
     ),
     "component.claude_ha.config.step.install_addon.title": (
-        "Installing the Claude Code add-on"
+        "Installing the Claude Code app"
     ),
     "component.claude_ha.config.step.start_addon.title": (
-        "Starting the Claude Code add-on"
+        "Starting the Claude Code app"
     ),
     "component.claude_ha.config.progress.install_addon": (
-        "Please wait while the Claude Code add-on is installed. "
+        "Please wait while the Claude Code app is installed. "
         "This can take several minutes."
     ),
     "component.claude_ha.config.progress.start_addon": (
-        "Please wait while the Claude Code add-on starts."
+        "Please wait while the Claude Code app starts."
     ),
     "component.claude_ha.config.abort.addon_required": (
-        "The Claude Code add-on is required to use this integration."
+        "The Claude Code app is required to use this integration."
     ),
     "component.claude_ha.config.abort.addon_info_failed": (
-        "Failed to get the Claude Code add-on info."
+        "Failed to get the Claude Code app info."
     ),
     "component.claude_ha.config.abort.addon_install_failed": (
-        "Failed to install the Claude Code add-on."
+        "Failed to install the Claude Code app."
     ),
     "component.claude_ha.config.abort.addon_start_failed": (
-        "Failed to start the Claude Code add-on."
+        "Failed to start the Claude Code app."
     ),
     "component.claude_ha.config.abort.addon_get_discovery_info_failed": (
-        "Failed to get the Claude Code add-on connection details."
+        "Failed to get the Claude Code app connection details."
     ),
 }
 
@@ -114,24 +112,24 @@ _CONFIG_OLD = {
 # captured before the conversion.
 _ISSUES_OLD = {
     "component.claude_ha.issues.addon_not_running.title": (
-        "The Claude Code add-on is not running"
+        "The Claude Code app is not running"
     ),
     "component.claude_ha.issues.addon_not_running.fix_flow.step.confirm.title": (
-        "Start the Claude Code add-on"
+        "Start the Claude Code app"
     ),
     "component.claude_ha.issues.addon_not_running.fix_flow.step.confirm.description": (
-        "The Claude Code add-on is installed but not running, so Claude is "
+        "The Claude Code app is installed but not running, so Claude is "
         "unavailable. Do you want to start it now?"
     ),
     "component.claude_ha.issues.addon_not_running.fix_flow.abort.start_failed": (
-        "Failed to start the Claude Code add-on. Check the add-on logs and try again."
+        "Failed to start the Claude Code app. Check the app logs and try again."
     ),
     "component.claude_ha.issues.addon_not_installed.title": (
-        "The Claude Code add-on is not installed"
+        "The Claude Code app is not installed"
     ),
     "component.claude_ha.issues.addon_not_installed.description": (
-        "Claude is unavailable because the Claude Code add-on is not installed. "
-        "Home Assistant is trying to install it; check the add-on for progress."
+        "Claude is unavailable because the Claude Code app is not installed. "
+        "Home Assistant is trying to install it; check the app for progress."
     ),
     "component.claude_ha.issues.not_logged_in.title": "Claude isn't logged in",
     "component.claude_ha.issues.no_ha_token.title": (
@@ -140,7 +138,7 @@ _ISSUES_OLD = {
     "component.claude_ha.issues.no_ha_token.description": (
         "Claude is logged in but has no Home Assistant token, so chat can "
         "answer general questions but can't see or control your home. Set the "
-        "'Prompt API HA Token' (or 'HA Token') in the Claude Code add-on "
+        "'Prompt API HA Token' (or 'HA Token') in the Claude Code app "
         "options, then check again."
     ),
     "component.claude_ha.issues.mcp_unreachable.title": (
@@ -188,16 +186,16 @@ _OPTIONS_OLD = {
 # captured before the conversion.
 _EXCEPTIONS_OLD = {
     "component.claude_ha.exceptions.addon_not_ready.message": (
-        "The Claude Code add-on is not ready yet."
+        "The Claude Code app is not ready yet."
     ),
     "component.claude_ha.exceptions.addon_info_failed.message": (
-        "Failed to get the Claude Code add-on info."
+        "Failed to get the Claude Code app info."
     ),
     "component.claude_ha.exceptions.addon_not_installed.message": (
-        "The Claude Code add-on is being installed."
+        "The Claude Code app is being installed."
     ),
     "component.claude_ha.exceptions.addon_not_running.message": (
-        "The Claude Code add-on is not running yet."
+        "The Claude Code app is not running yet."
     ),
 }
 
@@ -276,7 +274,7 @@ async def test_engine_mismatch_issue_names_both_engines(hass: HomeAssistant) -> 
     assert "codex" in text
 
 
-# Each engine's own renewal commands, from its add-on's own docs (engines.py).
+# Each engine's own renewal commands, from its app's own docs (engines.py).
 # A sign-in string rendered for one engine must show only its own commands.
 _SIGNIN_COMMANDS = {
     CLAUDE: ("`/login`", "`claude setup-token`"),

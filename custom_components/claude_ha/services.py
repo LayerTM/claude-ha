@@ -374,6 +374,6 @@ async def _async_handle_list_memory(call: ServiceCall) -> ServiceResponse:
     return {
         "facts": [_fact_response(fact) for fact in facts],
         "enabled": enabled,
-        # Whether chat turns carry the facts now: on, and an add-on that takes them.
+        # Whether chat turns carry the facts now: on, and an app that takes them.
         "used_in_chat": enabled and data.client.supports_memory,
     }

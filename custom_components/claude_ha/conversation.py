@@ -1,10 +1,10 @@
-"""Conversation agent for Claude, backed by the Claude Code add-on.
+"""Conversation agent for Claude, backed by the Claude Code app.
 
 Chat can ACT on Home Assistant: benign, model-low-risk actions run immediately;
 anything the deterministic classifier (:mod:`.risk`) flags — or that the model
 marks non-low, or that the user pinned as critical — is held and confirmed with a
 plain yes/no. The confirmed write replays the exact validated intents, so it does
-not depend on any model memory of what is being confirmed. The add-on's coarse
+not depend on any model memory of what is being confirmed. The app's coarse
 per-domain 403 is a backstop; Assist entity exposure is the outer ceiling.
 """
 
@@ -69,7 +69,7 @@ from .vision import resolve_camera
 from .web import async_note_web_outcome
 
 # Declared for the parallel-updates quality rule. Conversation turns are not
-# entity state updates, so this does not gate them; the add-on owns concurrency
+# entity state updates, so this does not gate them; the app owns concurrency
 # control (it returns 503 when its own cap is reached).
 PARALLEL_UPDATES = 0
 
@@ -259,8 +259,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
     _attr_has_entity_name = True
     _attr_name: str | None = None
-    # The add-on can stream the answer as NDJSON deltas (>= 1.17.0); older
-    # add-ons return a full JSON body, which the client yields as one result.
+    # The app can stream the answer as NDJSON deltas (>= 1.17.0); older
+    # apps return a full JSON body, which the client yields as one result.
     _attr_supports_streaming = True
     # Claude acts on the home (auto-run or confirmed writes, automations). HA
     # reads this to drop the Assist dialog's "cannot control your home" warning;
@@ -324,7 +324,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             )
 
         # A3. A "change my <x> automation ..." request: resolve the target locally,
-        # then have the model edit its REAL config (only when the add-on supports it).
+        # then have the model edit its REAL config (only when the app supports it).
         modify_query = _modify_query(text)
         if (
             modify_query is not None
@@ -427,7 +427,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
     ) -> conversation.ConversationResult | None:
         """Run an auto-executable write; say what it did, or ``None`` to confirm.
 
-        ``None`` is a refusal before anything ran (e.g. the add-on's 403
+        ``None`` is a refusal before anything ran (e.g. the app's 403
         backstop). A write that ran and failed is said, not asked again; so is one
         whose outcome is unknown (connection lost or timed out), because a held
         confirmation would run it twice. An ``action_failed`` that names no
@@ -471,7 +471,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
         Text deltas are added live; the final ``PromptResult`` (carrying the
         proposal) is captured out of band. The streamed answer, as recorded in the
-        chat log, is empty when the add-on answered with a plain JSON body (no
+        chat log, is empty when the app answered with a plain JSON body (no
         deltas) so the caller records it.
         ``edit_automation`` (a target's current config) asks the model to edit it.
         """
@@ -497,7 +497,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                         yield {"role": "assistant"}
                         started = True
                     yield {"content": chunk.text}
-            # A cut answer always ends with the add-on's explanation, whatever the
+            # A cut answer always ends with the app's explanation, whatever the
             # reason; without it the user sees only the half sentence.
             degraded = captured.get("result")
             if started and degraded is not None and degraded.degraded:
@@ -511,9 +511,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
         result = captured.get("result")
         if result is None:
-            raise ClaudeError(
-                "The add-on returned no result", translation_key="no_result"
-            )
+            raise ClaudeError("The app returned no result", translation_key="no_result")
         return result, streamed
 
     def _dropped_memory_note(
@@ -923,7 +921,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
 
         Home Assistant's ``async_get_result_from_chat_log`` adopts the last intent
         result in the chat log since an LLM agent provided its prompt data. This
-        agent never provides it (Claude runs in the add-on), so a local intent
+        agent never provides it (Claude runs in the app), so a local intent
         the Assist pipeline tried and failed before falling back here would make
         Claude's answer an error response.
         """

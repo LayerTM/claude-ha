@@ -124,7 +124,7 @@ async def test_alerts_binary_sensor_unavailable_without_field(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """An add-on that doesn't report alerts (< 1.39.0) leaves the sensor unavailable."""
+    """An app that doesn't report alerts (< 1.39.0) leaves the sensor unavailable."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json={"ready": True})
     aioclient_mock.get(f"{TEST_BASE_URL}/api/usage", json=USAGE_PAYLOAD)
     await setup_integration(hass, mock_config_entry)
@@ -139,7 +139,7 @@ async def test_alerts_binary_sensor_null_is_unavailable(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """A v1.39.0 add-on with proactive alerts off reports null → unavailable."""
+    """A v1.39.0 app with proactive alerts off reports null → unavailable."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status", json={"ready": True, "alerts": None}
     )

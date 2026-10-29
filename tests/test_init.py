@@ -85,7 +85,7 @@ async def test_remove_clears_every_issue_of_the_entry(
     mock_config_entry: MockConfigEntry,
     mock_status: None,
 ) -> None:
-    """A removed entry leaves no repair of its own behind, add-on ones included."""
+    """A removed entry leaves no repair of its own behind, app ones included."""
     await setup_integration(hass, mock_config_entry)
     kinds = (
         *HEALTH_ISSUES,
@@ -116,7 +116,7 @@ async def test_setup_status_unreachable(
     mock_config_entry: MockConfigEntry,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """An unreachable add-on leaves the entry in retry."""
+    """An unreachable app leaves the entry in retry."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", status=500)
     await setup_integration(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
@@ -128,7 +128,7 @@ async def test_setup_on_supervisor_running(
     mock_status: None,
     mock_addon_manager: object,
 ) -> None:
-    """On Supervisor with the add-on running, setup proceeds."""
+    """On Supervisor with the app running, setup proceeds."""
     with patch("custom_components.claude_ha.is_hassio", return_value=True):
         await setup_integration(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.LOADED
@@ -155,9 +155,9 @@ async def test_setup_leaves_stopped_addon_to_supervisor(
     mock_addon_manager,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A stopped add-on at setup is waited for, not started, and not a repair.
+    """A stopped app at setup is waited for, not started, and not a repair.
 
-    At boot the Supervisor starts the add-on right after Core; starting it from
+    At boot the Supervisor starts the app right after Core; starting it from
     setup raced that and flashed a repair on every Home Assistant restart.
     """
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
@@ -177,7 +177,7 @@ async def test_setup_leaves_stopped_addon_to_supervisor(
             is None
         )
 
-        # The Supervisor brings the add-on up; the next setup retry succeeds.
+        # The Supervisor brings the app up; the next setup retry succeeds.
         mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
         freezer.tick(timedelta(seconds=11))
         async_fire_time_changed(hass)
@@ -202,7 +202,7 @@ async def test_setup_stopped_addon_raises_repair_after_grace(
     mock_addon_manager,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """An add-on still stopped past the grace period gets a WARNING and a repair."""
+    """An app still stopped past the grace period gets a WARNING and a repair."""
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_RUNNING
     )
@@ -236,7 +236,7 @@ async def test_setup_addon_not_installed_creates_issue(
     mock_status: None,
     mock_addon_manager,
 ) -> None:
-    """A missing add-on schedules install+setup and raises a repair issue."""
+    """A missing app schedules install+setup and raises a repair issue."""
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_INSTALLED
     )
@@ -261,7 +261,7 @@ async def test_setup_addon_info_error(
     mock_status: None,
     mock_addon_manager,
 ) -> None:
-    """A Supervisor error while reading add-on info defers setup."""
+    """A Supervisor error while reading app info defers setup."""
     from homeassistant.components.hassio import AddonError
 
     mock_addon_manager.async_get_addon_info.side_effect = AddonError("boom")
@@ -283,7 +283,7 @@ async def _assert_ensure_addon_running_names_the_addon(
 async def test_ensure_addon_running_names_addon_when_task_in_progress(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
 ) -> None:
-    """A pending Supervisor task names the add-on in the retry reason."""
+    """A pending Supervisor task names the app in the retry reason."""
     mock_addon_manager.task_in_progress.return_value = True
     await _assert_ensure_addon_running_names_the_addon(
         hass, mock_config_entry, "addon_not_ready"
@@ -293,7 +293,7 @@ async def test_ensure_addon_running_names_addon_when_task_in_progress(
 async def test_ensure_addon_running_names_addon_on_info_error(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
 ) -> None:
-    """A Supervisor error reading add-on info names the add-on in the reason."""
+    """A Supervisor error reading app info names the app in the reason."""
     from homeassistant.components.hassio import AddonError
 
     mock_addon_manager.async_get_addon_info.side_effect = AddonError("boom")
@@ -305,7 +305,7 @@ async def test_ensure_addon_running_names_addon_on_info_error(
 async def test_ensure_addon_running_names_addon_when_not_installed(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
 ) -> None:
-    """A missing add-on names the add-on in the retry reason."""
+    """A missing app names the app in the retry reason."""
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_INSTALLED
     )
@@ -317,7 +317,7 @@ async def test_ensure_addon_running_names_addon_when_not_installed(
 async def test_ensure_addon_running_names_addon_when_stopped(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_addon_manager
 ) -> None:
-    """A stopped add-on names the add-on in the retry reason."""
+    """A stopped app names the app in the retry reason."""
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info(
         AddonState.NOT_RUNNING
     )

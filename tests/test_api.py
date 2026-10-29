@@ -1,4 +1,4 @@
-"""Tests for the add-on HTTP client (contract mapping)."""
+"""Tests for the app HTTP client (contract mapping)."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ async def test_surface_gated_on_addon_version(
     version: str | None,
     sent: bool,
 ) -> None:
-    """`surface` is only put on the wire for add-ons >= 1.28.0 (else dropped)."""
+    """`surface` is only put on the wire for apps >= 1.28.0 (else dropped)."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
@@ -86,7 +86,7 @@ async def test_surface_gated_on_addon_version(
 async def test_supports_edit_automation_version_gate(
     hass: HomeAssistant, version: str | None, supported: bool
 ) -> None:
-    """`edit_automation` is only offered to add-ons >= 1.36.0."""
+    """`edit_automation` is only offered to apps >= 1.36.0."""
     client = _client(hass)
     note_status(client, version)
     assert client.supports_edit_automation is supported
@@ -120,7 +120,7 @@ async def test_status_ha_mcp_auth(
 async def test_status_without_ha_mcp_auth(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """An add-on that predates the field reports it as unknown, not as a break."""
+    """An app that predates the field reports it as unknown, not as a break."""
     payload = {k: v for k, v in STATUS_PAYLOAD.items() if k != "ha_mcp_auth"}
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json=payload)
     assert (await _client(hass).async_get_status()).ha_mcp_auth is None
@@ -140,7 +140,7 @@ async def test_status_parsing(
 async def test_status_parses_chat_health(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """A chat_health object (add-on >= 1.20.0) parses into ChatHealth."""
+    """A chat_health object (app >= 1.20.0) parses into ChatHealth."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={
@@ -437,7 +437,7 @@ async def test_alerts_items_that_cannot_be_iterated_yield_an_empty_set(
     It fails separately from the counts and so is guarded separately:
     ``items: null`` raised ``TypeError`` straight out of the comprehension while
     both counts were perfectly readable. Dropping the whole block for it would
-    throw away what the add-on did manage to say.
+    throw away what the app did manage to say.
     """
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
@@ -505,7 +505,7 @@ def test_chat_health_staleness_boundary_is_strict() -> None:
 @pytest.mark.parametrize(
     ("consecutive_failed", "expected"),
     [
-        (None, False),  # add-on older than 1.49.0 raises nothing early
+        (None, False),  # app older than 1.49.0 raises nothing early
         (0, False),
         (2, False),
         (3, True),
@@ -564,7 +564,7 @@ def test_chat_health_failure_rate_empty_window() -> None:
         # tie, and a tie does not overrule the only clause that raises a warning.
         (4, 2, 2, False),
         (6, 2, 4, True),
-        # A count HIGHER than the success total is the add-on miscounting. `>=`
+        # A count HIGHER than the success total is the app miscounting. `>=`
         # would grant recovery on every one of these; `==` refuses.
         (4, 4, 1, False),
         (4, 4, 5, False),
@@ -572,7 +572,7 @@ def test_chat_health_failure_rate_empty_window() -> None:
         # Nonsense in the other direction: the success count goes negative, and
         # any positive count sits above it.
         (3, 5, 1, False),
-        # An add-on older than 1.49.0 reports nothing and gets no rescue.
+        # An app older than 1.49.0 reports nothing and gets no rescue.
         (3, 1, None, False),
     ],
 )
@@ -581,7 +581,7 @@ def test_chat_health_has_recovered(
 ) -> None:
     """Recovery is a clean run that outlasts the failures, bounded by the successes.
 
-    The bound only ever fires on input the add-on could not have produced; the
+    The bound only ever fires on input the app could not have produced; the
     floor is what does the work.
     """
     health = ChatHealth(
@@ -624,7 +624,7 @@ async def test_status_chat_health_consecutive_ok_coercion(
 async def test_status_chat_health_absent_is_none(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """An older add-on that omits chat_health yields None (backward-compatible)."""
+    """An older app that omits chat_health yields None (backward-compatible)."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json={"ready": True})
     status = await _client(hass).async_get_status()
     assert status.chat_health is None
@@ -633,7 +633,7 @@ async def test_status_chat_health_absent_is_none(
 async def test_status_parses_timeout_and_budget(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """prompt_timeout_ms and budget (add-on >= 1.21.0) parse into the status."""
+    """prompt_timeout_ms and budget (app >= 1.21.0) parse into the status."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={
@@ -652,7 +652,7 @@ async def test_status_parses_timeout_and_budget(
 async def test_status_timeout_and_budget_absent_are_none(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """Older add-ons omit both fields → None (backward-compatible)."""
+    """Older apps omit both fields → None (backward-compatible)."""
     aioclient_mock.get(f"{TEST_BASE_URL}/api/status", json={"ready": True})
     status = await _client(hass).async_get_status()
     assert status.prompt_timeout_ms is None
@@ -662,7 +662,7 @@ async def test_status_timeout_and_budget_absent_are_none(
 async def test_status_parses_alerts(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """An alerts object (add-on >= 1.39.0) parses into Alerts with its items."""
+    """An alerts object (app >= 1.39.0) parses into Alerts with its items."""
     aioclient_mock.get(
         f"{TEST_BASE_URL}/api/status",
         json={
@@ -702,7 +702,7 @@ async def test_status_alerts_absent_or_null_is_none(
 ) -> None:
     """A missing field, an explicit null, or a non-dict all yield alerts=None.
 
-    An older add-on omits the key; a v1.39.0 add-on with proactive alerts off (or
+    An older app omits the key; a v1.39.0 app with proactive alerts off (or
     not yet ticked) reports ``null`` — both must leave the sensor unavailable.
     """
     body: dict[str, object] = {"ready": True}
@@ -736,8 +736,8 @@ async def test_status_auth_absent_or_unreadable_is_none(
 ) -> None:
     """No block, a non-dict, or a missing/empty state all read as no evidence.
 
-    An add-on that predates ``auth`` sends no key at all; this collapses every
-    one of those shapes to the same ``None`` a legacy add-on produces, so the
+    An app that predates ``auth`` sends no key at all; this collapses every
+    one of those shapes to the same ``None`` a legacy app produces, so the
     health check's "unknown = no repair" never has to tell them apart.
     """
     body: dict[str, object] = {"ready": True}
@@ -786,7 +786,7 @@ async def test_status_alerts_skips_malformed_items(
 
 
 async def test_note_prompt_timeout_tracks_addon_budget(hass: HomeAssistant) -> None:
-    """The read timeout stays a margin above the add-on budget, never below floor."""
+    """The read timeout stays a margin above the app budget, never below floor."""
     client = _client(hass)
     assert client.read_timeout == 135.0  # floor
     client.note_prompt_timeout(200000)  # 200s + 15s margin
@@ -851,7 +851,7 @@ async def test_prompt_read_mode_omits_intents(
 async def test_prompt_sends_language_when_given(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """The HA conversation language is forwarded so the add-on can localize."""
+    """The HA conversation language is forwarded so the app can localize."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
@@ -863,7 +863,7 @@ async def test_prompt_sends_language_when_given(
 async def test_prompt_omits_language_when_absent(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """No language means no field — additive, backward-compatible with old add-ons."""
+    """No language means no field — additive, backward-compatible with old apps."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},
@@ -875,7 +875,7 @@ async def test_prompt_omits_language_when_absent(
 async def test_prompt_parses_automation_draft(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """A drafted automation (add-on >= 1.34.0) is carried on the PromptResult."""
+    """A drafted automation (app >= 1.34.0) is carried on the PromptResult."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={
@@ -968,7 +968,7 @@ async def test_memory_sent_only_when_listed(
     fields: frozenset[str] | None,
     sent: bool,
 ) -> None:
-    """`memory` goes on the wire only when the add-on lists it."""
+    """`memory` goes on the wire only when the app lists it."""
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "ok", "proposal": None, "tools_used": [], "truncated": False},

@@ -212,7 +212,7 @@ async def test_stream_cleans_every_string_in_the_answer(
 async def test_stream_json_fallback(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """A non-NDJSON body (old add-on) yields a single result, no deltas."""
+    """A non-NDJSON body (old app) yields a single result, no deltas."""
     aioclient_mock.post(
         _URL,
         json={"text": "hi", "proposal": None, "tools_used": [], "truncated": False},
@@ -414,7 +414,7 @@ async def test_conversation_stream_no_result_errors(
 async def test_stream_sends_edit_automation_when_supported(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """`edit_automation` rides the read only when the add-on is new enough."""
+    """`edit_automation` rides the read only when the app is new enough."""
     aioclient_mock.post(
         _URL, text=_ndjson({"type": "done", "text": "ok"}), headers=_NDJSON
     )
@@ -431,7 +431,7 @@ async def test_stream_sends_edit_automation_when_supported(
 async def test_stream_omits_edit_automation_when_unsupported(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """A pre-1.36.0 add-on never sees the edit_automation key (would 400)."""
+    """A pre-1.36.0 app never sees the edit_automation key (would 400)."""
     aioclient_mock.post(
         _URL, text=_ndjson({"type": "done", "text": "ok"}), headers=_NDJSON
     )
@@ -493,7 +493,7 @@ async def test_conversation_degraded_stream_appends_the_notice(
     extra: dict[str, Any],
     satellite_id: str | None,
 ) -> None:
-    """A degraded stream ends with the add-on's explanation after what streamed."""
+    """A degraded stream ends with the app's explanation after what streamed."""
     aioclient_mock.post(
         _URL,
         text=_ndjson(

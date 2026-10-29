@@ -20,7 +20,7 @@ from .conftest import TEST_SLUG
 async def test_addon_not_running_fix_flow(
     hass: HomeAssistant, mock_addon_manager: MagicMock
 ) -> None:
-    """Confirming the repair starts the add-on."""
+    """Confirming the repair starts the app."""
     flow = await async_create_fix_flow(
         hass,
         f"{ISSUE_ADDON_NOT_RUNNING}_entry",
@@ -63,7 +63,7 @@ async def test_unknown_issue_uses_confirm_flow(hass: HomeAssistant) -> None:
 
 
 async def test_fix_flow_follows_the_issue_kind_not_the_id(hass: HomeAssistant) -> None:
-    """Only data naming the not-running kind gets the start-the-add-on flow."""
+    """Only data naming the not-running kind gets the start-the-app flow."""
     flow = await async_create_fix_flow(
         hass,
         f"{ISSUE_ADDON_NOT_RUNNING}_entry",

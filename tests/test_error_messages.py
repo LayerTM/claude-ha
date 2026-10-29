@@ -44,17 +44,17 @@ async def _speech(
 @pytest.mark.parametrize(
     ("mock", "speech"),
     [
-        ({"status": 503}, "The add-on is busy or rate-limited. Try again shortly."),
+        ({"status": 503}, "The app is busy or rate-limited. Try again shortly."),
         (
             {"status": 401},
-            "The add-on rejected the request. The shared token may be out of date.",
+            "The app rejected the request. The shared token may be out of date.",
         ),
-        ({"status": 413}, "The request is too large for the add-on."),
-        ({"status": 400}, "The add-on rejected the request as invalid."),
-        ({"status": 500}, "Unexpected error talking to the add-on."),
+        ({"status": 413}, "The request is too large for the app."),
+        ({"status": 400}, "The app rejected the request as invalid."),
+        ({"status": 500}, "Unexpected error talking to the app."),
         (
             {"exc": ClientError("Cannot connect to host abcd:8126")},
-            "The add-on is not reachable.",
+            "The app is not reachable.",
         ),
     ],
 )
@@ -88,7 +88,7 @@ async def test_a_language_without_translations_gets_english(
 
     result = await _speech(hass, mock_config_entry, language="uk")
 
-    assert result.response.speech["plain"]["speech"] == "The add-on is not reachable."
+    assert result.response.speech["plain"]["speech"] == "The app is not reachable."
 
 
 async def test_a_rejected_automation_says_why_with_its_details(
@@ -133,13 +133,13 @@ async def test_a_rejected_automation_says_why_with_its_details(
         # raw key or template.
         (
             ClaudeError("raw", translation_key="no_such_key"),
-            "Unexpected error talking to the add-on.",
+            "Unexpected error talking to the app.",
         ),
         (
             ClaudeError("raw", translation_key="automation_entity_not_allowed"),
-            "Unexpected error talking to the add-on.",
+            "Unexpected error talking to the app.",
         ),
-        (ClaudeError(), "Unexpected error talking to the add-on."),
+        (ClaudeError(), "Unexpected error talking to the app."),
     ],
 )
 async def test_error_message_rendering(

@@ -1,12 +1,12 @@
 """One-click local voice: install Whisper + Piper and wire a Claude pipeline.
 
-A polished, non-console version of the add-on's ``/ha-voice`` skill. For a chosen
+A polished, non-console version of the app's ``/ha-voice`` skill. For a chosen
 language it installs and starts the official Whisper (STT) and Piper (TTS)
-add-ons, waits for the Wyoming integration to discover them, and creates an Assist
+apps, waits for the Wyoming integration to discover them, and creates an Assist
 pipeline whose conversation agent is this Claude agent.
 
 The values that depend on the live Supervisor / Piper catalogue are isolated as
-constants below so they are trivial to correct: the official add-on slugs, their
+constants below so they are trivial to correct: the official app slugs, their
 option keys, and a best-effort default Piper voice per language (override with the
 service's ``tts_voice``). The Wyoming engine ids and the tts voice are otherwise
 discovered from the running system rather than guessed.
@@ -42,7 +42,7 @@ from .const import LOGGER
 # after-dependency that pulls in tts/mutagen); it is only touched at runtime.
 ASSIST_PIPELINE_DATA = "assist_pipeline"
 
-# Official Supervisor add-on slugs and the integration that discovers them.
+# Official Supervisor app slugs and the integration that discovers them.
 WHISPER_ADDON_SLUG = "core_whisper"
 PIPER_ADDON_SLUG = "core_piper"
 WHISPER_ADDON_NAME = "Whisper"
@@ -64,7 +64,7 @@ LANGUAGE_VOICES: dict[str, str] = {
     "uk": "uk_UA-ukrainian_tts-medium",
 }
 
-# How long to wait for Wyoming to discover a freshly-started add-on.
+# How long to wait for Wyoming to discover a freshly-started app.
 ENGINE_DISCOVERY_TIMEOUT = 90
 
 
@@ -78,26 +78,26 @@ class VoiceSetupResult:
 
 
 def _discovery_url(slug: str) -> str:
-    """Return the ``configuration_url`` Wyoming's flow carries for an add-on."""
+    """Return the ``configuration_url`` Wyoming's flow carries for an app."""
     return f"homeassistant://hassio/addon/{slug}/info"
 
 
-# Wyoming's Supervisor-discovery flows for exactly the two add-ons set up here,
-# mapped to the add-on each one belongs to.
+# Wyoming's Supervisor-discovery flows for exactly the two apps set up here,
+# mapped to the app each one belongs to.
 _OWN_DISCOVERY_SLUGS = {
     _discovery_url(slug): slug for slug in (WHISPER_ADDON_SLUG, PIPER_ADDON_SLUG)
 }
 
 
 def _addon_host(slug: str) -> str:
-    """Return the hostname Supervisor gives an add-on on the internal network."""
+    """Return the hostname Supervisor gives an app on the internal network."""
     return slug.replace("_", "-")
 
 
 async def _async_addon_hosts(hass: HomeAssistant, slug: str) -> frozenset[str]:
-    """Return every address a Wyoming entry may use for an add-on.
+    """Return every address a Wyoming entry may use for an app.
 
-    Discovery stores the add-on's hostname; an entry added by hand may hold its
+    Discovery stores the app's hostname; an entry added by hand may hold its
     internal IP address instead, which Supervisor reports once it is installed.
     """
     hosts = {_addon_host(slug)}
@@ -117,14 +117,14 @@ def default_voice(language: str) -> str | None:
 async def _async_ensure_addon(
     hass: HomeAssistant, slug: str, name: str, options: dict[str, object]
 ) -> None:
-    """Install (if needed), configure and start one Supervisor add-on."""
+    """Install (if needed), configure and start one Supervisor app."""
     manager = get_addon_manager(hass, slug, name)
     try:
         info = await manager.async_get_addon_info()
         if info.state is AddonState.NOT_INSTALLED:
             await manager.async_install_addon()
             info = await manager.async_get_addon_info()
-        # Supervisor validates the whole option set, and add-ons grow required
+        # Supervisor validates the whole option set, and apps grow required
         # options over time, so change only ours on top of what is stored.
         await manager.async_set_addon_options({**info.options, **options})
         info = await manager.async_get_addon_info()
@@ -142,7 +142,7 @@ async def _async_ensure_addon(
 def _wyoming_entries(
     hass: HomeAssistant, hosts: frozenset[str]
 ) -> list[ConfigEntry[Any]]:
-    """Return the Wyoming config entries for one add-on's (lower-case) addresses."""
+    """Return the Wyoming config entries for one app's (lower-case) addresses."""
     return [
         entry
         for entry in hass.config_entries.async_entries(WYOMING_PLATFORM)
@@ -151,7 +151,7 @@ def _wyoming_entries(
 
 
 def _discovery_url_of(flow: Any) -> str:
-    """Return the add-on URL a Wyoming discovery flow carries ("" if none)."""
+    """Return the app URL a Wyoming discovery flow carries ("" if none)."""
     return str(flow["context"].get("configuration_url", ""))
 
 
@@ -179,13 +179,13 @@ async def _async_confirm_discovery(
 ) -> None:
     """Confirm one Wyoming discovery flow if it is for Whisper or Piper.
 
-    The action is the user's explicit request to wire these two add-ons, so the
+    The action is the user's explicit request to wire these two apps, so the
     prompt Wyoming would otherwise show for them is answered here. Any other
-    Wyoming flow, or any other add-on's, is left to the user. An add-on that
+    Wyoming flow, or any other app's, is left to the user. An app that
     already has an entry (under any address it is known by, looked up now: the
-    add-on may have just been started) is never wired a second time, and its
-    prompt is dismissed. While one discovery of an add-on is being confirmed,
-    another (a stale one is left behind when an add-on is reinstalled) is kept
+    app may have just been started) is never wired a second time, and its
+    prompt is dismissed. While one discovery of an app is being confirmed,
+    another (a stale one is left behind when an app is reinstalled) is kept
     until that confirmation succeeds, then dismissed — so a failed confirmation
     still leaves a prompt to retry from.
     """
@@ -215,7 +215,7 @@ async def _async_confirm_discovery(
 def _wyoming_engine_ids(
     hass: HomeAssistant, domain: str, hosts: frozenset[str]
 ) -> set[str]:
-    """Return the entity ids of an add-on's Wyoming engines in a domain (stt/tts)."""
+    """Return the entity ids of an app's Wyoming engines in a domain (stt/tts)."""
     entry_ids = {entry.entry_id for entry in _wyoming_entries(hass, hosts)}
     return {
         entry.entity_id
@@ -229,11 +229,11 @@ def _wyoming_engine_ids(
 async def _async_wait_for_engine(
     hass: HomeAssistant, domain: str, name: str, hosts: frozenset[str]
 ) -> str | None:
-    """Return an add-on's Wyoming engine, waiting (bounded) for its discovery.
+    """Return an app's Wyoming engine, waiting (bounded) for its discovery.
 
     An engine that is already registered is returned at once. Otherwise this is
     driven by entity-registry updates (Wyoming registers the engine once the
-    Supervisor discovery for the started add-on lands), so there is no polling.
+    Supervisor discovery for the started app lands), so there is no polling.
     An entry the user disabled never registers one, so that is said at once.
     """
     entries = _wyoming_entries(hass, hosts)

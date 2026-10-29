@@ -1,4 +1,4 @@
-"""An add-on restart is a normal event: quiet unavailability, not an error."""
+"""An app restart is a normal event: quiet unavailability, not an error."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def on_supervisor() -> Generator[None]:
 
 
 def _serve(aioclient_mock: AiohttpClientMocker, *, up: bool) -> None:
-    """Answer the add-on endpoints, or refuse them as a restarting add-on does."""
+    """Answer the app endpoints, or refuse them as a restarting app does."""
     aioclient_mock.clear_requests()
     if up:
         aioclient_mock.get(STATUS_URL, json=STATUS_PAYLOAD)
@@ -120,9 +120,9 @@ async def test_restart_window_is_quiet(
     caplog: pytest.LogCaptureFixture,
     supervisor_state: AddonState,
 ) -> None:
-    """Refused polls while the add-on restarts log one INFO and no error.
+    """Refused polls while the app restarts log one INFO and no error.
 
-    The Supervisor reports ``started`` while the add-on is still shutting down
+    The Supervisor reports ``started`` while the app is still shutting down
     and ``startup``/``stopped`` while it comes back; both are a restart.
     """
     _serve(aioclient_mock, up=True)
@@ -143,13 +143,13 @@ async def test_restart_window_is_quiet(
 
     mock_addon_manager.async_get_addon_info.return_value = make_addon_info()
     _serve(aioclient_mock, up=True)
-    # While restarting the add-on is re-polled every ADDON_RESTART_RETRY seconds,
+    # While restarting the app is re-polled every ADDON_RESTART_RETRY seconds,
     # so the entities come back well inside one SCAN_INTERVAL.
     await _advance(hass, freezer, ADDON_RESTART_RETRY)
     assert _status_state(hass, mock_config_entry) != STATE_UNAVAILABLE
 
     assert _loud(caplog) == []
-    infos = [r for r in _records(caplog, logging.INFO) if "add-on" in r.getMessage()]
+    infos = [r for r in _records(caplog, logging.INFO) if "app" in r.getMessage()]
     assert len(infos) == 1
     assert (
         ir.async_get(hass).async_get_issue(
@@ -192,7 +192,7 @@ async def test_outage_warns_once_and_raises_repair(
     mock_addon_manager: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A stopped add-on past the grace period: one WARNING and a repair."""
+    """A stopped app past the grace period: one WARNING and a repair."""
     _serve(aioclient_mock, up=True)
     await setup_integration(hass, mock_config_entry)
     caplog.clear()
@@ -280,7 +280,7 @@ async def test_unvouched_failure_stays_an_error(
     caplog: pytest.LogCaptureFixture,
     supervisor: dict[str, object],
 ) -> None:
-    """If the Supervisor cannot vouch for the add-on, the failure is an error."""
+    """If the Supervisor cannot vouch for the app, the failure is an error."""
     _serve(aioclient_mock, up=True)
     await setup_integration(hass, mock_config_entry)
     caplog.clear()
@@ -323,7 +323,7 @@ async def test_http_error_is_not_a_restart(
     mock_addon_manager: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """An add-on that answers with an error is failing, not restarting."""
+    """An app that answers with an error is failing, not restarting."""
     _serve(aioclient_mock, up=True)
     await setup_integration(hass, mock_config_entry)
     caplog.clear()

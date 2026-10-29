@@ -19,10 +19,10 @@ from .schema import vol
 
 
 class AddonNotRunningRepairFlow(RepairsFlow):
-    """Offer to start the stopped Claude Code add-on."""
+    """Offer to start the stopped Claude Code app."""
 
     def __init__(self, slug: str) -> None:
-        """Store the resolved add-on slug to act on."""
+        """Store the resolved app slug to act on."""
         self._slug = slug
 
     async def async_step_init(
@@ -34,12 +34,12 @@ class AddonNotRunningRepairFlow(RepairsFlow):
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> RepairsFlowResult:
-        """Start the add-on on confirmation."""
+        """Start the app on confirmation."""
         if user_input is not None:
             try:
                 await get_addon_manager(self.hass, self._slug).async_start_addon()
             except AddonError as err:
-                LOGGER.error("Repair could not start the Claude Code add-on: %s", err)
+                LOGGER.error("Repair could not start the Claude Code app: %s", err)
                 return self.async_abort(reason="start_failed")
             return self.async_create_entry(title="", data={})
         return self.async_show_form(step_id="confirm", data_schema=vol.Schema({}))

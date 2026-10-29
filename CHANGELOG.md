@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Every message, repair, setup step and action description now says "app" instead of
+  "add-on", matching what Home Assistant calls them. Entity, device and action
+  identifiers are unchanged; the device model reads "Claude Code app".
+
 ## [1.17.0] - 2026-10-23
 
 ### Added
