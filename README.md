@@ -176,6 +176,8 @@ whether to carry it out immediately or confirm:
   that failed instead (with an app that reports each action's outcome). These
   words (`Done`, `Not done`, `Failed`, `Went through`) follow the Assist language
   — German and English are translated; other languages show the English text.
+  The same goes for the confirmation question and its answers: in German `ja` /
+  `nein` work next to `yes` / `no`.
 - **Important actions are held and confirmed** with a plain `yes` / `no` — anything
   the deterministic classifier flags (locks, alarms, garage/door/gate covers,
   firmware updates, router/AP and other config entities, and opaque-effect

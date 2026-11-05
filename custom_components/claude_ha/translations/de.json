@@ -11,6 +11,96 @@
     },
     "write_went_through": {
       "message": ". Ausgeführt: {went_through}"
+    },
+    "target_fallback": {
+      "message": "das Ziel"
+    },
+    "requested_change": {
+      "message": "die gewünschte Änderung"
+    },
+    "write_unconfirmed": {
+      "message": "Ich konnte nicht bestätigen, was mit „{summary}“ passiert ist. Bitte zuerst prüfen."
+    },
+    "proposed": {
+      "message": "Vorschlag: {summary}"
+    },
+    "affects": {
+      "message": "Betrifft: {targets}."
+    },
+    "confirm_ask": {
+      "message": "Bestätigen? (ja/nein)"
+    },
+    "confirm_spoken": {
+      "message": "{summary}. Sag ja, um zu bestätigen."
+    },
+    "confirm_yes": {
+      "message": "ja"
+    },
+    "confirm_no": {
+      "message": "nein"
+    },
+    "cancelled": {
+      "message": "Abgebrochen."
+    },
+    "remember_line": {
+      "message": "Merken: {fact}"
+    },
+    "forget_line": {
+      "message": "Vergessen: {fact}"
+    },
+    "remembered": {
+      "message": "Gemerkt: {fact}"
+    },
+    "forgot": {
+      "message": "Vergessen: {fact}"
+    },
+    "memory_dropped": {
+      "message": "Nicht im Gedächtnis gespeichert – frag dazu einzeln, um es zu behalten."
+    },
+    "memory_needs_user": {
+      "message": "Nicht im Gedächtnis gespeichert: Fakten werden aus einem angemeldeten Chat oder über die Aktion „Remember a fact“ gespeichert."
+    },
+    "automation_fallback": {
+      "message": "Automatisierung"
+    },
+    "automation_draft": {
+      "message": "Hier ist ein Automatisierungsentwurf – **{alias}**:"
+    },
+    "automation_create_spoken": {
+      "message": "Automatisierung {alias} erstellen"
+    },
+    "automation_update_spoken": {
+      "message": "Automatisierung {alias} aktualisieren"
+    },
+    "automation_create_ask": {
+      "message": "Erstellen? (ja/nein)"
+    },
+    "automation_update_ask": {
+      "message": "Aktualisieren? (ja/nein)"
+    },
+    "automation_created": {
+      "message": "Automatisierung erstellt: {summary}"
+    },
+    "automation_updated": {
+      "message": "Automatisierung aktualisiert: {summary}"
+    },
+    "automation_deleted": {
+      "message": "Automatisierung gelöscht: {summary}"
+    },
+    "automation_delete_spoken": {
+      "message": "Automatisierung {name} löschen"
+    },
+    "automation_delete_ask": {
+      "message": "Die Automatisierung „{name}“ löschen? (ja/nein)"
+    },
+    "automation_not_found": {
+      "message": "Ich habe dazu keine passende Automatisierung gefunden."
+    },
+    "automation_ambiguous": {
+      "message": "Ich habe mehr als eine gefunden – welche? {names}"
+    },
+    "automation_unreadable": {
+      "message": "Ich konnte die Konfiguration dieser Automatisierung nicht lesen."
     }
   }
 }

@@ -168,11 +168,16 @@ async def async_exception_texts(hass: HomeAssistant, language: str) -> dict[str,
 def exception_text(
     texts: dict[str, str], key: str | None, default: str, **placeholders: str
 ) -> str:
-    """Render the ``exceptions.<key>.message`` template, or ``default``."""
-    template = texts.get(_exception_key(key))
-    if template is not None:
-        with suppress(KeyError, IndexError, ValueError):
-            return template.format(**placeholders)
+    """Render the ``exceptions.<key>.message`` template with ``placeholders``.
+
+    A missing template, or one that cannot be rendered, gives ``default`` (itself
+    a template, rendered the same way), so a turn is never answered with a raw key
+    or a ``{placeholder}``.
+    """
+    for template in (texts.get(_exception_key(key)), default):
+        if template is not None:
+            with suppress(KeyError, IndexError, ValueError):
+                return template.format(**placeholders)
     return default
 
 

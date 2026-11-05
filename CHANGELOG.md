@@ -8,11 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- The reply to an action no longer starts with the English "Done:" / "Not done:" in
-  other languages, so text-to-speech reads it in the conversation's language. The
-  words follow the Assist language (German is included; a regional code such as
-  `de-CH` uses its base language; any other language keeps the English text).
-  Whether an action counts as done is still decided by Home Assistant's own result.
+- The sentences the agent writes itself are now in the Assist language instead of
+  English: the verdict of an action (`Done` / `Not done` / `Failed` / `Went through`),
+  the proposal and its confirmation question, "Cancelled.", the remember / forget
+  confirmations, and the automation create / update / delete prompts. Text-to-speech
+  therefore no longer reads English words in other languages. German is included; a
+  regional code such as `de-CH` uses its base language, and any other language keeps
+  the English text. Whether an action counts as done is still decided by Home
+  Assistant's own result.
+- Confirming and cancelling accepts the language's own words next to the English
+  ones: in German `ja` and `nein` (English `yes`, `ok`, `no` keep working).
 
 ## [1.17.1] - 2026-10-29
 
