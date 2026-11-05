@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The reply to an action no longer starts with the English "Done:" / "Not done:" in
+  other languages, so text-to-speech reads it in the conversation's language. The
+  words follow the Assist language (German is included; a regional code such as
+  `de-CH` uses its base language; any other language keeps the English text).
+  Whether an action counts as done is still decided by Home Assistant's own result.
+
 ## [1.17.1] - 2026-10-29
 
 ### Fixed

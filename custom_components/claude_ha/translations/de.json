@@ -1,0 +1,16 @@
+{
+  "exceptions": {
+    "write_done": {
+      "message": "Erledigt: {summary}"
+    },
+    "write_done_bare": {
+      "message": "Erledigt."
+    },
+    "write_not_done": {
+      "message": "Nicht erledigt: {summary}. Fehlgeschlagen: {failed}"
+    },
+    "write_went_through": {
+      "message": ". Ausgeführt: {went_through}"
+    }
+  }
+}

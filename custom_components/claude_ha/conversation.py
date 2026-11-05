@@ -34,6 +34,8 @@ from .api import (
     Proposal,
     StreamDelta,
     async_error_message,
+    async_exception_texts,
+    exception_text,
 )
 from .automation_commit import (
     async_commit_automation,
@@ -447,13 +449,17 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeActionFailedError as err:
             if not err.actions:
                 return await self._error(user_input, chat_log, err)
-            reply = _write_reply(self.coordinator.hass, summary, err.actions)
+            reply = await _write_reply(
+                self.coordinator.hass, user_input.language, summary, err.actions
+            )
         except ClaudeConnectionError:
             reply = f"I couldn't confirm what happened with: {summary}. Check first."
         except ClaudeError:
             return None
         else:
-            reply = _write_reply(self.coordinator.hass, summary, written.actions)
+            reply = await _write_reply(
+                self.coordinator.hass, user_input.language, summary, written.actions
+            )
         note = self._dropped_memory_note(user_input, read)
         return self._reply(user_input, chat_log, f"{reply}{note}")
 
@@ -635,7 +641,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 lines.append(f"Remembered: {fact.text}")
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, "\n".join(lines) or "Done.")
+        if lines:
+            return self._reply(user_input, chat_log, "\n".join(lines))
+        texts = await async_exception_texts(self.hass, user_input.language)
+        return self._reply(
+            user_input, chat_log, exception_text(texts, "write_done_bare", "Done.")
+        )
 
     def _answer_reply(
         self,
@@ -889,15 +900,15 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             )
         except ClaudeActionFailedError as err:
             if err.actions:
-                return self._reply(
-                    user_input, chat_log, _write_reply(hass, summary, err.actions)
+                reply = await _write_reply(
+                    hass, user_input.language, summary, err.actions
                 )
+                return self._reply(user_input, chat_log, reply)
             return await self._error(user_input, chat_log, err)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(
-            user_input, chat_log, _write_reply(hass, summary, result.actions)
-        )
+        reply = await _write_reply(hass, user_input.language, summary, result.actions)
+        return self._reply(user_input, chat_log, reply)
 
     def _reply(
         self,
@@ -977,25 +988,39 @@ _MEMORY_NEEDS_USER = (
 )
 
 
-def _write_reply(
-    hass: HomeAssistant, summary: str, actions: list[ActionOutcome] | None
+async def _write_reply(
+    hass: HomeAssistant,
+    language: str,
+    summary: str,
+    actions: list[ActionOutcome] | None,
 ) -> str:
     """Say what a write did: "Done" only when every action reported ok.
 
-    A core that sends no ``actions`` (an older one) is taken at its 200, as before.
-    Otherwise each failed action is named by its target's friendly name with Home
-    Assistant's own reason, and the ones that went through are named too.
+    The verdict is decided here, never by the model; only its words come from the
+    ``exceptions`` translations in the conversation's ``language`` (English when
+    there is none). A core that sends no ``actions`` (an older one) is taken at
+    its 200, as before. Otherwise each failed action is named by its target's
+    friendly name with Home Assistant's own reason, and the ones that went
+    through are named too.
     """
+    texts = await async_exception_texts(hass, language)
     failed = [action for action in actions or () if not action.ok]
     if not failed:
-        return f"Done: {summary}"
+        return exception_text(texts, "write_done", "Done: {summary}", summary=summary)
     done = [action for action in actions or () if action.ok]
-    text = f"Not done: {summary}. Failed: " + "; ".join(
-        _failure(hass, action) for action in failed
+    text = exception_text(
+        texts,
+        "write_not_done",
+        "Not done: {summary}. Failed: {failed}",
+        summary=summary,
+        failed="; ".join(_failure(hass, action) for action in failed),
     )
     if done:
-        text += ". Went through: " + ", ".join(
-            _target_name(hass, action.target) for action in done
+        text += exception_text(
+            texts,
+            "write_went_through",
+            ". Went through: {went_through}",
+            went_through=", ".join(_target_name(hass, a.target) for a in done),
         )
     return f"{text}."
 

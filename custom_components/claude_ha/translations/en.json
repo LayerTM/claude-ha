@@ -422,6 +422,18 @@
     },
     "web_requires_plain_read": {
       "message": "A web answer is text only: leave mode on read and do not pass intents or a notify service."
+    },
+    "write_done": {
+      "message": "Done: {summary}"
+    },
+    "write_done_bare": {
+      "message": "Done."
+    },
+    "write_not_done": {
+      "message": "Not done: {summary}. Failed: {failed}"
+    },
+    "write_went_through": {
+      "message": ". Went through: {went_through}"
     }
   },
   "issues": {

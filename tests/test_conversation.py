@@ -1429,6 +1429,7 @@ async def _confirmed_write(
     *,
     status: int,
     body: dict[str, Any],
+    language: str = "en",
 ) -> conversation.ConversationResult:
     """Propose a sensitive write, answer yes, and return the turn that wrote."""
 
@@ -1444,7 +1445,12 @@ async def _confirmed_write(
     hass.states.async_set("light.b", "unavailable", {"friendly_name": "Desk lamp"})
     agent_id = _agent_id(hass, entry)
     first = await conversation.async_converse(
-        hass, "turn off the lamps", None, context=Context(), agent_id=agent_id
+        hass,
+        "turn off the lamps",
+        None,
+        context=Context(),
+        agent_id=agent_id,
+        language=language,
     )
     return await conversation.async_converse(
         hass,
@@ -1452,6 +1458,7 @@ async def _confirmed_write(
         first.conversation_id,
         context=Context(),
         agent_id=agent_id,
+        language=language,
     )
 
 
