@@ -15,4 +15,4 @@ pytest-homeassistant-custom-component==0.13.375
 ruff==0.17.3
 mypy==2.4.1
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
-types-PyYAML==6.0.12.20260906
+types-PyYAML==6.0.12.20261103
