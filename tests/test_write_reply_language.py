@@ -324,4 +324,7 @@ def test_a_template_that_cannot_be_rendered_falls_back_to_the_default() -> None:
 def test_every_reply_word_is_used_by_the_agent() -> None:
     """No translated word is dead, and a new one must be wired in to be listed."""
     source = (_PACKAGE / "conversation.py").read_text()
-    assert [key for key in ENGLISH if f'"{key}"' not in source] == []
+    unused = [
+        key for key in ENGLISH if f'"{key}"' not in source and f"'{key}'" not in source
+    ]
+    assert unused == []
