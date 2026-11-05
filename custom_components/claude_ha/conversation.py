@@ -892,7 +892,8 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 "", words("automation_delete_spoken", name=match.name), words
             )
         else:
-            message = words("automation_delete_ask", name=match.name)
+            # Hassfest forbids quotes around a placeholder, so the code quotes the name.
+            message = words("automation_delete_ask", name=f"'{match.name}'")
         return self._reply(user_input, chat_log, message)
 
     async def _async_delete_automation(

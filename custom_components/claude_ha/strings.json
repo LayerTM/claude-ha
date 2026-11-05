@@ -514,7 +514,7 @@
       "message": "Delete automation {name}"
     },
     "automation_delete_ask": {
-      "message": "Delete the automation '{name}'? (yes/no)"
+      "message": "Delete the automation {name}? (yes/no)"
     },
     "automation_not_found": {
       "message": "I couldn't find an automation matching that."

@@ -91,7 +91,7 @@
       "message": "Automatisierung {name} löschen"
     },
     "automation_delete_ask": {
-      "message": "Die Automatisierung „{name}“ löschen? (ja/nein)"
+      "message": "Die Automatisierung {name} löschen? (ja/nein)"
     },
     "automation_not_found": {
       "message": "Ich habe dazu keine passende Automatisierung gefunden."

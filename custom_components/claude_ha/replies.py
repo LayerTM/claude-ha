@@ -51,7 +51,7 @@ ENGLISH: Final = {
     "automation_updated": "Updated automation: {summary}",
     "automation_deleted": "Deleted automation: {summary}",
     "automation_delete_spoken": "Delete automation {name}",
-    "automation_delete_ask": "Delete the automation '{name}'? (yes/no)",
+    "automation_delete_ask": "Delete the automation {name}? (yes/no)",
     "automation_not_found": "I couldn't find an automation matching that.",
     "automation_ambiguous": "I found more than one — which? {names}",
     "automation_unreadable": "I couldn't read that automation's configuration.",
