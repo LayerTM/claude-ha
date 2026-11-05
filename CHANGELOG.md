@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.17.2] - 2026-11-06
+
 ### Fixed
 
 - The sentences the agent writes itself are now in the Assist language instead of
@@ -840,7 +842,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.17.2...HEAD
+[1.17.2]: https://github.com/LayerTM/claude-ha/compare/v1.17.1...v1.17.2
 [1.17.1]: https://github.com/LayerTM/claude-ha/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/LayerTM/claude-ha/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/LayerTM/claude-ha/compare/v1.15.0...v1.16.0
