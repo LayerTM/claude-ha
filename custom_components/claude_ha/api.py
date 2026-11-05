@@ -25,8 +25,10 @@ from awesomeversion import AwesomeVersion, AwesomeVersionException
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.generated.languages import LANGUAGES
 from homeassistant.helpers import translation
 from homeassistant.util import dt as dt_util
+from homeassistant.util.language import matches as language_matches
 
 from .const import (
     ACTION_ERROR,
@@ -145,29 +147,56 @@ class ClaudeError(HomeAssistantError):
         )
 
 
+async def async_exception_texts(hass: HomeAssistant, language: str) -> dict[str, str]:
+    """Return the integration's ``exceptions`` translations for ``language``.
+
+    A regional code (``de-CH``) is read as the closest language Home Assistant
+    ships (``de``); Home Assistant falls back to English for a language without a
+    translation. Translations that cannot be loaded give an empty mapping, so
+    callers fall back to their own English text rather than failing the turn.
+    """
+    closest = language_matches(language, LANGUAGES)
+    try:
+        return await translation.async_get_translations(
+            hass, closest[0] if closest else language, "exceptions", {DOMAIN}
+        )
+    except Exception:  # noqa: BLE001 - a failed turn must still get an answer
+        LOGGER.exception("Could not load the error messages for %s", language)
+        return {}
+
+
+def exception_text(
+    texts: dict[str, str], key: str | None, default: str, **placeholders: str
+) -> str:
+    """Render the ``exceptions.<key>.message`` template with ``placeholders``.
+
+    A missing template, or one that cannot be rendered, gives ``default`` (itself
+    a template, rendered the same way), so a turn is never answered with a raw key
+    or a ``{placeholder}``.
+    """
+    for template in (texts.get(_exception_key(key)), default):
+        if template is not None:
+            with suppress(KeyError, IndexError, ValueError):
+                return template.format(**placeholders)
+    return default
+
+
 async def async_error_message(
     hass: HomeAssistant, language: str, err: ClaudeError
 ) -> str:
     """Return what ``err`` says to a user, in ``language``; never raises.
 
-    Home Assistant falls back to English for a language without a translation.
     A key or placeholder that cannot be rendered gives the generic message, and
     translations that cannot be loaded at all give :data:`GENERIC_ERROR_MESSAGE`,
     so a failure is never answered with a raw key, a template or a traceback.
     """
-    try:
-        translations = await translation.async_get_translations(
-            hass, language, "exceptions", {DOMAIN}
-        )
-    except Exception:  # noqa: BLE001 - a failed turn must still get an answer
-        LOGGER.exception("Could not load the error messages for %s", language)
-        return GENERIC_ERROR_MESSAGE
-    template = translations.get(_exception_key(err.translation_key))
-    if template is not None:
-        with suppress(KeyError, IndexError, ValueError):
-            return template.format(**(err.translation_placeholders or {}))
-    return translations.get(
-        _exception_key(ClaudeError.translation_key), GENERIC_ERROR_MESSAGE
+    texts = await async_exception_texts(hass, language)
+    generic = exception_text(texts, ClaudeError.translation_key, GENERIC_ERROR_MESSAGE)
+    return exception_text(
+        texts,
+        err.translation_key,
+        generic,
+        **(err.translation_placeholders or {}),
     )
 
 

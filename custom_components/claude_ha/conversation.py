@@ -64,6 +64,7 @@ from .engines import engine_for_entry
 from .entity import build_device_info
 from .issues import async_clear_issues, async_raise_issue
 from .memory import async_may_edit_household
+from .replies import Words, async_words
 from .risk import is_auto_ok
 from .vision import resolve_camera
 from .web import async_note_web_outcome
@@ -94,12 +95,16 @@ _AFFIRM = frozenset(
 _DENY = frozenset({"no", "nope", "cancel", "stop", "don't", "ні", "скасуй", "відміна"})
 
 
-def _decision(text: str) -> bool | None:
-    """Return True (affirm), False (deny) or None (neither) for a reply."""
+def _decision(text: str, words: Words) -> bool | None:
+    """Return True (affirm), False (deny) or None (neither) for a reply.
+
+    The English words and the language's own (its ``confirm_yes`` / ``confirm_no``
+    translation) count; nothing else does.
+    """
     normalized = text.strip().lower()
-    if normalized in _AFFIRM:
+    if normalized in _AFFIRM or normalized in words.vocabulary("confirm_yes"):
         return True
-    if normalized in _DENY:
+    if normalized in _DENY or normalized in words.vocabulary("confirm_no"):
         return False
     return None
 
@@ -291,6 +296,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         conv_id = chat_log.conversation_id
         caller = user_input.context.user_id
         text = user_input.text
+        words = await async_words(hass, user_input.language)
         pending_store: dict[tuple[str, str | None], PendingProposal] = (
             hass.data.setdefault(DATA_PENDING_CHAT, {})
         )
@@ -303,7 +309,9 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         pending = pending_store.get((conv_id, caller))
         if pending is not None and pending.entry_id == entry.entry_id:
             del pending_store[conv_id, caller]
-            resolved = await self._resolve_pending(user_input, chat_log, text, pending)
+            resolved = await self._resolve_pending(
+                user_input, chat_log, text, pending, words
+            )
             if resolved is not None:
                 return resolved
             # Neither/expired: fall through and treat as a fresh request.
@@ -321,6 +329,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 entry,
                 caller,
                 delete_query,
+                words,
             )
 
         # A3. A "change my <x> automation ..." request: resolve the target locally,
@@ -338,6 +347,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 entry,
                 caller,
                 modify_query,
+                words,
             )
 
         # B. Fresh read, streamed live into the chat log. When vision is enabled,
@@ -358,7 +368,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         # the confirmed commit re-validates + allow-lists + writes it in-process.
         if result.automation is not None:
             automation = result.automation
-            alias = _automation_alias(automation)
+            alias = _automation_alias(automation, words)
             pending_store[conv_id, user_input.context.user_id] = PendingProposal(
                 entry_id=entry.entry_id,
                 prompt=text,
@@ -375,23 +385,24 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 result.text,
                 streamed,
                 alias,
-                note=self._dropped_memory_note(user_input, result),
+                words,
+                note=self._dropped_memory_note(user_input, result, words),
             )
 
         proposal = result.proposal
         if proposal is None or not proposal.intents:
             return await self._plain_reply(
-                user_input, chat_log, conv_id, pending_store, result, streamed
+                user_input, chat_log, conv_id, pending_store, result, streamed, words
             )
 
-        summary = proposal.summary.strip() or "the requested change"
+        summary = proposal.summary.strip() or words("requested_change")
 
         # C/D. Auto-execute benign, model-low-risk actions.
         auto_execute = entry.options.get(CONF_AUTO_EXECUTE, True)
         critical = entry.options.get(CONF_CRITICAL_ENTITIES, [])
         if auto_execute and is_auto_ok(hass, proposal.intents, critical):
             written = await self._async_auto_write(
-                user_input, chat_log, result, conv_id, proposal.intents, summary
+                user_input, chat_log, result, conv_id, proposal.intents, summary, words
             )
             if written is not None:
                 return written
@@ -410,10 +421,11 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if _surface(user_input) == SURFACE_VOICE:
             # Spoken: drop the markdown proposal block, targets and "(yes/no)" —
             # all noise aloud — for one short, speakable confirmation.
-            message = _spoken_confirm(answer, summary)
+            message = _spoken_confirm(answer, summary, words)
         else:
-            message = f"{_render_proposal(answer, proposal)}\n\nConfirm? (yes/no)"
-        note = self._dropped_memory_note(user_input, result)
+            proposed = _render_proposal(answer, proposal, words)
+            message = f"{proposed}\n\n{words('confirm_ask')}"
+        note = self._dropped_memory_note(user_input, result, words)
         return self._reply(user_input, chat_log, message.strip() + note)
 
     async def _async_auto_write(
@@ -424,6 +436,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         conv_id: str,
         intents: list[dict[str, Any]],
         summary: str,
+        words: Words,
     ) -> conversation.ConversationResult | None:
         """Run an auto-executable write; say what it did, or ``None`` to confirm.
 
@@ -447,14 +460,14 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         except ClaudeActionFailedError as err:
             if not err.actions:
                 return await self._error(user_input, chat_log, err)
-            reply = _write_reply(self.coordinator.hass, summary, err.actions)
+            reply = _write_reply(self.coordinator.hass, words, summary, err.actions)
         except ClaudeConnectionError:
-            reply = f"I couldn't confirm what happened with: {summary}. Check first."
+            reply = words("write_unconfirmed", summary=summary)
         except ClaudeError:
             return None
         else:
-            reply = _write_reply(self.coordinator.hass, summary, written.actions)
-        note = self._dropped_memory_note(user_input, read)
+            reply = _write_reply(self.coordinator.hass, words, summary, written.actions)
+        note = self._dropped_memory_note(user_input, read, words)
         return self._reply(user_input, chat_log, f"{reply}{note}")
 
     async def _async_stream_read(
@@ -515,7 +528,10 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         return result, streamed
 
     def _dropped_memory_note(
-        self, user_input: conversation.ConversationInput, result: PromptResult
+        self,
+        user_input: conversation.ConversationInput,
+        result: PromptResult,
+        words: Words,
     ) -> str:
         """Say that a memory suggestion beside an action was not kept.
 
@@ -525,7 +541,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if result.memory_change is None or not self._memory_on:
             return ""
         separator = " " if _surface(user_input) == SURFACE_VOICE else "\n\n"
-        return f"{separator}{_MEMORY_DROPPED}"
+        return f"{separator}{words('memory_dropped')}"
 
     @property
     def _memory_on(self) -> bool:
@@ -546,6 +562,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         pending_store: dict[tuple[str, str | None], PendingProposal],
         result: PromptResult,
         streamed: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Answer a turn with no action: hold a suggested memory change, if any.
 
@@ -555,7 +572,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         if result.memory_change is not None and self._memory_on:
             if user_input.context.user_id is None:
                 answer = "" if streamed else result.text
-                message = f"{answer}\n\n{_MEMORY_NEEDS_USER}".strip()
+                message = f"{answer}\n\n{words('memory_needs_user')}".strip()
                 return self._reply(user_input, chat_log, message)
             return await self._memory_confirm_reply(
                 user_input,
@@ -565,6 +582,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 result.memory_change,
                 result.text,
                 streamed,
+                words,
             )
         return self._answer_reply(user_input, chat_log, result.text, streamed)
 
@@ -577,6 +595,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         change: MemoryChange,
         text: str,
         streamed: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Hold a suggested memory change and ask to confirm — nothing is saved yet.
 
@@ -603,17 +622,19 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             expires_at=dt_util.utcnow() + CHAT_PENDING_TTL,
             memory_change=change,
         )
-        lines = [f"Remember: {fact}" for fact in change.remember]
-        lines += [f"Forget: {visible[fact_id]}" for fact_id in change.forget]
+        lines = [words("remember_line", fact=fact) for fact in change.remember]
+        lines += [
+            words("forget_line", fact=visible[fact_id]) for fact_id in change.forget
+        ]
         if _surface(user_input) == SURFACE_VOICE:
             # _spoken_confirm ends the summary with its own full stop.
             message = _spoken_confirm(
-                answer, ". ".join(line.rstrip(".") for line in lines)
+                answer, ". ".join(line.rstrip(".") for line in lines), words
             )
         else:
             parts = [answer.strip()] if answer.strip() else []
             parts.append("\n".join(lines))
-            parts.append("Confirm? (yes/no)")
+            parts.append(words("confirm_ask"))
             message = "\n\n".join(parts)
         return self._reply(user_input, chat_log, message)
 
@@ -623,19 +644,22 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log: conversation.ChatLog,
         change: MemoryChange,
         caller: str | None,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Save / remove the confirmed facts; a full or invalid set says why."""
         memory = self.coordinator.config_entry.runtime_data.memory
         household = await async_may_edit_household(self.hass, caller)
         removed = await memory.async_forget(change.forget, caller, household=household)
-        lines = [f"Forgot: {fact.text}" for fact in removed]
+        lines = [words("forgot", fact=fact.text) for fact in removed]
         try:
             for text in change.remember:
                 fact = await memory.async_remember(text, caller)
-                lines.append(f"Remembered: {fact.text}")
+                lines.append(words("remembered", fact=fact.text))
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, "\n".join(lines) or "Done.")
+        return self._reply(
+            user_input, chat_log, "\n".join(lines) or words("write_done_bare")
+        )
 
     def _answer_reply(
         self,
@@ -658,24 +682,25 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         text: str,
         streamed: str,
         alias: str,
-        action: str = "Create",
+        words: Words,
+        update: bool = False,
         note: str = "",
     ) -> conversation.ConversationResult:
         """Show a drafted automation and ask to confirm — this never writes it.
 
-        ``action`` is "Create" for a new automation or "Update" for a modify. Text
+        ``update`` is False for a new automation and True for a modify. Text
         turns get the exact config as a YAML block plus a yes/no question. Voice turns
         skip the YAML (noise aloud) for a short spoken confirmation. The write only
         happens on the next turn if the user confirms.
         """
         answer = "" if streamed else text
         if _surface(user_input) == SURFACE_VOICE:
-            message = _spoken_confirm(answer, f"{action} automation {alias}")
+            key = "automation_update_spoken" if update else "automation_create_spoken"
+            message = _spoken_confirm(answer, words(key, alias=alias), words)
             return self._reply(user_input, chat_log, message + note)
-        block = _render_automation_draft(answer, automation)
-        return self._reply(
-            user_input, chat_log, f"{block}\n\n{action} it? (yes/no){note}"
-        )
+        block = _render_automation_draft(answer, automation, words)
+        ask = words("automation_update_ask" if update else "automation_create_ask")
+        return self._reply(user_input, chat_log, f"{block}\n\n{ask}{note}")
 
     async def _async_commit_automation(
         self,
@@ -683,13 +708,16 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log: conversation.ChatLog,
         automation: dict[str, Any],
         summary: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Commit a confirmed drafted automation; a rejection is a clean chat error."""
         try:
             await async_commit_automation(self.coordinator.hass, automation)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, f"Created automation: {summary}")
+        return self._reply(
+            user_input, chat_log, words("automation_created", summary=summary)
+        )
 
     async def _handle_modify_request(
         self,
@@ -700,18 +728,17 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         entry: ClaudeConfigEntry,
         caller: str | None,
         query: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Resolve a modify target, have the model edit its config, hold to confirm."""
         hass = self.coordinator.hass
         matches = find_automations(hass, query)
         if not matches:
-            return self._reply(
-                user_input, chat_log, "I couldn't find an automation matching that."
-            )
+            return self._reply(user_input, chat_log, words("automation_not_found"))
         if len(matches) > 1:
             names = ", ".join(f"'{match.name}'" for match in matches)
             return self._reply(
-                user_input, chat_log, f"I found more than one — which? {names}"
+                user_input, chat_log, words("automation_ambiguous", names=names)
             )
         target = matches[0]
         try:
@@ -720,9 +747,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             # An unreadable store says why; it must not read as "no such automation".
             return await self._error(user_input, chat_log, err)
         if current is None:
-            return self._reply(
-                user_input, chat_log, "I couldn't read that automation's configuration."
-            )
+            return self._reply(user_input, chat_log, words("automation_unreadable"))
         try:
             result, streamed = await self._async_stream_read(
                 user_input,
@@ -740,7 +765,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             # show its answer; nothing is held for confirmation.
             return self._answer_reply(user_input, chat_log, result.text, streamed)
         updated = result.automation
-        alias = _automation_alias(updated)
+        alias = _automation_alias(updated, words)
         pending_store[conv_id, user_input.context.user_id] = PendingProposal(
             entry_id=entry.entry_id,
             prompt=user_input.text,
@@ -752,7 +777,14 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             update_target_id=target.config_id,
         )
         return self._automation_confirm_reply(
-            user_input, chat_log, updated, result.text, streamed, alias, action="Update"
+            user_input,
+            chat_log,
+            updated,
+            result.text,
+            streamed,
+            alias,
+            words,
+            update=True,
         )
 
     async def _async_update_automation(
@@ -762,13 +794,16 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         automation: dict[str, Any],
         target_id: str,
         summary: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Update a confirmed automation in place; a failure is a clean chat error."""
         try:
             await async_update_automation(self.coordinator.hass, automation, target_id)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, f"Updated automation: {summary}")
+        return self._reply(
+            user_input, chat_log, words("automation_updated", summary=summary)
+        )
 
     async def _resolve_pending(
         self,
@@ -776,21 +811,26 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log: conversation.ChatLog,
         text: str,
         pending: PendingProposal,
+        words: Words,
     ) -> conversation.ConversationResult | None:
         """Act on a pending confirmation; return None to treat the turn as fresh.
 
         "Yes" runs the held action (delete / automation commit / entity write);
         "no" cancels; anything else (or an expired hold) falls through.
         """
-        decision = _decision(text)
+        decision = _decision(text, words)
         if decision is True and pending.expires_at >= dt_util.utcnow():
             if pending.memory_change is not None:
                 return await self._async_apply_memory(
-                    user_input, chat_log, pending.memory_change, pending.caller
+                    user_input, chat_log, pending.memory_change, pending.caller, words
                 )
             if pending.delete_automation_id is not None:
                 return await self._async_delete_automation(
-                    user_input, chat_log, pending.delete_automation_id, pending.summary
+                    user_input,
+                    chat_log,
+                    pending.delete_automation_id,
+                    pending.summary,
+                    words,
                 )
             if pending.automation is not None:
                 if pending.update_target_id is not None:
@@ -800,9 +840,10 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                         pending.automation,
                         pending.update_target_id,
                         pending.summary,
+                        words,
                     )
                 return await self._async_commit_automation(
-                    user_input, chat_log, pending.automation, pending.summary
+                    user_input, chat_log, pending.automation, pending.summary, words
                 )
             return await self._async_write(
                 user_input,
@@ -810,9 +851,10 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 pending.prompt,
                 pending.intents,
                 pending.summary,
+                words,
             )
         if decision is False:
-            return self._reply(user_input, chat_log, "Cancelled.")
+            return self._reply(user_input, chat_log, words("cancelled"))
         return None
 
     def _handle_delete_request(
@@ -824,17 +866,16 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         entry: ClaudeConfigEntry,
         caller: str | None,
         query: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Resolve a delete request: none -> say so, many -> ask, one -> confirm."""
         matches = find_automations(self.coordinator.hass, query)
         if not matches:
-            return self._reply(
-                user_input, chat_log, "I couldn't find an automation matching that."
-            )
+            return self._reply(user_input, chat_log, words("automation_not_found"))
         if len(matches) > 1:
             names = ", ".join(f"'{match.name}'" for match in matches)
             return self._reply(
-                user_input, chat_log, f"I found more than one — which? {names}"
+                user_input, chat_log, words("automation_ambiguous", names=names)
             )
         match = matches[0]
         pending_store[conv_id, user_input.context.user_id] = PendingProposal(
@@ -847,9 +888,12 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             delete_automation_id=match.config_id,
         )
         if _surface(user_input) == SURFACE_VOICE:
-            message = _spoken_confirm("", f"Delete automation {match.name}")
+            message = _spoken_confirm(
+                "", words("automation_delete_spoken", name=match.name), words
+            )
         else:
-            message = f"Delete the automation '{match.name}'? (yes/no)"
+            # Hassfest forbids quotes around a placeholder, so the code quotes the name.
+            message = words("automation_delete_ask", name=f"'{match.name}'")
         return self._reply(user_input, chat_log, message)
 
     async def _async_delete_automation(
@@ -858,13 +902,16 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         chat_log: conversation.ChatLog,
         config_id: str,
         summary: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Delete a confirmed automation; a failure is a clean chat error."""
         try:
             await async_delete_automation(self.coordinator.hass, config_id)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(user_input, chat_log, f"Deleted automation: {summary}")
+        return self._reply(
+            user_input, chat_log, words("automation_deleted", summary=summary)
+        )
 
     async def _async_write(
         self,
@@ -873,6 +920,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         prompt: str,
         intents: list[dict[str, Any]],
         summary: str,
+        words: Words,
     ) -> conversation.ConversationResult:
         """Run a confirmed write with the stored, validated intents."""
         hass = self.coordinator.hass
@@ -889,15 +937,13 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
             )
         except ClaudeActionFailedError as err:
             if err.actions:
-                return self._reply(
-                    user_input, chat_log, _write_reply(hass, summary, err.actions)
-                )
+                reply = _write_reply(hass, words, summary, err.actions)
+                return self._reply(user_input, chat_log, reply)
             return await self._error(user_input, chat_log, err)
         except ClaudeError as err:
             return await self._error(user_input, chat_log, err)
-        return self._reply(
-            user_input, chat_log, _write_reply(hass, summary, result.actions)
-        )
+        reply = _write_reply(hass, words, summary, result.actions)
+        return self._reply(user_input, chat_log, reply)
 
     def _reply(
         self,
@@ -970,49 +1016,50 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
         )
 
 
-_MEMORY_DROPPED = "Not saved to memory — ask on its own to keep it."
-_MEMORY_NEEDS_USER = (
-    "Not saved to memory: facts are kept from a signed-in chat or the Remember"
-    " a fact action."
-)
-
-
 def _write_reply(
-    hass: HomeAssistant, summary: str, actions: list[ActionOutcome] | None
+    hass: HomeAssistant,
+    words: Words,
+    summary: str,
+    actions: list[ActionOutcome] | None,
 ) -> str:
     """Say what a write did: "Done" only when every action reported ok.
 
-    A core that sends no ``actions`` (an older one) is taken at its 200, as before.
-    Otherwise each failed action is named by its target's friendly name with Home
-    Assistant's own reason, and the ones that went through are named too.
+    The verdict is decided here, never by the model; only its words come from the
+    conversation's language. A core that sends no ``actions`` (an older one) is
+    taken at its 200, as before. Otherwise each failed action is named by its
+    target's friendly name with Home Assistant's own reason, and the ones that
+    went through are named too.
     """
     failed = [action for action in actions or () if not action.ok]
     if not failed:
-        return f"Done: {summary}"
+        return words("write_done", summary=summary)
     done = [action for action in actions or () if action.ok]
-    text = f"Not done: {summary}. Failed: " + "; ".join(
-        _failure(hass, action) for action in failed
+    text = words(
+        "write_not_done",
+        summary=summary,
+        failed="; ".join(_failure(hass, words, action) for action in failed),
     )
     if done:
-        text += ". Went through: " + ", ".join(
-            _target_name(hass, action.target) for action in done
+        text += words(
+            "write_went_through",
+            went_through=", ".join(_target_name(hass, words, a.target) for a in done),
         )
     return f"{text}."
 
 
-def _failure(hass: HomeAssistant, action: ActionOutcome) -> str:
+def _failure(hass: HomeAssistant, words: Words, action: ActionOutcome) -> str:
     """Name one failed action: its target, and the reason Home Assistant gave."""
-    name = _target_name(hass, action.target)
+    name = _target_name(hass, words, action.target)
     return f"{name} ({action.error})" if action.error else name
 
 
-def _target_name(hass: HomeAssistant, target: str) -> str:
+def _target_name(hass: HomeAssistant, words: Words, target: str) -> str:
     """Return the friendly name of an entity target, or the target as given."""
     state = hass.states.get(target)
-    return state.name if state is not None else target or "the target"
+    return state.name if state is not None else target or words("target_fallback")
 
 
-def _spoken_confirm(answer: str, summary: str) -> str:
+def _spoken_confirm(answer: str, summary: str, words: Words) -> str:
     """Build a short, TTS-friendly confirmation (no markdown, targets or slashes).
 
     The read answer has usually already streamed (``answer`` empty then); when it
@@ -1020,30 +1067,33 @@ def _spoken_confirm(answer: str, summary: str) -> str:
     the affirm vocabulary in :data:`_AFFIRM`.
     """
     parts = [answer.strip()] if answer.strip() else []
-    parts.append(f"{summary}. Say yes to confirm.")
+    parts.append(words("confirm_spoken", summary=summary))
     return " ".join(parts)
 
 
-def _render_proposal(text: str, proposal: Proposal | None) -> str:
+def _render_proposal(text: str, proposal: Proposal | None, words: Words) -> str:
     """Combine Claude's answer with a described proposal (summary + targets)."""
     if proposal is None:
         return text
     lines = [text] if text else []
     summary = proposal.summary.strip()
     if summary:
-        lines.append(f"\nProposed: {summary}")
+        lines.append("\n" + words("proposed", summary=summary))
     targets = sorted({t for item in proposal.intents for t in item.get("targets", [])})
     if targets:
-        lines.append(f"Affects: {', '.join(targets)}.")
+        lines.append(words("affects", targets=", ".join(targets)))
     return "\n".join(line for line in lines if line).strip()
 
 
-def _automation_alias(automation: dict[str, Any]) -> str:
+def _automation_alias(automation: dict[str, Any], words: Words) -> str:
     """Return the drafted automation's display name, or a sane fallback."""
-    return str(automation.get("alias") or "automation").strip() or "automation"
+    fallback = words("automation_fallback")
+    return str(automation.get("alias") or fallback).strip() or fallback
 
 
-def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
+def _render_automation_draft(
+    text: str, automation: dict[str, Any], words: Words
+) -> str:
     """Render a drafted automation as a readable YAML block for review.
 
     Nothing is written by rendering; the caller owns the confirm question. ``text``
@@ -1054,7 +1104,7 @@ def _render_automation_draft(text: str, automation: dict[str, Any]) -> str:
         automation, sort_keys=False, default_flow_style=False, allow_unicode=True
     ).strip()
     parts = [text.strip()] if text.strip() else []
-    parts.append(f"Here's a draft automation — **{_automation_alias(automation)}**:")
+    parts.append(words("automation_draft", alias=_automation_alias(automation, words)))
     parts.append(f"```yaml\n{body}\n```")
     return "\n\n".join(parts)
 

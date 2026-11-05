@@ -422,6 +422,108 @@
     },
     "web_requires_plain_read": {
       "message": "A web answer is text only: leave mode on read and do not pass intents or a notify service."
+    },
+    "write_done": {
+      "message": "Done: {summary}"
+    },
+    "write_done_bare": {
+      "message": "Done."
+    },
+    "write_not_done": {
+      "message": "Not done: {summary}. Failed: {failed}"
+    },
+    "write_went_through": {
+      "message": ". Went through: {went_through}"
+    },
+    "target_fallback": {
+      "message": "the target"
+    },
+    "requested_change": {
+      "message": "the requested change"
+    },
+    "write_unconfirmed": {
+      "message": "I couldn't confirm what happened with: {summary}. Check first."
+    },
+    "proposed": {
+      "message": "Proposed: {summary}"
+    },
+    "affects": {
+      "message": "Affects: {targets}."
+    },
+    "confirm_ask": {
+      "message": "Confirm? (yes/no)"
+    },
+    "confirm_spoken": {
+      "message": "{summary}. Say yes to confirm."
+    },
+    "confirm_yes": {
+      "message": "yes"
+    },
+    "confirm_no": {
+      "message": "no"
+    },
+    "cancelled": {
+      "message": "Cancelled."
+    },
+    "remember_line": {
+      "message": "Remember: {fact}"
+    },
+    "forget_line": {
+      "message": "Forget: {fact}"
+    },
+    "remembered": {
+      "message": "Remembered: {fact}"
+    },
+    "forgot": {
+      "message": "Forgot: {fact}"
+    },
+    "memory_dropped": {
+      "message": "Not saved to memory — ask on its own to keep it."
+    },
+    "memory_needs_user": {
+      "message": "Not saved to memory: facts are kept from a signed-in chat or the Remember a fact action."
+    },
+    "automation_fallback": {
+      "message": "automation"
+    },
+    "automation_draft": {
+      "message": "Here's a draft automation — **{alias}**:"
+    },
+    "automation_create_spoken": {
+      "message": "Create automation {alias}"
+    },
+    "automation_update_spoken": {
+      "message": "Update automation {alias}"
+    },
+    "automation_create_ask": {
+      "message": "Create it? (yes/no)"
+    },
+    "automation_update_ask": {
+      "message": "Update it? (yes/no)"
+    },
+    "automation_created": {
+      "message": "Created automation: {summary}"
+    },
+    "automation_updated": {
+      "message": "Updated automation: {summary}"
+    },
+    "automation_deleted": {
+      "message": "Deleted automation: {summary}"
+    },
+    "automation_delete_spoken": {
+      "message": "Delete automation {name}"
+    },
+    "automation_delete_ask": {
+      "message": "Delete the automation {name}? (yes/no)"
+    },
+    "automation_not_found": {
+      "message": "I couldn't find an automation matching that."
+    },
+    "automation_ambiguous": {
+      "message": "I found more than one — which? {names}"
+    },
+    "automation_unreadable": {
+      "message": "I couldn't read that automation's configuration."
     }
   },
   "issues": {

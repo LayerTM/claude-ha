@@ -33,6 +33,7 @@ from custom_components.claude_ha.conversation import (
 )
 from custom_components.claude_ha.engines import CLAUDE
 from custom_components.claude_ha.issues import entry_issue_id
+from custom_components.claude_ha.replies import Words
 from homeassistant.components import conversation
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
 from homeassistant.core import Context, HomeAssistant
@@ -55,6 +56,9 @@ from .conftest import (
 # A voice satellite entity id — HA sets this on ConversationInput only for turns
 # that arrive through an assist_satellite (audio in, TTS out).
 VOICE_SATELLITE = "assist_satellite.kitchen"
+
+
+_EN = Words({})
 
 
 def _agent_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
@@ -395,7 +399,7 @@ async def test_conversation_propagates_id_and_caller(
 
 def test_render_proposal_no_proposal() -> None:
     """With no proposal, the reply is Claude's text verbatim."""
-    assert _render_proposal("just an answer", None) == "just an answer"
+    assert _render_proposal("just an answer", None, _EN) == "just an answer"
 
 
 @pytest.mark.parametrize(
@@ -428,7 +432,7 @@ def test_render_proposal_variants(
     expect_absent: list[str],
 ) -> None:
     """Proposal rendering omits empty parts (no execute/disclaimer text)."""
-    reply = _render_proposal(text, proposal)
+    reply = _render_proposal(text, proposal, _EN)
     for fragment in expect_present:
         assert fragment in reply
     for fragment in expect_absent:
@@ -543,11 +547,12 @@ async def test_voice_confirmation_is_spoken_friendly(
 
 def test_spoken_confirm_keeps_unstreamed_answer() -> None:
     """When the read hasn't streamed, the answer is kept before the confirm line."""
-    assert _spoken_confirm("It is 21 degrees.", "Turn on the fan") == (
+    assert _spoken_confirm("It is 21 degrees.", "Turn on the fan", _EN) == (
         "It is 21 degrees. Turn on the fan. Say yes to confirm."
     )
     assert (
-        _spoken_confirm("", "Turn on the fan") == "Turn on the fan. Say yes to confirm."
+        _spoken_confirm("", "Turn on the fan", _EN)
+        == "Turn on the fan. Say yes to confirm."
     )
 
 
@@ -719,6 +724,7 @@ def test_render_automation_draft_includes_alias_and_yaml() -> None:
             "triggers": [{"trigger": "time", "at": "08:00:00"}],
             "actions": [{"action": "notify.notify"}],
         },
+        _EN,
     )
     assert "draft automation — **X**" in out
     assert "```yaml" in out
@@ -727,7 +733,7 @@ def test_render_automation_draft_includes_alias_and_yaml() -> None:
 
 def test_render_automation_draft_keeps_prose_and_defaults_alias() -> None:
     """Prose is kept above the block; a missing alias falls back to 'automation'."""
-    out = _render_automation_draft("Here you go.", {"triggers": [], "actions": []})
+    out = _render_automation_draft("Here you go.", {"triggers": [], "actions": []}, _EN)
     assert out.startswith("Here you go.")
     assert "**automation**" in out
 
@@ -1429,6 +1435,7 @@ async def _confirmed_write(
     *,
     status: int,
     body: dict[str, Any],
+    language: str = "en",
 ) -> conversation.ConversationResult:
     """Propose a sensitive write, answer yes, and return the turn that wrote."""
 
@@ -1444,7 +1451,12 @@ async def _confirmed_write(
     hass.states.async_set("light.b", "unavailable", {"friendly_name": "Desk lamp"})
     agent_id = _agent_id(hass, entry)
     first = await conversation.async_converse(
-        hass, "turn off the lamps", None, context=Context(), agent_id=agent_id
+        hass,
+        "turn off the lamps",
+        None,
+        context=Context(),
+        agent_id=agent_id,
+        language=language,
     )
     return await conversation.async_converse(
         hass,
@@ -1452,6 +1464,7 @@ async def _confirmed_write(
         first.conversation_id,
         context=Context(),
         agent_id=agent_id,
+        language=language,
     )
 
 
