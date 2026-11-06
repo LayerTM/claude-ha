@@ -3,8 +3,13 @@ name: Dependabot auto-merge
 # Automatically merges Dependabot pull requests for minor and patch updates once
 # all required status checks pass. Anything else -- major version bumps or updates
 # whose type cannot be determined -- is left for manual review (fail-closed).
+#
+# Runs on `pull_request`: a Dependabot-triggered run executes the workflow from
+# the pull request's own branch with a read-only GITHUB_TOKEN and no repository
+# secrets by default, and the `permissions` block below raises the token to the
+# scopes the merge needs. The job is limited to pull requests authored by Dependabot.
 
-on: pull_request_target
+on: pull_request
 
 permissions:
   contents: write
@@ -12,7 +17,7 @@ permissions:
 
 jobs:
   auto-merge:
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Fetch Dependabot metadata
