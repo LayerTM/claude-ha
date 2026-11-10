@@ -244,15 +244,48 @@ async def test_setup_pipeline_full(
     assert captured["language"] == "uk"
 
 
-def _flow(flow_id: str, slug: str) -> dict[str, Any]:
+# Home Assistant 2026.10 and earlier, then 2026.11 and later, build the URL.
+DISCOVERY_URL_FORMS = (
+    "homeassistant://hassio/addon/{slug}/info",
+    "homeassistant://config/app/{slug}/info",
+)
+
+
+def _flow(
+    flow_id: str, slug: str, url_form: str = DISCOVERY_URL_FORMS[0]
+) -> dict[str, Any]:
     """Return a pending Wyoming Supervisor-discovery flow for an app slug."""
     return {
         "flow_id": flow_id,
         "context": {
             "source": "hassio",
-            "configuration_url": f"homeassistant://hassio/addon/{slug}/info",
+            "configuration_url": url_form.format(slug=slug),
         },
     }
+
+
+@pytest.mark.parametrize("url_form", DISCOVERY_URL_FORMS)
+def test_own_discoveries_match_both_home_assistant_url_forms(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, url_form: str
+) -> None:
+    """Whisper's and Piper's flows match under either URL, a foreign app's does not."""
+    flows = [
+        _flow("w", voice.WHISPER_ADDON_SLUG, url_form),
+        _flow("p", voice.PIPER_ADDON_SLUG, url_form),
+        _flow("x", "core_other", url_form),
+        {"flow_id": "n", "context": {"source": "hassio"}},
+        {"flow_id": "m", "context": {"configuration_url": "https://x/y/info"}},
+    ]
+    monkeypatch.setattr(
+        hass.config_entries.flow,
+        "async_progress_by_handler",
+        lambda *_a, **_k: flows,
+    )
+
+    assert voice._own_discoveries(hass) == [
+        ("w", voice.WHISPER_ADDON_SLUG),
+        ("p", voice.PIPER_ADDON_SLUG),
+    ]
 
 
 @pytest.mark.parametrize(
