@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Voice setup (`claude_ha.setup_voice`) works on Home Assistant 2026.11 again. Home
+  Assistant renamed add-ons to apps and changed the link its Whisper and Piper
+  discovery prompts carry, so the action no longer recognised them and voice setup
+  timed out. The action now identifies the two apps from the app name in that link,
+  whichever form Home Assistant uses, so older versions keep working.
+
 ## [1.17.2] - 2026-11-06
 
 ### Fixed

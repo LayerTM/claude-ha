@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from aiohasupervisor import SupervisorError
@@ -77,16 +78,13 @@ class VoiceSetupResult:
     pipeline_id: str | None
 
 
-def _discovery_url(slug: str) -> str:
-    """Return the ``configuration_url`` Wyoming's flow carries for an app."""
-    return f"homeassistant://hassio/addon/{slug}/info"
+# Wyoming's Supervisor-discovery flows for exactly the two apps set up here.
+_OWN_DISCOVERY_SLUGS = frozenset({WHISPER_ADDON_SLUG, PIPER_ADDON_SLUG})
 
-
-# Wyoming's Supervisor-discovery flows for exactly the two apps set up here,
-# mapped to the app each one belongs to.
-_OWN_DISCOVERY_SLUGS = {
-    _discovery_url(slug): slug for slug in (WHISPER_ADDON_SLUG, PIPER_ADDON_SLUG)
-}
+# The flow context carries the app only inside ``configuration_url``, whose
+# path prefix Home Assistant renamed (``hassio/addon`` became ``config/app``
+# in 2026.11); the stable part is the trailing ``/<slug>/info``.
+_DISCOVERY_URL_SLUG = re.compile(r"^homeassistant://.+/(?P<slug>[^/]+)/info$")
 
 
 def _addon_host(slug: str) -> str:
@@ -150,9 +148,11 @@ def _wyoming_entries(
     ]
 
 
-def _discovery_url_of(flow: Any) -> str:
-    """Return the app URL a Wyoming discovery flow carries ("" if none)."""
-    return str(flow["context"].get("configuration_url", ""))
+def _discovery_slug_of(flow: Any) -> str | None:
+    """Return the app slug a Wyoming discovery flow carries (None if none)."""
+    url = str(flow["context"].get("configuration_url", ""))
+    match = _DISCOVERY_URL_SLUG.match(url)
+    return match["slug"] if match else None
 
 
 @callback
@@ -163,7 +163,8 @@ def _own_discoveries(hass: HomeAssistant) -> list[tuple[str, str]]:
         for flow in hass.config_entries.flow.async_progress_by_handler(
             WYOMING_PLATFORM, match_context={"source": "hassio"}
         )
-        if (slug := _OWN_DISCOVERY_SLUGS.get(_discovery_url_of(flow)))
+        if (slug := _discovery_slug_of(flow)) is not None
+        and slug in _OWN_DISCOVERY_SLUGS
     ]
 
 
