@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- The install instructions cover the Marketplace built into Home Assistant 2026.11, next to HACS for older versions.
+
 ### Added
 
 - Hungarian reply words: the agent's own proposal, confirmation question, done,

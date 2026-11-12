@@ -110,26 +110,29 @@ there is nothing to type in.
 
 ## Installation
 
-### HACS
+### Marketplace (Home Assistant 2026.11 and newer) or HACS
 
-This integration is listed in the **HACS default store**. A freshly listed
-repository takes a few hours to reach every HACS install, so the button below is
-the reliable route in the meantime — if your HACS doesn't know the repository
-yet, it offers to add it.
+Home Assistant 2026.11 includes HACS as **Settings → Marketplace**; a separate
+HACS install is no longer possible there. On older versions, install HACS and
+use it the same way. This integration is listed in the **HACS default store**.
 
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=LayerTM&repository=claude-ha&category=integration)
 
-1. Click **Open in HACS** above and install **AI Agent**. (Accept the prompt if
-   HACS asks to add the repository first.) You can also search HACS for
-   `claude-ha`, which matches only this integration.
-2. Restart Home Assistant.
+1. Click **Open in HACS** above — on 2026.11 and newer it opens the
+   Marketplace — and install **AI Agent**. You can also search for `claude-ha`,
+   which matches only this integration. The first time you open the Marketplace,
+   Home Assistant shows a notice that you must accept (**I understand the risks
+   and agree**) before installing or updating.
+2. With HACS, restart Home Assistant (a new install from the Marketplace needs no restart).
 3. Install the Claude Code or Codex app. Once it starts, Home Assistant
    offers to set up the **AI Agent** integration automatically — accept it. No
    configuration needed.
 
-Neither route working? Add `LayerTM/claude-ha` as a **custom repository**
-(category *Integration*). If HACS replies that the repository already exists in
-the store, then it is already listed — search for `claude-ha` instead.
+If the repository isn't found, add `LayerTM/claude-ha` as a custom repository
+(category *Integration*): in the Marketplace use **Add from link** (it asks you
+to sign in to GitHub); in HACS use **Custom repositories**. If it replies that
+the repository already exists in the store, it is already listed — search for
+`claude-ha` instead.
 
 ### Manual
 
