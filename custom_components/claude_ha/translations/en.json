@@ -556,9 +556,17 @@
       "title": "{engine} isn't logged in",
       "description": "The {addon} app is running but {engine} isn't authenticated, so chat can't answer. Open the {addon} app, {login_fix}, or {durable_login}, then check again."
     },
+    "not_logged_in_durable": {
+      "title": "{engine} refused its credential",
+      "description": "The {addon} app is running but {engine} refused the {durable_name} set in its options, so chat can't answer. Open the {addon} app, check or replace it, or remove it to use the sign-in ({login_fix}), then check again."
+    },
     "signin_expired": {
       "title": "{engine}'s sign-in has expired",
       "description": "{engine}'s sign-in to its model provider has expired, so chat can't answer until it's renewed. Open the {addon} app, {login_fix}, or {durable_login} (which survives idle spells), then check again."
+    },
+    "signin_expired_durable": {
+      "title": "{engine} refused its credential",
+      "description": "{engine} refused the {durable_name} set in its options, so chat can't answer until it's checked or replaced. Open the {addon} app, check or replace it, or remove it to use the sign-in ({login_fix}), then check again."
     },
     "no_ha_token": {
       "title": "{engine} has no token to read your home",

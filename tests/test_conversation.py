@@ -366,6 +366,45 @@ async def test_conversation_names_an_expired_signin_and_raises_the_repair(
     )
     assert issue is not None
     assert issue.translation_placeholders == CLAUDE.placeholders
+    assert issue.translation_key == "signin_expired"
+
+
+async def test_conversation_names_a_refused_option_credential(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_status: None,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A read that ended auth-expired on the option-set credential says so."""
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={
+            "text": "Sorry — I couldn't finish that response.",
+            "reason": "auth-expired",
+            "credential": "durable",
+            "proposal": None,
+            "tools_used": [],
+            "truncated": False,
+        },
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    result = await conversation.async_converse(
+        hass,
+        "how warm is the living room?",
+        None,
+        context=Context(),
+        agent_id=_agent_id(hass, mock_config_entry),
+    )
+
+    speech = result.response.speech["plain"]["speech"]
+    assert "refused the OAuth token set in its options" in speech
+    assert "sign-in has expired" not in speech
+    issue = ir.async_get(hass).async_get_issue(
+        DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, mock_config_entry.entry_id)
+    )
+    assert issue is not None
+    assert issue.translation_key == "signin_expired_durable"
 
 
 async def test_conversation_propagates_id_and_caller(

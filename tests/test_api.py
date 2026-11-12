@@ -728,6 +728,22 @@ async def test_status_parses_auth(
     assert status.auth is not None
     assert status.auth.state == "expired"
     assert status.auth.since == dt_util.parse_datetime("2026-10-08T12:00:00+00:00")
+    assert status.auth.credential is None
+
+
+async def test_status_parses_auth_credential(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The auth block's credential is carried as-is; junk reads as absent."""
+    for raw, expected in (("durable", "durable"), ("login", "login"), (7, None)):
+        aioclient_mock.clear_requests()
+        aioclient_mock.get(
+            f"{TEST_BASE_URL}/api/status",
+            json={"ready": True, "auth": {"state": "expired", "credential": raw}},
+        )
+        status = await _client(hass).async_get_status()
+        assert status.auth is not None
+        assert status.auth.credential == expected
 
 
 @pytest.mark.parametrize("auth", [None, "not-a-dict", 42, {}, {"state": ""}])
