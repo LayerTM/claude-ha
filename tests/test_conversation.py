@@ -1459,7 +1459,24 @@ async def test_another_callers_proposal_does_not_replace_the_hold(
     posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
     assert [body["mode"] for body in posts] == ["write"]
     assert posts[0]["intents"][0]["targets"] == ["lock.front"]
-    assert (("hall", "user-2") in hass.data[DATA_PENDING_CHAT]) is not OWNER_CHECKED
+    if OWNER_CHECKED:
+        assert ("hall", "user-2") not in hass.data[DATA_PENDING_CHAT]
+        return
+
+    # Without the owner check user-2 holds a proposal too, and confirms only it.
+    assert ("hall", "user-2") in hass.data[DATA_PENDING_CHAT]
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(
+        f"{TEST_BASE_URL}/api/prompt",
+        json={"text": "Done.", "tools_used": [], "truncated": False},
+    )
+    await conversation.async_converse(
+        hass, "yes", "hall", Context(user_id="user-2"), agent_id=agent
+    )
+    posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
+    assert [body["mode"] for body in posts] == ["write"]
+    assert posts[0]["intents"][0]["targets"] == ["lock.back"]
+    assert not hass.data[DATA_PENDING_CHAT]
 
 
 _WRITE_PROPOSAL = {

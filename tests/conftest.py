@@ -25,6 +25,7 @@ from custom_components.claude_ha.const import (
 from homeassistant.components import conversation
 from homeassistant.components.hassio import AddonInfo, AddonState
 from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import chat_session, intent
 from homeassistant.setup import async_setup_component
 
@@ -61,6 +62,7 @@ def assert_turn_of_other_user(
     posts = [call for call in aioclient_mock.mock_calls if call[0] == "POST"]
     if OWNER_CHECKED:
         assert result.response.response_type is intent.IntentResponseType.ERROR
+        assert result.response.speech["plain"]["speech"] == str(Unauthorized())
         assert len(posts) == posts_before
     else:
         assert result.response.response_type is not intent.IntentResponseType.ERROR

@@ -107,8 +107,9 @@ disallow_incomplete_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-# Home Assistant installs its httpx alias before respx is imported; the
-# harness uses respx directly, so its separate pytest plugin stays off.
+# The test harness installs respx, whose pytest plugin loads by itself and
+# imports httpx before Home Assistant can install its httpx alias, which stops
+# the run at collection. These tests do not use respx, so the plugin stays off.
 addopts = "-p no:respx --cov=custom_components.claude_ha --cov-report=term-missing"
 
 [tool.coverage.run]
