@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Hungarian reply words: the agent's own proposal, confirmation question, done,
+  cancelled, memory and automation lines are available in Hungarian, including the
+  spoken yes/no vocabulary (`igen` / `nem`), so a Hungarian Assist pipeline no
+  longer gets English confirmations. Thanks to @marcello-star (#113).
+
 ## [1.17.4] - 2026-11-12
 
 ### Fixed

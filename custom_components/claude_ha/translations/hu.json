@@ -1,0 +1,106 @@
+{
+  "exceptions": {
+    "write_done": {
+      "message": "Kész: {summary}"
+    },
+    "write_done_bare": {
+      "message": "Kész."
+    },
+    "write_not_done": {
+      "message": "Nem sikerült: {summary}. Sikertelen: {failed}"
+    },
+    "write_went_through": {
+      "message": ". Végrehajtva: {went_through}"
+    },
+    "target_fallback": {
+      "message": "a cél"
+    },
+    "requested_change": {
+      "message": "a kért változtatás"
+    },
+    "write_unconfirmed": {
+      "message": "Nem tudtam megerősíteni, mi történt ezzel: {summary}. Kérlek, előbb ellenőrizd."
+    },
+    "proposed": {
+      "message": "Javaslat: {summary}"
+    },
+    "affects": {
+      "message": "Érintett: {targets}."
+    },
+    "confirm_ask": {
+      "message": "Megerősíted? (igen/nem)"
+    },
+    "confirm_spoken": {
+      "message": "{summary}. Mondd, hogy igen, ha megerősíted."
+    },
+    "confirm_yes": {
+      "message": "igen, jó, rendben, persze"
+    },
+    "confirm_no": {
+      "message": "nem, ne, mégse"
+    },
+    "cancelled": {
+      "message": "Megszakítva."
+    },
+    "remember_line": {
+      "message": "Megjegyzés: {fact}"
+    },
+    "forget_line": {
+      "message": "Elfelejtés: {fact}"
+    },
+    "remembered": {
+      "message": "Megjegyeztem: {fact}"
+    },
+    "forgot": {
+      "message": "Elfelejtettem: {fact}"
+    },
+    "memory_dropped": {
+      "message": "Nem mentettem a memóriába – kérd külön, ha meg szeretnéd tartani."
+    },
+    "memory_needs_user": {
+      "message": "Nem mentettem a memóriába: tényeket bejelentkezett csevegésből vagy a „Remember a fact” művelettel lehet menteni."
+    },
+    "automation_fallback": {
+      "message": "automatizálás"
+    },
+    "automation_draft": {
+      "message": "Itt egy automatizálás-vázlat – **{alias}**:"
+    },
+    "automation_create_spoken": {
+      "message": "{alias} automatizálás létrehozása"
+    },
+    "automation_update_spoken": {
+      "message": "{alias} automatizálás frissítése"
+    },
+    "automation_create_ask": {
+      "message": "Létrehozzam? (igen/nem)"
+    },
+    "automation_update_ask": {
+      "message": "Frissítsem? (igen/nem)"
+    },
+    "automation_created": {
+      "message": "Automatizálás létrehozva: {summary}"
+    },
+    "automation_updated": {
+      "message": "Automatizálás frissítve: {summary}"
+    },
+    "automation_deleted": {
+      "message": "Automatizálás törölve: {summary}"
+    },
+    "automation_delete_spoken": {
+      "message": "{name} automatizálás törlése"
+    },
+    "automation_delete_ask": {
+      "message": "Töröljem a(z) {name} automatizálást? (igen/nem)"
+    },
+    "automation_not_found": {
+      "message": "Nem találtam ehhez illő automatizálást."
+    },
+    "automation_ambiguous": {
+      "message": "Többet is találtam – melyiket? {names}"
+    },
+    "automation_unreadable": {
+      "message": "Nem tudtam beolvasni ennek az automatizálásnak a konfigurációját."
+    }
+  }
+}
