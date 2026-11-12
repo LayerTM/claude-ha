@@ -75,6 +75,10 @@ RISK_SENSITIVE: Final = "sensitive"
 # request ``field`` at fault and the exceeded ``limit_bytes``, when they apply.
 ERROR_CODE: Final = "code"
 ERROR_FIELD: Final = "field"
+# Which credential an auth-expired answer says was refused: "durable" is the
+# one set in the app's options; anything else (or absent) is the sign-in.
+ERROR_CREDENTIAL: Final = "credential"
+CREDENTIAL_DURABLE: Final = "durable"
 ERROR_LIMIT_BYTES: Final = "limit_bytes"
 
 # POST /api/prompt 200-response keys.

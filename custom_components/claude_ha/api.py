@@ -46,9 +46,11 @@ from .const import (
     CHAT_HEALTH_OUTAGE_RUN,
     CHAT_HEALTH_STALE_FAILURE_S,
     CONTENT_TYPE_NDJSON,
+    CREDENTIAL_DURABLE,
     DOMAIN,
     ERROR_CODE,
     ERROR_CODE_ACTION_FAILED,
+    ERROR_CREDENTIAL,
     ERROR_FIELD,
     ERROR_LIMIT_BYTES,
     HEADER_CALLER,
@@ -1514,6 +1516,8 @@ def _coded_error(
     placeholders: dict[str, str] | None = None
     if key == "auth_expired":
         placeholders = engine.placeholders
+        if body.get(ERROR_CREDENTIAL) == CREDENTIAL_DURABLE:
+            key = "auth_expired_durable"
     elif key in _ERROR_PLACEHOLDERS:
         field, name = _ERROR_PLACEHOLDERS[key]
         value = body.get(field)

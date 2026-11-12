@@ -44,6 +44,9 @@ class Engine:
     login_fix: str
     # The durable alternative to login_fix (survives idle spells), same shape.
     durable_login: str
+    # What the durable alternative is called as a noun (the option it sets), for
+    # strings that say that option was refused.
+    durable_name: str
 
     @property
     def placeholders(self) -> dict[str, str]:
@@ -53,6 +56,7 @@ class Engine:
             "addon": self.addon_name,
             "login_fix": self.login_fix,
             "durable_login": self.durable_login,
+            "durable_name": self.durable_name,
         }
 
 
@@ -66,6 +70,7 @@ CLAUDE: Final = Engine(
     repository_url="https://github.com/LayerTM/ClaudeInHA",
     login_fix="run `/login` in the app's console",
     durable_login="set a `claude setup-token` token as its OAuth Token option",
+    durable_name="OAuth token",
 )
 
 CODEX: Final = Engine(
@@ -78,6 +83,7 @@ CODEX: Final = Engine(
     repository_url="https://github.com/LayerTM/CodexInHA",
     login_fix="run `codex logout` then `codex login` in a console shell tab",
     durable_login="set an API key as its API Key option",
+    durable_name="API key",
 )
 
 ENGINES: Final[Mapping[str, Engine]] = {

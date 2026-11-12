@@ -267,6 +267,9 @@
     "auth_expired": {
       "message": "{engine}'s sign-in has expired. Sign in again: {login_fix}, or {durable_login} so it survives idle spells."
     },
+    "auth_expired_durable": {
+      "message": "{engine} refused the {durable_name} set in its options. Check or replace it, or remove it to use the sign-in ({login_fix})."
+    },
     "rate_limited": {
       "message": "The app is busy or rate-limited. Try again shortly."
     },

@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- When the app reports that the credential set in its own options (the OAuth token or
+  API key) was refused, the error now says so and suggests checking, replacing or
+  removing it, instead of advising to sign in again or set an API key. Apps that do
+  not report which credential was refused keep the previous message.
+
 ## [1.17.3] - 2026-11-10
 
 ### Fixed
