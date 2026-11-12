@@ -1,5 +1,8 @@
 # The test harness for the oldest Home Assistant hacs.json promises
-# (pytest-homeassistant-custom-component pins homeassistant exactly). The tests
+# (pytest-homeassistant-custom-component pins homeassistant exactly; Home
+# Assistant's own pytest-homeassistant starts at 2026.11, so this leg keeps the
+# older package until the minimum reaches it — tests/__init__.py maps the
+# import name). The tests
 # workflow installs this on its minimum leg and fails if the installed
 # homeassistant is not hacs.json's minimum, so bump both together. Not named
 # requirements_test*.txt on purpose: a bot must not raise it to the newest.

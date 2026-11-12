@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiohttp import ClientError
 import pytest
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.api import (
     _MAX_JSON_INT,

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry, flush_store
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant.common import MockConfigEntry, flush_store
+from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.const import DOMAIN, ISSUE_USAGE_HISTORY_RESET
 from custom_components.claude_ha.issues import entry_issue_id

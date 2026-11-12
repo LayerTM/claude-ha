@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 from aiohttp import ClientError
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.test_util.aiohttp import (
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
 )
@@ -21,9 +21,8 @@ from custom_components.claude_ha.replies import ENGLISH, Words, async_words
 from homeassistant.components import conversation
 from homeassistant.components.conversation.agent_manager import async_get_agent
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.helpers import chat_session
 
-from .conftest import TEST_BASE_URL, setup_integration
+from .conftest import TEST_BASE_URL, get_chat_session, setup_integration
 from .test_conversation import (
     _FAILED_B,
     _OK_A,
@@ -298,7 +297,7 @@ async def test_a_memory_change_with_nothing_to_say_is_just_done(
         agent_id=agent_id,
     )
     with (
-        chat_session.async_get_chat_session(hass, None) as session,
+        get_chat_session(hass, None, user_input.context) as session,
         conversation.async_get_chat_log(hass, session, user_input) as chat_log,
     ):
         result = await agent._async_apply_memory(

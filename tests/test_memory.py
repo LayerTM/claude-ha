@@ -6,8 +6,8 @@ import logging
 from typing import Any
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
-from pytest_homeassistant_custom_component.test_util.aiohttp import (
+from pytest_homeassistant.common import MockConfigEntry, MockUser
+from pytest_homeassistant.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
 )
@@ -41,6 +41,7 @@ from .conftest import (
     STATUS_PAYLOAD,
     TEST_BASE_URL,
     USAGE_PAYLOAD,
+    assert_turn_of_other_user,
     setup_integration,
 )
 
@@ -736,9 +737,11 @@ async def test_only_the_held_caller_can_confirm(
         hass, mock_config_entry, "remember my room", conversation_id="kitchen"
     )
     assert "Remember:" in _speech(asked)
+    before = len(_posts(aioclient_mock))
     other = await _say(
         hass, mock_config_entry, "yes", user_id="user-2", conversation_id="kitchen"
     )
+    assert_turn_of_other_user(other, aioclient_mock, before)
     assert "Remembered" not in _speech(other)
     assert _memory(mock_config_entry).visible("user-1") == []
     assert _memory(mock_config_entry).visible("user-2") == []

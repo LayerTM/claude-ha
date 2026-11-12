@@ -2,7 +2,8 @@
 """Install what the Home Assistant components this integration depends on need.
 
 The integration's `dependencies` are set up before it, in tests as in a real
-install, so their Python requirements must be present. Home Assistant states
+install, and it imports its `after_dependencies`, so the Python requirements of
+both must be present. Home Assistant states
 those requirements in each component's manifest, pinned to the versions it
 ships. This script reads them from the installed `homeassistant` package,
 following `dependencies` transitively, and installs exactly those pins, under
@@ -67,7 +68,11 @@ def main(argv: list[str]) -> int:
     import homeassistant  # noqa: PLC0415 - the installed one is the source
 
     package = Path(homeassistant.__file__).parent
-    roots = json.loads(MANIFEST.read_text())["dependencies"]
+    manifest = json.loads(MANIFEST.read_text())
+    # The integration imports its after_dependencies too (hassio, ...), so their
+    # requirements must be present even though Home Assistant does not order
+    # setup by them; their own after_dependencies stay out.
+    roots = [*manifest["dependencies"], *manifest.get("after_dependencies", [])]
     try:
         requirements = component_requirements(package / "components", roots)
     except RequirementError as err:

@@ -7,8 +7,8 @@ from typing import Any
 
 import aiohttp
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.test_util.aiohttp import (
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
 )
@@ -38,7 +38,6 @@ from homeassistant.components import conversation
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import (
-    chat_session,
     entity_registry as er,
     intent,
     issue_registry as ir,
@@ -47,9 +46,12 @@ from homeassistant.helpers import (
 
 from .conftest import (
     LEGACY_STATUS_PAYLOAD,
+    OWNER_CHECKED,
     PROMPT_PAYLOAD,
     TEST_BASE_URL,
     USAGE_PAYLOAD,
+    assert_turn_of_other_user,
+    get_chat_session,
     setup_integration,
 )
 
@@ -59,6 +61,11 @@ VOICE_SATELLITE = "assist_satellite.kitchen"
 
 
 _EN = Words({})
+
+
+def _post_count(aioclient_mock: AiohttpClientMocker) -> int:
+    """Return how many POSTs have been sent to the app so far."""
+    return sum(1 for call in aioclient_mock.mock_calls if call[0] == "POST")
 
 
 def _agent_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
@@ -271,7 +278,7 @@ async def test_answer_after_failed_local_intent_is_not_an_error(
         agent_id=agent_id,
     )
     with (
-        chat_session.async_get_chat_session(hass, None) as session,
+        get_chat_session(hass, None, user_input.context) as session,
         conversation.async_get_chat_log(hass, session, user_input) as chat_log,
     ):
         _local_attempt_failed(chat_log, conversation.HOME_ASSISTANT_AGENT)
@@ -1343,10 +1350,12 @@ async def test_held_action_needs_the_same_caller(
         hass, "unlock the door", "hall", Context(user_id="user-1"), agent_id=agent
     )
     assert "Confirm? (yes/no)" in asked.response.speech["plain"]["speech"]
-    await conversation.async_converse(
+    before = _post_count(aioclient_mock)
+    other = await conversation.async_converse(
         hass, "yes", "hall", Context(user_id="user-2"), agent_id=agent
     )
 
+    assert_turn_of_other_user(other, aioclient_mock, before)
     posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
     assert all(body["mode"] == "read" for body in posts)
 
@@ -1376,15 +1385,16 @@ async def test_other_callers_answer_leaves_the_hold_for_its_owner(
     await conversation.async_converse(
         hass, "unlock the door", "hall", Context(user_id="user-1"), agent_id=agent
     )
-    # The other caller's turn is a plain answer, so it holds nothing of its own.
+    # The other caller's turn is refused or a plain answer: it holds nothing.
     aioclient_mock.clear_requests()
     aioclient_mock.post(
         f"{TEST_BASE_URL}/api/prompt",
         json={"text": "Sure.", "tools_used": [], "truncated": False},
     )
-    await conversation.async_converse(
+    other = await conversation.async_converse(
         hass, "yes", "hall", Context(user_id="user-2"), agent_id=agent
     )
+    assert_turn_of_other_user(other, aioclient_mock, 0)
     assert hass.data[DATA_PENDING_CHAT]["hall", "user-1"].caller == "user-1"
 
     aioclient_mock.clear_requests()
@@ -1411,7 +1421,11 @@ async def test_another_callers_proposal_does_not_replace_the_hold(
     mock_status: None,
     aioclient_mock: AiohttpClientMocker,
 ) -> None:
-    """Two users holding proposals in one conversation each confirm their own."""
+    """Another user's proposal in the conversation never replaces the owner's.
+
+    From Home Assistant 2026.11 the other user's turn is refused, so only the
+    owner holds a proposal; before, each user holds and confirms their own.
+    """
 
     def _proposal(target: str) -> dict[str, Any]:
         return {
@@ -1429,9 +1443,10 @@ async def test_another_callers_proposal_does_not_replace_the_hold(
     for user, target in (("user-1", "lock.front"), ("user-2", "lock.back")):
         aioclient_mock.clear_requests()
         aioclient_mock.post(f"{TEST_BASE_URL}/api/prompt", json=_proposal(target))
-        await conversation.async_converse(
+        result = await conversation.async_converse(
             hass, "unlock", "hall", Context(user_id=user), agent_id=agent
         )
+    assert_turn_of_other_user(result, aioclient_mock, 0)
 
     aioclient_mock.clear_requests()
     aioclient_mock.post(
@@ -1444,7 +1459,7 @@ async def test_another_callers_proposal_does_not_replace_the_hold(
     posts = [call[2] for call in aioclient_mock.mock_calls if call[0] == "POST"]
     assert [body["mode"] for body in posts] == ["write"]
     assert posts[0]["intents"][0]["targets"] == ["lock.front"]
-    assert ("hall", "user-2") in hass.data[DATA_PENDING_CHAT]
+    assert (("hall", "user-2") in hass.data[DATA_PENDING_CHAT]) is not OWNER_CHECKED
 
 
 _WRITE_PROPOSAL = {

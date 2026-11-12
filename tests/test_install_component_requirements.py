@@ -87,7 +87,13 @@ def test_the_real_dependencies_resolve() -> None:
         check=True,
     )
     names = {line.split("==")[0] for line in result.stdout.split()}
-    assert {"hassil", "home-assistant-intents", "home-assistant-frontend"} <= names
+    assert {
+        "hassil",
+        "home-assistant-intents",
+        "home-assistant-frontend",
+        # hassio is an after_dependency the integration imports at load time.
+        "aiohasupervisor",
+    } <= names
 
 
 def test_main_reports_a_bad_manifest(

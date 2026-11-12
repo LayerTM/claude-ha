@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant.common import (
     MockConfigEntry,
     async_mock_service,
 )
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.confirm import EVENT_MOBILE_APP_ACTION
 from homeassistant.config_entries import ConfigEntryState
