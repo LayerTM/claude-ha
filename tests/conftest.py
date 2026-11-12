@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Generator
+from contextlib import AbstractContextManager
+import inspect
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.claude_ha.api import ClaudeClient, StatusResult
 from custom_components.claude_ha.const import (
@@ -20,9 +22,52 @@ from custom_components.claude_ha.const import (
     CONF_TOKEN,
     DOMAIN,
 )
+from homeassistant.components import conversation
 from homeassistant.components.hassio import AddonInfo, AddonState
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import Unauthorized
+from homeassistant.helpers import chat_session, intent
 from homeassistant.setup import async_setup_component
+
+# From Home Assistant 2026.11 the user of a conversation's first turn owns it: a
+# turn with another user's context is refused (an error result) before it
+# reaches any agent. Older releases pass every turn to the agent.
+OWNER_CHECKED = (
+    "context" in inspect.signature(chat_session.async_get_chat_session).parameters
+)
+
+
+def get_chat_session(
+    hass: HomeAssistant, conversation_id: str | None, context: Context
+) -> AbstractContextManager[chat_session.ChatSession]:
+    """Open a chat session for ``context`` the way the conversation entity does."""
+    if OWNER_CHECKED:
+        return chat_session.async_get_chat_session(
+            hass, conversation_id, context=context
+        )
+    return chat_session.async_get_chat_session(hass, conversation_id)
+
+
+def assert_turn_of_other_user(
+    result: conversation.ConversationResult,
+    aioclient_mock: AiohttpClientMocker,
+    posts_before: int,
+) -> None:
+    """Check a turn by a user who does not own the conversation.
+
+    From Home Assistant 2026.11 the owner check refuses it with an error result
+    before the agent runs, so nothing reaches the app. Before, the agent answers
+    it, and the caller-keyed hold is what keeps it from the owner's proposal.
+    """
+    posts = [call for call in aioclient_mock.mock_calls if call[0] == "POST"]
+    if OWNER_CHECKED:
+        assert result.response.response_type is intent.IntentResponseType.ERROR
+        assert result.response.speech["plain"]["speech"] == str(Unauthorized())
+        assert len(posts) == posts_before
+    else:
+        assert result.response.response_type is not intent.IntentResponseType.ERROR
+        assert len(posts) > posts_before
+
 
 TEST_HOST = "abcd1234-claude-code"
 TEST_PORT = 8126

@@ -1,7 +1,9 @@
-# Pinned to the current Home Assistant release that
-# pytest-homeassistant-custom-component tracks (HA 2026.10.4 on Python 3.14).
-# Its homeassistant pin decides every component requirement below it.
-pytest-homeassistant-custom-component==0.13.375
+# Home Assistant's own test harness, released with Home Assistant and pinning
+# it exactly (2026.11.1 on Python 3.14). Its homeassistant pin decides every
+# component requirement below it.
+pytest-homeassistant==2026.11.1
+# Coverage for the 100% gate (the harness does not bring it).
+pytest-cov==7.1.0
 
 # The requirements of the Home Assistant components this integration depends on
 # (conversation, frontend, ...) are not listed here: Home Assistant pins them in

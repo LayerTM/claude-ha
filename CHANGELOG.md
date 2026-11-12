@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Tested against Home Assistant 2026.11, where a conversation belongs to the user
+  who started it: Home Assistant refuses another user's turn in that conversation
+  before it reaches the agent. On older releases the agent still keeps each user's
+  pending confirmation to themselves, so one user's "yes" never confirms another's.
+
 ### Documentation
 
 - The install instructions cover the Marketplace built into Home Assistant 2026.11, next to HACS for older versions.

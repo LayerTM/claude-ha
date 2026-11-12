@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from aiohasupervisor import SupervisorError
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.claude_ha import voice
 from custom_components.claude_ha.const import CONF_VOICE_PIPELINE_ID, DOMAIN
