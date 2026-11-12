@@ -49,6 +49,7 @@ from .const import (
     DOMAIN,
     ERROR_CODE,
     ERROR_CODE_ACTION_FAILED,
+    ERROR_CREDENTIAL,
     ERROR_FIELD,
     ERROR_LIMIT_BYTES,
     HEADER_CALLER,
@@ -112,6 +113,7 @@ from .const import (
     STREAM_KIND_DONE,
     STREAM_KIND_ERROR,
     TIMEOUT_MARGIN,
+    refused_key,
 )
 from .engines import LEGACY_ENGINE, Engine
 
@@ -241,6 +243,21 @@ class ClaudeAuthExpiredError(ClaudeError):
     """
 
     translation_key = "auth_expired"
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        credential: object = None,
+        translation_placeholders: dict[str, str] | None = None,
+    ) -> None:
+        """Init with the credential the app says was refused, if it says."""
+        super().__init__(
+            message,
+            translation_key=refused_key(self.translation_key, credential),
+            translation_placeholders=translation_placeholders,
+        )
+        self.credential = credential
 
 
 class ClaudeRateLimitError(ClaudeError):
@@ -596,6 +613,9 @@ class AuthState:
 
     state: str
     since: datetime | None = None
+    # Which credential the app says is the one in question (``CREDENTIAL_*``),
+    # or ``None`` when it does not say.
+    credential: str | None = None
 
 
 @dataclass(slots=True)
@@ -1210,7 +1230,11 @@ def _parse_auth(raw: Any) -> AuthState | None:
     state = raw.get(AUTH_STATE)
     if not isinstance(state, str) or not state:
         return None
-    return AuthState(state=state, since=_parse_instant(raw.get(AUTH_SINCE)))
+    return AuthState(
+        state=state,
+        since=_parse_instant(raw.get(AUTH_SINCE)),
+        credential=_parse_text(raw.get(ERROR_CREDENTIAL)),
+    )
 
 
 def _non_negative_amount(raw: Any) -> float | None:
@@ -1382,6 +1406,7 @@ def _parse_prompt_result(data: dict[str, Any], engine: Engine) -> PromptResult:
     if data.get(RESP_REASON) == REASON_AUTH_EXPIRED:
         raise ClaudeAuthExpiredError(
             f"run ended reason={REASON_AUTH_EXPIRED}",
+            credential=data.get(ERROR_CREDENTIAL),
             translation_placeholders=engine.placeholders,
         )
     proposal_raw = data.get(RESP_PROPOSAL)
@@ -1511,10 +1536,14 @@ def _coded_error(
     if code not in _ERROR_CODES:
         return None
     error, key = _ERROR_CODES[body[ERROR_CODE]]
+    if error is ClaudeAuthExpiredError:
+        return ClaudeAuthExpiredError(
+            f"{status or 'stream'} {code}",
+            credential=body.get(ERROR_CREDENTIAL),
+            translation_placeholders=engine.placeholders,
+        )
     placeholders: dict[str, str] | None = None
-    if key == "auth_expired":
-        placeholders = engine.placeholders
-    elif key in _ERROR_PLACEHOLDERS:
+    if key in _ERROR_PLACEHOLDERS:
         field, name = _ERROR_PLACEHOLDERS[key]
         value = body.get(field)
         if field == ERROR_LIMIT_BYTES:

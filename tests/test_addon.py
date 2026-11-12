@@ -25,6 +25,7 @@ OTHER_ENGINE = Engine(
     repository_url="https://github.com/LayerTM/OtherInHA",
     login_fix="run its own login command",
     durable_login="set its own durable token",
+    durable_name="durable token",
 )
 OTHER_SLUG = "xyz_other-agent"
 

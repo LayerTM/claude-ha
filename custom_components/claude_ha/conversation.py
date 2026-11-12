@@ -58,6 +58,7 @@ from .const import (
     MODE_WRITE,
     SURFACE_TEXT,
     SURFACE_VOICE,
+    refused_key,
 )
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
 from .engines import engine_for_entry
@@ -1005,6 +1006,7 @@ class ClaudeConversationEntity(conversation.ConversationEntity):
                 persistent=True,
                 learn_more_url="https://github.com/LayerTM/claude-ha#health-checks",
                 placeholders=engine.placeholders,
+                translation_key=refused_key(ISSUE_SIGNIN_EXPIRED, err.credential),
             )
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_error(

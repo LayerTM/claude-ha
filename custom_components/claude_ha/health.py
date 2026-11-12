@@ -36,6 +36,7 @@ from .const import (
     MCP_SERVER_DOMAIN,
     MCP_UNREACHABLE_DEBOUNCE_POLLS,
     MODE_READ,
+    refused_key,
 )
 from .coordinator import ClaudeConfigEntry
 from .engines import engine_for_entry
@@ -81,6 +82,8 @@ class HealthReport:
     # run-reported expiry (raised from conversation.py, faster than a poll) must
     # survive an old app's status poll that says nothing about auth at all.
     signin_expired: bool | None = None
+    # The credential the status ``auth`` block names as refused, for the text.
+    credential: str | None = None
 
 
 @callback
@@ -173,6 +176,7 @@ def evaluate(
         ha_mcp_connected=connected,
         camera_vision_inert=camera_vision_inert,
         signin_expired=signin_expired,
+        credential=auth.credential if auth is not None else None,
     )
 
 
@@ -230,6 +234,7 @@ def async_apply(
                 severity=severity,
                 learn_more_url=learn_more_url,
                 placeholders=placeholders,
+                translation_key=refused_key(issue, report.credential),
             )
         else:
             async_clear_issues(hass, entry_id, issue)
@@ -259,6 +264,7 @@ def async_apply(
             persistent=True,
             learn_more_url="https://github.com/LayerTM/claude-ha#health-checks",
             placeholders=placeholders,
+            translation_key=refused_key(ISSUE_SIGNIN_EXPIRED, report.credential),
         )
     elif report.signin_expired is False:
         async_clear_issues(hass, entry_id, ISSUE_SIGNIN_EXPIRED)

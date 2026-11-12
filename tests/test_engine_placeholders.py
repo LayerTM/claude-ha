@@ -330,3 +330,24 @@ def test_no_translation_names_an_engines_command_literally() -> None:
         for strings in ("strings.json", "translations/en.json"):
             text = (_PACKAGE / strings).read_text()
             assert literal not in text, (literal, strings)
+
+
+async def test_refused_credential_string_names_each_engines_own_option(
+    hass: HomeAssistant,
+) -> None:
+    """auth_expired_durable names the rendering engine's own credential and fix."""
+    translations = await translation.async_get_translations(
+        hass, "en", "exceptions", {DOMAIN}
+    )
+    template = translations[
+        "component.claude_ha.exceptions.auth_expired_durable.message"
+    ]
+    for engine, own_name, own_fix in (
+        (CLAUDE, "OAuth token", "`/login`"),
+        (CODEX, "API key", "`codex login`"),
+    ):
+        other_name = "API key" if engine is CLAUDE else "OAuth token"
+        text = template.format(**engine.placeholders)
+        assert own_name in text, engine.key
+        assert own_fix in text, engine.key
+        assert other_name not in text, engine.key

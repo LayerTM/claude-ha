@@ -75,6 +75,22 @@ RISK_SENSITIVE: Final = "sensitive"
 # request ``field`` at fault and the exceeded ``limit_bytes``, when they apply.
 ERROR_CODE: Final = "code"
 ERROR_FIELD: Final = "field"
+# Which credential an auth-expired answer says was refused: "durable" is the
+# one set in the app's options; anything else (or absent) is the sign-in.
+ERROR_CREDENTIAL: Final = "credential"
+CREDENTIAL_DURABLE: Final = "durable"
+
+
+def refused_key(key: str, credential: object) -> str:
+    """Return the translation key to show for ``key`` given the refused credential.
+
+    The one place that turns the app's ``credential`` into text: the option-set
+    credential gets the ``<key>_durable`` variant, anything else (absent, the
+    sign-in, a value this version does not know) keeps ``key``.
+    """
+    return f"{key}_durable" if credential == CREDENTIAL_DURABLE else key
+
+
 ERROR_LIMIT_BYTES: Final = "limit_bytes"
 
 # POST /api/prompt 200-response keys.

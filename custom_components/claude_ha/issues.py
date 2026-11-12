@@ -3,7 +3,8 @@
 Several entries can be loaded at once (one per companion app), and each one
 raises and clears its own issues on its own schedule. An issue id is therefore
 the issue kind plus the entry id, while the translation key stays the kind, so
-the text a user reads is the same whichever entry raised it.
+the text a user reads is the same whichever entry raised it. A kind with
+variants (see :func:`.const.refused_key`) keeps one id and swaps only the key.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ def entry_issue_id(issue: str, entry_id: str) -> str:
 
 
 @callback
-def async_raise_issue(
+def async_raise_issue(  # noqa: PLR0913 - one flat keyword set mirrors ir.async_create_issue
     hass: HomeAssistant,
     entry_id: str,
     issue: str,
@@ -35,6 +36,7 @@ def async_raise_issue(
     persistent: bool = False,
     learn_more_url: str | None = None,
     placeholders: dict[str, str] | None = None,
+    translation_key: str | None = None,
     data: dict[str, str | int | float | None] | None = None,
 ) -> None:
     """Raise issue kind ``issue`` for one entry.
@@ -52,7 +54,7 @@ def async_raise_issue(
         is_fixable=fixable,
         is_persistent=persistent,
         severity=severity,
-        translation_key=issue,
+        translation_key=translation_key or issue,
         translation_placeholders=placeholders,
         learn_more_url=learn_more_url,
         data={ISSUE_DATA_KIND: issue, ISSUE_DATA_ENTRY_ID: entry_id, **(data or {})},

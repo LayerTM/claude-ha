@@ -168,6 +168,26 @@ def test_every_core_code_is_mapped() -> None:
             "its OAuth Token option so it survives idle spells.",
         ),
         (
+            503,
+            {
+                "error": "OAuth token refused",
+                "code": "auth_expired",
+                "credential": "durable",
+            },
+            ClaudeAuthExpiredError,
+            "Claude refused the OAuth token set in its options. Check or "
+            "replace it, or remove it to use the sign-in (run `/login` in "
+            "the app's console).",
+        ),
+        (
+            503,
+            {"error": "expired", "code": "auth_expired", "credential": "login"},
+            ClaudeAuthExpiredError,
+            "Claude's sign-in has expired. Sign in again: run `/login` in "
+            "the app's console, or set a `claude setup-token` token as "
+            "its OAuth Token option so it survives idle spells.",
+        ),
+        (
             504,
             {"error": "timeout", "code": "timeout"},
             ClaudeConnectionError,
@@ -511,3 +531,43 @@ async def test_uncoded_gateway_answers(
         await _client(hass).async_prompt("hi")
 
     assert err.value.translation_key == key
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        (
+            {"credential": "durable"},
+            "Claude refused the OAuth token set in its options. Check or "
+            "replace it, or remove it to use the sign-in (run `/login` in "
+            "the app's console).",
+        ),
+        (
+            {"credential": "login"},
+            "Claude's sign-in has expired. Sign in again: run `/login` in "
+            "the app's console, or set a `claude setup-token` token as "
+            "its OAuth Token option so it survives idle spells.",
+        ),
+        (
+            {},
+            "Claude's sign-in has expired. Sign in again: run `/login` in "
+            "the app's console, or set a `claude setup-token` token as "
+            "its OAuth Token option so it survives idle spells.",
+        ),
+    ],
+)
+async def test_auth_expired_reason_picks_its_text_from_the_credential(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    extra: dict[str, Any],
+    message: str,
+) -> None:
+    """A 200 read that ended auth-expired reads the credential like a coded error."""
+    aioclient_mock.post(
+        _PROMPT_URL, json={"text": "x", "reason": "auth-expired", **extra}
+    )
+
+    with pytest.raises(ClaudeAuthExpiredError) as err:
+        await _client(hass).async_prompt("hi")
+
+    assert await async_error_message(hass, "en", err.value) == message

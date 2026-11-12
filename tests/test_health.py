@@ -566,3 +566,51 @@ def test_debounce_streak_caps_at_threshold() -> None:
     report, streak = health.debounce_mcp_unreachable(_mcp_report(), 2)
     assert report.problem == ISSUE_MCP_UNREACHABLE
     assert streak == 2  # capped, not 3
+
+
+@pytest.mark.parametrize(
+    ("credential", "signin_key", "login_key"),
+    [
+        ("durable", "signin_expired_durable", "not_logged_in_durable"),
+        ("login", "signin_expired", "not_logged_in"),
+        (None, "signin_expired", "not_logged_in"),
+    ],
+)
+async def test_apply_picks_the_text_from_the_refused_credential(
+    hass: HomeAssistant, credential: str | None, signin_key: str, login_key: str
+) -> None:
+    """Both sign-in repairs show the option-credential text only when it is named."""
+    registry = ir.async_get(hass)
+    health.async_apply(
+        hass,
+        _entry(ENTRY_ID),
+        health.HealthReport(
+            ISSUE_NOT_LOGGED_IN,
+            1,
+            True,
+            True,
+            signin_expired=True,
+            credential=credential,
+        ),
+    )
+    signin = registry.async_get_issue(
+        DOMAIN, entry_issue_id(ISSUE_SIGNIN_EXPIRED, ENTRY_ID)
+    )
+    login = registry.async_get_issue(
+        DOMAIN, entry_issue_id(ISSUE_NOT_LOGGED_IN, ENTRY_ID)
+    )
+    assert signin is not None
+    assert login is not None
+    assert signin.translation_key == signin_key
+    assert login.translation_key == login_key
+
+
+async def test_evaluate_carries_the_status_credential(
+    hass: HomeAssistant, expose: Callable[[bool], None]
+) -> None:
+    """The auth block's credential reaches the report; no block means none."""
+    _healthy(hass)
+    expose(True)
+    auth = AuthState(state="expired", credential="durable")
+    assert health.evaluate(hass, _status(auth=auth)).credential == "durable"
+    assert health.evaluate(hass, _status()).credential is None
