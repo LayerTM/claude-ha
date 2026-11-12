@@ -123,7 +123,7 @@ use it the same way. This integration is listed in the **HACS default store**.
    which matches only this integration. The first time you open the Marketplace,
    Home Assistant shows a notice that you must accept (**I understand the risks
    and agree**) before installing or updating.
-2. Restart Home Assistant.
+2. With HACS, restart Home Assistant (a new install from the Marketplace needs no restart).
 3. Install the Claude Code or Codex app. Once it starts, Home Assistant
    offers to set up the **AI Agent** integration automatically — accept it. No
    configuration needed.
