@@ -1,7 +1,7 @@
 # Home Assistant's own test harness, released with Home Assistant and pinning
-# it exactly (2026.11.1 on Python 3.14). Its homeassistant pin decides every
+# it exactly (2026.11.2 on Python 3.14). Its homeassistant pin decides every
 # component requirement below it.
-pytest-homeassistant==2026.11.1
+pytest-homeassistant==2026.11.2
 # Coverage for the 100% gate (the harness does not bring it).
 pytest-cov==7.1.0
 
@@ -14,7 +14,7 @@ pytest-cov==7.1.0
 # written down: CI installs it from here, the pre-commit hook runs whatever ruff
 # the environment has, and CI fails if a second pin reappears (see
 # .github/workflows/lint.yml).
-ruff==0.17.4
+ruff==0.17.5
 mypy==2.4.1
 # Type stubs for PyYAML (conversation.py renders drafted automations as YAML).
-types-PyYAML==6.0.12.20261103
+types-PyYAML==6.0.12.20261113
