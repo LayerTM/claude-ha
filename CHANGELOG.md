@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The health button of a Codex entry is named **Check Codex health** instead of
+  **Check Claude health**. Claude entries are unchanged. An existing button keeps
+  its entity id, so automations and dashboards keep working; a newly added Codex
+  entry gets `button.codex_check_codex_health`.
+
 ## [1.18.0] - 2026-11-26
 
 ### Added
