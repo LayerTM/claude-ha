@@ -93,7 +93,7 @@
   "entity": {
     "button": {
       "check_health": {
-        "name": "Check Claude health"
+        "name": "Check {engine} health"
       }
     },
     "sensor": {

@@ -406,7 +406,10 @@ the device's main controls by default.
   have no such limits and get no sensors at all. Needs an app that provides
   account limits; older ones simply don't create these sensors.
 - **Check Claude health** (`button.claude_code_check_claude_health`) — runs the
-  deeper probe described under [Health checks](#health-checks) on demand.
+  deeper probe described under [Health checks](#health-checks) on demand. With
+  the Codex app it is **Check Codex health**
+  (`button.codex_check_codex_health`); a button that already exists keeps its
+  entity id.
 
 Entity ids above are the defaults (device *Claude Code* + entity name); adjust to
 your own if you've renamed them.

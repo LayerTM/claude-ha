@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import ClaudeConfigEntry, ClaudeStatusCoordinator
+from .engines import engine_for_entry
 from .entity import build_device_info
 from .health import async_probe
 
@@ -37,6 +38,9 @@ class ClaudeHealthButton(CoordinatorEntity[ClaudeStatusCoordinator], ButtonEntit
         super().__init__(coordinator)
         entry = coordinator.config_entry
         self._attr_unique_id = f"{entry.entry_id}_check_health"
+        engine = engine_for_entry(entry)
+        assert engine is not None  # async_setup_entry refuses an unknown engine
+        self._attr_translation_placeholders = {"engine": engine.name}
         self._attr_device_info = build_device_info(entry)
 
     async def async_press(self) -> None:
