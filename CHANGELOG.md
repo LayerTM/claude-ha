@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-11-26
+
+### Added
+
+- Hungarian reply words: the agent's own proposal, confirmation question, done,
+  cancelled, memory and automation lines are available in Hungarian, including the
+  spoken yes/no vocabulary (`igen` / `nem`), so a Hungarian Assist pipeline no
+  longer gets English confirmations. Thanks to @marcello-star (#113).
+
 ### Changed
 
 - Tested against Home Assistant 2026.11, where a conversation belongs to the user
@@ -16,13 +25,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Documentation
 
 - The install instructions cover the Marketplace built into Home Assistant 2026.11, next to HACS for older versions.
-
-### Added
-
-- Hungarian reply words: the agent's own proposal, confirmation question, done,
-  cancelled, memory and automation lines are available in Hungarian, including the
-  spoken yes/no vocabulary (`igen` / `nem`), so a Hungarian Assist pipeline no
-  longer gets English confirmations. Thanks to @marcello-star (#113).
 
 ## [1.17.4] - 2026-11-12
 
@@ -880,7 +882,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.17.4...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/LayerTM/claude-ha/compare/v1.17.4...v1.18.0
 [1.17.4]: https://github.com/LayerTM/claude-ha/compare/v1.17.3...v1.17.4
 [1.17.3]: https://github.com/LayerTM/claude-ha/compare/v1.17.2...v1.17.3
 [1.17.2]: https://github.com/LayerTM/claude-ha/compare/v1.17.1...v1.17.2
