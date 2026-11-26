@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-11-26
+
 ### Fixed
 
 - The health button of a Codex entry is named **Check Codex health** instead of
@@ -889,7 +891,8 @@ Initial release.
 - Full test suite (100% coverage), strict typing, and CI running hassfest, HACS
   validation, ruff, mypy, pytest and a secret scan.
 
-[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/LayerTM/claude-ha/compare/v1.18.1...HEAD
+[1.18.1]: https://github.com/LayerTM/claude-ha/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/LayerTM/claude-ha/compare/v1.17.4...v1.18.0
 [1.17.4]: https://github.com/LayerTM/claude-ha/compare/v1.17.3...v1.17.4
 [1.17.3]: https://github.com/LayerTM/claude-ha/compare/v1.17.2...v1.17.3
